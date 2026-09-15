@@ -1,1 +1,160 @@
 @import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family:
+    Inter,
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  background: #f3f4f6;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Fabric canvas */
+
+canvas {
+  display: block;
+}
+
+/* Toolbar */
+
+.toolbar-button {
+  min-width: 38px;
+  height: 38px;
+
+  padding: 0 10px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: white;
+  color: #374151;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.toolbar-button:hover {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+.toolbar-text-button {
+  padding: 0 13px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 26px;
+
+  background: #e5e7eb;
+
+  margin: 0 5px;
+
+  flex-shrink: 0;
+}
+
+.toolbar-select {
+  height: 38px;
+
+  padding: 0 12px;
+
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+
+  background: white;
+  color: #374151;
+
+  font-size: 14px;
+
+  outline: none;
+
+  cursor: pointer;
+}
+
+.toolbar-select:focus {
+  border-color: #111827;
+}
+
+.toolbar-color {
+  width: 38px;
+  height: 38px;
+
+  padding: 3px;
+
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+
+  background: white;
+
+  cursor: pointer;
+}
+
+.toolbar-action-button {
+  height: 38px;
+
+  padding: 0 15px;
+
+  border: none;
+  border-radius: 8px;
+
+  background: #111827;
+  color: white;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: background 0.15s ease;
+}
+
+.toolbar-action-button:hover {
+  background: #374151;
+}
+
+.delete-button {
+  color: #dc2626;
+}
+
+.delete-button:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.italic {
+  font-style: italic;
+}
