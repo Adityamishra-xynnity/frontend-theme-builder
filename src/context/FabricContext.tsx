@@ -1,29 +1,32 @@
 import {
-  createContext,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-
-import {
   Canvas as FabricCanvas,
+  FabricImage,
   IText,
   Rect,
   Circle,
   Triangle,
 } from "fabric";
 
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+} from "react";
+
+import jsPDF from "jspdf";
+
 import { useEditor } from "./EditorContext";
 
 import type {
-  EditorElement,
   ElementType,
+  EditorElement,
 } from "../types/editor";
 
 type FabricObjectWithMeta = {
   elementId?: string;
   elementType?: ElementType;
+  imageSrc?: string;
 };
 
 interface FabricContextType {
@@ -33,1363 +36,1390 @@ interface FabricContextType {
 
   setSelectedObject: (object: any) => void;
 
-  selectedFontSize: number;
+  convertCanvasToElements: () => EditorElement[];
 
-  addHeading: () => void;
-  addSubheading: () => void;
-  addText: () => void;
+  selectObjectById: (id: string) => void;
 
-  addRectangle: () => void;
-  addCircle: () => void;
-  addTriangle: () => void;
+  addText: (
+    type?: "heading" | "subheading" | "text"
+  ) => void;
+
+  addShape: (
+    type: "rectangle" | "circle" | "triangle"
+  ) => void;
+
+  addImage: (dataUrl: string) => void;
 
   deleteSelected: () => void;
+
   duplicateSelected: () => void;
 
   increaseFontSize: () => void;
+
   decreaseFontSize: () => void;
 
   setFontSize: (size: number) => void;
-
-  setFontFamily: (fontFamily: string) => void;
 
   setTextColor: (color: string) => void;
 
   setShapeColor: (color: string) => void;
 
+  setFontFamily: (fontFamily: string) => void;
+
   toggleBold: () => void;
+
   toggleItalic: () => void;
 
   alignObject: (
-    position: "left" | "center" | "right"
+    alignment: "left" | "center" | "right"
   ) => void;
 
+  rotateSelected: (degrees: number) => void;
+
+  bringForward: () => void;
+
+  sendBackward: () => void;
+
+  bringToFront: () => void;
+
+  sendToBack: () => void;
+
   undo: () => void;
+
   redo: () => void;
 
   canUndo: boolean;
+
   canRedo: boolean;
 
-  saveCanvasState: () => void;
+  selectedFontSize: number | null;
 
-  saveCurrentDesign: (name?: string) => void;
+  saveCurrentDesign: (name: string) => void;
 
-  convertCanvasToElements: () => EditorElement[];
+  downloadPNG: () => void;
+
+  downloadPDF: () => void;
 }
 
 const FabricContext =
   createContext<FabricContextType | null>(null);
 
-interface FabricProviderProps {
-  children: ReactNode;
-}
-
 export function FabricProvider({
   children,
-}: FabricProviderProps) {
+}: {
+  children: React.ReactNode;
+}) {
   const canvasRef =
     useRef<FabricCanvas | null>(null);
 
-  const {
-    backgroundColor,
-    saveDesign,
-  } = useEditor();
-
-  const [selectedObjectState, setSelectedObjectState] =
+  const [selectedObject, setSelectedObject] =
     useState<any>(null);
 
-  const [selectedFontSize, setSelectedFontSize] =
-    useState(18);
+  const [history, setHistory] = useState<string[]>(
+    []
+  );
 
-  const historyRef =
-    useRef<string[]>([]);
+  const [future, setFuture] = useState<string[]>(
+    []
+  );
 
-  const futureRef =
-    useRef<string[]>([]);
+  const {
+    saveDesign,
+    clearCanvas,
+    currentDesignName,
+  } = useEditor();
 
-  const [canUndo, setCanUndo] =
-    useState(false);
+  const selectedFontSize =
+    selectedObject &&
+    (
+      selectedObject.type === "i-text" ||
+      selectedObject.type === "textbox"
+    )
+      ? selectedObject.fontSize ?? 18
+      : null;
 
-  const [canRedo, setCanRedo] =
-    useState(false);
-
-  /*
-   * Ye function selected object ko React ke saath
-   * properly sync karta hai.
-   */
-  const setSelectedObject = (object: any) => {
-    setSelectedObjectState(object);
-
-    if (object instanceof IText) {
-      setSelectedFontSize(
-        object.fontSize ?? 18
-      );
-    } else {
-      setSelectedFontSize(18);
-    }
-  };
-
-  const createId = () => {
-    return crypto.randomUUID();
-  };
-
-  const updateHistoryButtons = () => {
-    setCanUndo(
-      historyRef.current.length > 0
-    );
-
-    setCanRedo(
-      futureRef.current.length > 0
-    );
-  };
-
-  const saveCanvasState = () => {
+  function saveCanvasState() {
     const canvas = canvasRef.current;
 
-    if (!canvas) {
-      return;
-    }
+    if (!canvas) return;
 
     const json = JSON.stringify(
-      canvas.toJSON()
+      canvas.toJSON([
+        "elementId",
+        "elementType",
+        "imageSrc",
+      ])
     );
 
-    historyRef.current.push(json);
+    setHistory((previous) => [
+      ...previous,
+      json,
+    ]);
 
-    futureRef.current = [];
+    setFuture([]);
+  }
 
-    updateHistoryButtons();
-  };
-
-  /*
-   * =========================
-   * ADD HEADING
-   * =========================
-   */
-
-  const addHeading = () => {
+  function convertCanvasToElements(): EditorElement[] {
     const canvas = canvasRef.current;
 
-    if (!canvas) {
-      return;
-    }
+    if (!canvas) return [];
+
+    return canvas.getObjects().map((object) => {
+      const fabricObject =
+        object as typeof object &
+          FabricObjectWithMeta;
+
+      let elementType =
+        fabricObject.elementType;
+
+      if (!elementType) {
+        if (
+          object.type === "i-text" ||
+          object.type === "textbox"
+        ) {
+          elementType = "text";
+        } else if (
+          object.type === "rect"
+        ) {
+          elementType = "rectangle";
+        } else if (
+          object.type === "circle"
+        ) {
+          elementType = "circle";
+        } else if (
+          object.type === "triangle"
+        ) {
+          elementType = "triangle";
+        } else if (
+          object.type === "image"
+        ) {
+          elementType = "image";
+        } else {
+          elementType = "text";
+        }
+      }
+
+      const element: EditorElement = {
+        id:
+          fabricObject.elementId ??
+          crypto.randomUUID(),
+
+        type: elementType,
+
+        x: object.left ?? 0,
+
+        y: object.top ?? 0,
+
+        width: object.width ?? 0,
+
+        height: object.height ?? 0,
+
+        scaleX: object.scaleX ?? 1,
+
+        scaleY: object.scaleY ?? 1,
+
+        angle: object.angle ?? 0,
+
+        opacity: object.opacity ?? 1,
+      };
+
+      if (
+        object.type === "i-text" ||
+        object.type === "textbox"
+      ) {
+        const textObject =
+          object as IText;
+
+        element.text =
+          textObject.text ?? "";
+
+        element.fontSize =
+          textObject.fontSize ?? 18;
+
+        element.fontFamily =
+          textObject.fontFamily ??
+          "Arial";
+
+        element.color =
+          typeof textObject.fill === "string"
+            ? textObject.fill
+            : "#111827";
+
+        element.fontWeight =
+          textObject.fontWeight === "bold"
+            ? "bold"
+            : "normal";
+
+        element.fontStyle =
+          textObject.fontStyle === "italic"
+            ? "italic"
+            : "normal";
+      }
+
+      if (
+        object.type === "rect" ||
+        object.type === "circle" ||
+        object.type === "triangle"
+      ) {
+        element.backgroundColor =
+          typeof object.fill === "string"
+            ? object.fill
+            : "#2563eb";
+      }
+
+      if (
+        object.type === "image"
+      ) {
+        element.src =
+          fabricObject.imageSrc ?? "";
+      }
+
+      return element;
+    });
+  }
+
+  function selectObjectById(id: string) {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    const object = canvas
+      .getObjects()
+      .find(
+        (item) =>
+          (
+            item as typeof item &
+              FabricObjectWithMeta
+          ).elementId === id
+      );
+
+    if (!object) return;
+
+    canvas.setActiveObject(object);
+
+    setSelectedObject(object);
+
+    canvas.renderAll();
+  }
+
+  function addText(
+    type:
+      | "heading"
+      | "subheading"
+      | "text" = "text"
+  ) {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
 
     saveCanvasState();
 
-    const text = new IText(
-      "Heading",
+    const settings = {
+      heading: {
+        text: "Heading",
+        fontSize: 42,
+        fontWeight:
+          "bold" as const,
+      },
+
+      subheading: {
+        text: "Subheading",
+        fontSize: 26,
+        fontWeight:
+          "bold" as const,
+      },
+
+      text: {
+        text: "Add your text here",
+        fontSize: 18,
+        fontWeight:
+          "normal" as const,
+      },
+    };
+
+    const config = settings[type];
+
+    const textObject = new IText(
+      config.text,
       {
-        left: 200,
+        left: 100,
         top: 100,
 
-        fontSize: 40,
-        fontFamily: "Arial",
+        fontSize: config.fontSize,
 
-        fontWeight: "bold",
-        fontStyle: "normal",
+        fontFamily: "Arial",
 
         fill: "#111827",
 
-        originX: "left",
-        originY: "top",
-
-        editable: true,
-        selectable: true,
-        evented: true,
-      }
-    );
-
-    const fabricText =
-      text as typeof text &
-        FabricObjectWithMeta;
-
-    fabricText.elementId =
-      createId();
-
-    fabricText.elementType =
-      "heading";
-
-    canvas.add(text);
-
-    canvas.setActiveObject(text);
-
-    setSelectedObject(text);
-
-    canvas.renderAll();
-  };
-
-  /*
-   * =========================
-   * ADD SUBHEADING
-   * =========================
-   */
-
-  const addSubheading = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    saveCanvasState();
-
-    const text = new IText(
-      "Subheading",
-      {
-        left: 250,
-        top: 180,
-
-        fontSize: 28,
-        fontFamily: "Arial",
-
-        fontWeight: "bold",
-        fontStyle: "normal",
-
-        fill: "#374151",
+        fontWeight:
+          config.fontWeight,
 
         originX: "left",
         originY: "top",
 
         editable: true,
+
         selectable: true,
         evented: true,
+
+        padding: 4,
+
+        transparentCorners: false,
+
+        cornerColor: "#111827",
+
+        cornerStyle: "circle",
+
+        borderColor: "#111827",
       }
     );
 
-    const fabricText =
-      text as typeof text &
+    const meta =
+      textObject as typeof textObject &
         FabricObjectWithMeta;
 
-    fabricText.elementId =
-      createId();
+    meta.elementId =
+      crypto.randomUUID();
 
-    fabricText.elementType =
-      "subheading";
+    meta.elementType = type;
 
-    canvas.add(text);
+    canvas.add(textObject);
 
-    canvas.setActiveObject(text);
+    canvas.setActiveObject(
+      textObject
+    );
 
-    setSelectedObject(text);
+    setSelectedObject(
+      textObject
+    );
 
     canvas.renderAll();
-  };
+  }
 
-  /*
-   * =========================
-   * ADD TEXT
-   * =========================
-   */
-
-  const addText = () => {
+  function addShape(
+    type:
+      | "rectangle"
+      | "circle"
+      | "triangle"
+  ) {
     const canvas = canvasRef.current;
 
-    if (!canvas) {
-      return;
-    }
+    if (!canvas) return;
 
     saveCanvasState();
 
-    const text = new IText(
-      "Add your text",
-      {
-        left: 250,
-        top: 250,
+    let object: any;
 
-        fontSize: 18,
-        fontFamily: "Arial",
+    if (type === "rectangle") {
+      object = new Rect({
+        left: 100,
+        top: 100,
+        width: 180,
+        height: 100,
+        fill: "#2563eb",
+      });
+    }
 
-        fontWeight: "normal",
-        fontStyle: "normal",
+    if (type === "circle") {
+      object = new Circle({
+        left: 100,
+        top: 100,
+        radius: 70,
+        fill: "#2563eb",
+      });
+    }
 
-        fill: "#111827",
+    if (type === "triangle") {
+      object = new Triangle({
+        left: 100,
+        top: 100,
+        width: 150,
+        height: 120,
+        fill: "#2563eb",
+      });
+    }
+
+    object.set({
+      selectable: true,
+      evented: true,
+
+      transparentCorners: false,
+
+      cornerColor: "#111827",
+
+      cornerStyle: "circle",
+
+      borderColor: "#111827",
+
+      originX: "left",
+      originY: "top",
+    });
+
+    const meta =
+      object as typeof object &
+        FabricObjectWithMeta;
+
+    meta.elementId =
+      crypto.randomUUID();
+
+    meta.elementType = type;
+
+    canvas.add(object);
+
+    canvas.setActiveObject(object);
+
+    setSelectedObject(object);
+
+    canvas.renderAll();
+  }
+
+  async function addImage(
+    dataUrl: string
+  ) {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    try {
+      saveCanvasState();
+
+      const image =
+        await FabricImage.fromURL(
+          dataUrl
+        );
+
+      const maxWidth = 350;
+
+      const originalWidth =
+        image.width || 1;
+
+      const scale =
+        maxWidth /
+        originalWidth;
+
+      image.set({
+        left: 100,
+        top: 100,
+
+        scaleX: scale,
+        scaleY: scale,
+
+        angle: 0,
+
+        opacity: 1,
+
+        selectable: true,
+        evented: true,
+
+        transparentCorners: false,
+
+        cornerColor: "#111827",
+
+        cornerStyle: "circle",
+
+        borderColor: "#111827",
 
         originX: "left",
         originY: "top",
+      });
 
-        editable: true,
-        selectable: true,
-        evented: true,
-      }
-    );
+      const meta =
+        image as typeof image &
+          FabricObjectWithMeta;
 
-    const fabricText =
-      text as typeof text &
-        FabricObjectWithMeta;
+      meta.elementId =
+        crypto.randomUUID();
 
-    fabricText.elementId =
-      createId();
+      meta.elementType = "image";
 
-    fabricText.elementType =
-      "text";
+      meta.imageSrc = dataUrl;
 
-    canvas.add(text);
+      canvas.add(image);
 
-    canvas.setActiveObject(text);
+      canvas.setActiveObject(image);
 
-    setSelectedObject(text);
+      setSelectedObject(image);
 
-    canvas.renderAll();
-  };
+      canvas.renderAll();
+    } catch (error) {
+      console.error(
+        "Image could not be loaded:",
+        error
+      );
+    }
+  }
 
-  /*
-   * =========================
-   * ADD RECTANGLE
-   * =========================
-   */
-
-  const addRectangle = () => {
+  function deleteSelected() {
     const canvas = canvasRef.current;
 
-    if (!canvas) {
+    if (!canvas || !selectedObject)
       return;
-    }
 
     saveCanvasState();
 
-    const rectangle = new Rect({
-      left: 150,
-      top: 150,
-
-      width: 220,
-      height: 120,
-
-      fill: "#2563eb",
-
-      originX: "left",
-      originY: "top",
-
-      selectable: true,
-      evented: true,
-    });
-
-    const fabricRectangle =
-      rectangle as typeof rectangle &
-        FabricObjectWithMeta;
-
-    fabricRectangle.elementId =
-      createId();
-
-    fabricRectangle.elementType =
-      "rectangle";
-
-    canvas.add(rectangle);
-
-    canvas.setActiveObject(
-      rectangle
+    canvas.remove(
+      selectedObject
     );
-
-    setSelectedObject(
-      rectangle
-    );
-
-    canvas.renderAll();
-  };
-
-  /*
-   * =========================
-   * ADD CIRCLE
-   * =========================
-   */
-
-  const addCircle = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    saveCanvasState();
-
-    const circle = new Circle({
-      left: 300,
-      top: 200,
-
-      radius: 70,
-
-      fill: "#7c3aed",
-
-      originX: "left",
-      originY: "top",
-
-      selectable: true,
-      evented: true,
-    });
-
-    const fabricCircle =
-      circle as typeof circle &
-        FabricObjectWithMeta;
-
-    fabricCircle.elementId =
-      createId();
-
-    fabricCircle.elementType =
-      "circle";
-
-    canvas.add(circle);
-
-    canvas.setActiveObject(
-      circle
-    );
-
-    setSelectedObject(
-      circle
-    );
-
-    canvas.renderAll();
-  };
-
-  /*
-   * =========================
-   * ADD TRIANGLE
-   * =========================
-   */
-
-  const addTriangle = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    saveCanvasState();
-
-    const triangle = new Triangle({
-      left: 350,
-      top: 150,
-
-      width: 150,
-      height: 150,
-
-      fill: "#059669",
-
-      originX: "left",
-      originY: "top",
-
-      selectable: true,
-      evented: true,
-    });
-
-    const fabricTriangle =
-      triangle as typeof triangle &
-        FabricObjectWithMeta;
-
-    fabricTriangle.elementId =
-      createId();
-
-    fabricTriangle.elementType =
-      "triangle";
-
-    canvas.add(triangle);
-
-    canvas.setActiveObject(
-      triangle
-    );
-
-    setSelectedObject(
-      triangle
-    );
-
-    canvas.renderAll();
-  };
-
-  /*
-   * =========================
-   * DELETE
-   * =========================
-   */
-
-  const deleteSelected = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (!activeObject) {
-      return;
-    }
-
-    saveCanvasState();
-
-    canvas.remove(activeObject);
 
     canvas.discardActiveObject();
 
     setSelectedObject(null);
 
     canvas.renderAll();
-  };
+  }
 
-  /*
-   * =========================
-   * DUPLICATE
-   * =========================
-   */
-
-  const duplicateSelected = () => {
+  function duplicateSelected() {
     const canvas = canvasRef.current;
 
-    if (!canvas) {
+    if (!canvas || !selectedObject)
       return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (!activeObject) {
-      return;
-    }
 
     saveCanvasState();
 
-    activeObject
+    selectedObject
       .clone()
-      .then((clonedObject: any) => {
-        const cloned =
-          clonedObject as FabricObjectWithMeta;
+      .then((cloned: any) => {
+        cloned.set({
+          left:
+            (selectedObject.left ?? 0) +
+            20,
 
-        const original =
-          activeObject as FabricObjectWithMeta;
+          top:
+            (selectedObject.top ?? 0) +
+            20,
+        });
 
-        cloned.elementId =
-          createId();
+        const originalMeta =
+          selectedObject as
+            FabricObjectWithMeta;
 
-        cloned.elementType =
-          original.elementType;
+        const clonedMeta =
+          cloned as
+            FabricObjectWithMeta;
 
-        cloned.left =
-          (activeObject.left ?? 0) +
-          30;
+        clonedMeta.elementId =
+          crypto.randomUUID();
 
-        cloned.top =
-          (activeObject.top ?? 0) +
-          30;
+        clonedMeta.elementType =
+          originalMeta.elementType;
 
-        canvas.add(clonedObject);
+        clonedMeta.imageSrc =
+          originalMeta.imageSrc;
+
+        canvas.add(cloned);
 
         canvas.setActiveObject(
-          clonedObject
+          cloned
         );
 
         setSelectedObject(
-          clonedObject
+          cloned
         );
 
         canvas.renderAll();
       });
-  };
+  }
 
-  /*
-   * =========================
-   * SET FONT SIZE
-   * =========================
-   */
-
-  const setFontSize = (
-    size: number
-  ) => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
+  function increaseFontSize() {
+    if (!selectedObject)
       return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
 
     if (
-      !(activeObject instanceof IText)
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
     ) {
       return;
     }
 
-    const safeSize = Math.max(
-      8,
-      Math.min(
-        200,
-        Math.round(size)
-      )
-    );
-
     saveCanvasState();
 
-    activeObject.set({
-      fontSize: safeSize,
+    const current =
+      selectedObject.fontSize ?? 18;
+
+    selectedObject.set({
+      fontSize: current + 2,
     });
 
-    activeObject.setCoords();
+    canvasRef.current?.renderAll();
+  }
 
-    canvas.renderAll();
-
-    /*
-     * Sabse important part:
-     *
-     * Fabric object update
-     * +
-     * React state update
-     */
-
-    setSelectedFontSize(
-      safeSize
-    );
-
-    setSelectedObjectState(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * INCREASE FONT
-   * =========================
-   */
-
-  const increaseFontSize = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
+  function decreaseFontSize() {
+    if (!selectedObject)
       return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
 
     if (
-      !(activeObject instanceof IText)
-    ) {
-      return;
-    }
-
-    const currentSize =
-      activeObject.fontSize ?? 18;
-
-    setFontSize(
-      currentSize + 2
-    );
-  };
-
-  /*
-   * =========================
-   * DECREASE FONT
-   * =========================
-   */
-
-  const decreaseFontSize = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (
-      !(activeObject instanceof IText)
-    ) {
-      return;
-    }
-
-    const currentSize =
-      activeObject.fontSize ?? 18;
-
-    setFontSize(
-      currentSize - 2
-    );
-  };
-
-  /*
-   * =========================
-   * FONT FAMILY
-   * =========================
-   */
-
-  const setFontFamily = (
-    fontFamily: string
-  ) => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (
-      !(activeObject instanceof IText)
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
     ) {
       return;
     }
 
     saveCanvasState();
 
-    activeObject.set({
+    const current =
+      selectedObject.fontSize ?? 18;
+
+    selectedObject.set({
+      fontSize: Math.max(
+        8,
+        current - 2
+      ),
+    });
+
+    canvasRef.current?.renderAll();
+  }
+
+  function setFontSize(
+    size: number
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    selectedObject.set({
+      fontSize: size,
+    });
+
+    canvasRef.current?.renderAll();
+  }
+
+  function setTextColor(
+    color: string
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    selectedObject.set({
+      fill: color,
+    });
+
+    canvasRef.current?.renderAll();
+  }
+
+  function setShapeColor(
+    color: string
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "rect" &&
+      selectedObject.type !==
+        "circle" &&
+      selectedObject.type !==
+        "triangle"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    selectedObject.set({
+      fill: color,
+    });
+
+    canvasRef.current?.renderAll();
+  }
+
+  function setFontFamily(
+    fontFamily: string
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    selectedObject.set({
       fontFamily,
     });
 
-    activeObject.setCoords();
+    canvasRef.current?.renderAll();
+  }
 
-    canvas.renderAll();
-
-    setSelectedObject(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * TEXT COLOR
-   * =========================
-   */
-
-  const setTextColor = (
-    color: string
-  ) => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
+  function toggleBold() {
+    if (!selectedObject)
       return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
 
     if (
-      !(activeObject instanceof IText)
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
     ) {
       return;
     }
 
     saveCanvasState();
 
-    activeObject.set({
-      fill: color,
-    });
-
-    canvas.renderAll();
-
-    setSelectedObject(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * SHAPE COLOR
-   * =========================
-   */
-
-  const setShapeColor = (
-    color: string
-  ) => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (!activeObject) {
-      return;
-    }
-
-    if (
-      activeObject instanceof IText
-    ) {
-      return;
-    }
-
-    saveCanvasState();
-
-    activeObject.set({
-      fill: color,
-    });
-
-    canvas.renderAll();
-
-    setSelectedObject(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * BOLD
-   * =========================
-   */
-
-  const toggleBold = () => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const activeObject =
-      canvas.getActiveObject();
-
-    if (
-      !(activeObject instanceof IText)
-    ) {
-      return;
-    }
-
-    saveCanvasState();
-
-    activeObject.set({
+    selectedObject.set({
       fontWeight:
-        activeObject.fontWeight ===
+        selectedObject.fontWeight ===
         "bold"
           ? "normal"
           : "bold",
     });
 
-    canvas.renderAll();
+    canvasRef.current?.renderAll();
+  }
+
+  function toggleItalic() {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    selectedObject.set({
+      fontStyle:
+        selectedObject.fontStyle ===
+        "italic"
+          ? "normal"
+          : "italic",
+    });
+
+    canvasRef.current?.renderAll();
+  }
+
+  function alignObject(
+    alignment:
+      | "left"
+      | "center"
+      | "right"
+  ) {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas || !selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    saveCanvasState();
+
+    const objectWidth =
+      selectedObject.getScaledWidth();
+
+    if (alignment === "left") {
+      selectedObject.set({
+        left: 0,
+        originX: "left",
+      });
+    }
+
+    if (alignment === "center") {
+      selectedObject.set({
+        left:
+          (canvas.getWidth() -
+            objectWidth) /
+          2,
+
+        originX: "left",
+      });
+    }
+
+    if (alignment === "right") {
+      selectedObject.set({
+        left:
+          canvas.getWidth() -
+          objectWidth,
+
+        originX: "left",
+      });
+    }
+
+    selectedObject.setCoords();
+
+    canvas.setActiveObject(
+      selectedObject
+    );
 
     setSelectedObject(
-      activeObject
+      selectedObject
     );
-  };
 
-  /*
-   * =========================
-   * ITALIC
-   * =========================
-   */
+    canvas.renderAll();
+  }
 
-  const toggleItalic = () => {
-    const canvas = canvasRef.current;
+  function rotateSelected(
+    degrees: number
+  ) {
+    const canvas =
+      canvasRef.current;
 
-    if (!canvas) {
+    if (!canvas || !selectedObject)
+      return;
+
+    saveCanvasState();
+
+    const currentAngle =
+      selectedObject.angle ?? 0;
+
+    selectedObject.set({
+      angle:
+        currentAngle + degrees,
+    });
+
+    selectedObject.setCoords();
+
+    canvas.setActiveObject(
+      selectedObject
+    );
+
+    setSelectedObject(
+      selectedObject
+    );
+
+    canvas.renderAll();
+  }
+
+  function bringForward() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas || !selectedObject)
+      return;
+
+    saveCanvasState();
+
+    canvas.bringObjectForward(
+      selectedObject
+    );
+
+    canvas.setActiveObject(
+      selectedObject
+    );
+
+    setSelectedObject(
+      selectedObject
+    );
+
+    canvas.renderAll();
+  }
+
+  function sendBackward() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas || !selectedObject)
+      return;
+
+    saveCanvasState();
+
+    canvas.sendObjectBackwards(
+      selectedObject
+    );
+
+    canvas.setActiveObject(
+      selectedObject
+    );
+
+    setSelectedObject(
+      selectedObject
+    );
+
+    canvas.renderAll();
+  }
+
+  function bringToFront() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas || !selectedObject)
+      return;
+
+    saveCanvasState();
+
+    canvas.bringObjectToFront(
+      selectedObject
+    );
+
+    canvas.setActiveObject(
+      selectedObject
+    );
+
+    setSelectedObject(
+      selectedObject
+    );
+
+    canvas.renderAll();
+  }
+
+  function sendToBack() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas || !selectedObject)
+      return;
+
+    saveCanvasState();
+
+    canvas.sendObjectToBack(
+      selectedObject
+    );
+
+    canvas.setActiveObject(
+      selectedObject
+    );
+
+    setSelectedObject(
+      selectedObject
+    );
+
+    canvas.renderAll();
+  }
+
+  function restoreSelection(
+    selectedId: string | undefined
+  ) {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+    if (!selectedId) {
+      canvas.discardActiveObject();
+
+      setSelectedObject(null);
+
+      canvas.renderAll();
+
+      return;
+    }
+
+    const object =
+      canvas
+        .getObjects()
+        .find(
+          (item) =>
+            (
+              item as typeof item &
+                FabricObjectWithMeta
+            ).elementId ===
+            selectedId
+        );
+
+    if (object) {
+      canvas.setActiveObject(
+        object
+      );
+
+      setSelectedObject(
+        object
+      );
+    } else {
+      canvas.discardActiveObject();
+
+      setSelectedObject(null);
+    }
+
+    canvas.renderAll();
+  }
+
+  function undo() {
+    const canvas =
+      canvasRef.current;
+
+    if (
+      !canvas ||
+      history.length === 0
+    ) {
       return;
     }
 
     const activeObject =
       canvas.getActiveObject();
 
-    if (
-      !(activeObject instanceof IText)
-    ) {
-      return;
-    }
+    const activeMeta =
+      activeObject as
+        | (typeof activeObject &
+            FabricObjectWithMeta)
+        | null;
 
-    saveCanvasState();
+    const selectedId =
+      activeMeta?.elementId;
 
-    activeObject.set({
-      fontStyle:
-        activeObject.fontStyle ===
-        "italic"
-          ? "normal"
-          : "italic",
-    });
-
-    canvas.renderAll();
-
-    setSelectedObject(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * ALIGN
-   * =========================
-   */
-
-  const alignObject = (
-    position:
-      | "left"
-      | "center"
-      | "right"
-  ) => {
-    const canvas = canvasRef.current;
-
-    const activeObject =
-      canvas?.getActiveObject();
-
-    if (
-      !canvas ||
-      !activeObject
-    ) {
-      return;
-    }
-
-    saveCanvasState();
-
-    const canvasWidth =
-      canvas.getWidth();
-
-    const padding = 20;
-
-    const objectWidth =
-      activeObject.getScaledWidth();
-
-    const maxWidth =
-      canvasWidth -
-      padding * 2;
-
-    if (
-      position === "left" &&
-      activeObject instanceof IText
-    ) {
-      if (
-        objectWidth > maxWidth
-      ) {
-        const scale =
-          maxWidth /
-          activeObject.getScaledWidth();
-
-        activeObject.scaleX =
-          (activeObject.scaleX ?? 1) *
-          scale;
-
-        activeObject.scaleY =
-          (activeObject.scaleY ?? 1) *
-          scale;
-      }
-
-      activeObject.set({
-        left: padding,
-        originX: "left",
-      });
-
-      activeObject.setCoords();
-
-      canvas.renderAll();
-
-      setSelectedObject(
-        activeObject
-      );
-
-      return;
-    }
-
-    const currentWidth =
-      activeObject.getScaledWidth();
-
-    let newLeft = padding;
-
-    if (
-      position === "center"
-    ) {
-      newLeft =
-        (canvasWidth -
-          currentWidth) /
-        2;
-    }
-
-    if (
-      position === "right"
-    ) {
-      newLeft =
-        canvasWidth -
-        currentWidth -
-        padding;
-    }
-
-    const maxLeft =
-      canvasWidth -
-      currentWidth -
-      padding;
-
-    newLeft = Math.max(
-      padding,
-      Math.min(
-        newLeft,
-        maxLeft
-      )
-    );
-
-    activeObject.set({
-      left: newLeft,
-    });
-
-    activeObject.setCoords();
-
-    canvas.renderAll();
-
-    setSelectedObject(
-      activeObject
-    );
-  };
-
-  /*
-   * =========================
-   * UNDO
-   * =========================
-   */
-
-  const undo = () => {
-    const canvas = canvasRef.current;
-
-    if (
-      !canvas ||
-      historyRef.current.length === 0
-    ) {
-      return;
-    }
+    const previousState =
+      history[
+        history.length - 1
+      ];
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON()
+        canvas.toJSON([
+          "elementId",
+          "elementType",
+          "imageSrc",
+        ])
       );
 
-    futureRef.current.push(
-      currentState
+    setFuture((previous) => [
+      ...previous,
+      currentState,
+    ]);
+
+    setHistory((previous) =>
+      previous.slice(0, -1)
     );
-
-    const previousState =
-      historyRef.current.pop();
-
-    if (!previousState) {
-      return;
-    }
 
     canvas
       .loadFromJSON(
         JSON.parse(previousState)
       )
       .then(() => {
-        canvas.renderAll();
-
-        setSelectedObject(null);
-
-        updateHistoryButtons();
+        restoreSelection(
+          selectedId
+        );
       });
-  };
+  }
 
-  /*
-   * =========================
-   * REDO
-   * =========================
-   */
-
-  const redo = () => {
-    const canvas = canvasRef.current;
+  function redo() {
+    const canvas =
+      canvasRef.current;
 
     if (
       !canvas ||
-      futureRef.current.length === 0
+      future.length === 0
     ) {
       return;
     }
 
-    const currentState =
-      JSON.stringify(
-        canvas.toJSON()
-      );
+    const activeObject =
+      canvas.getActiveObject();
 
-    historyRef.current.push(
-      currentState
-    );
+    const activeMeta =
+      activeObject as
+        | (typeof activeObject &
+            FabricObjectWithMeta)
+        | null;
+
+    const selectedId =
+      activeMeta?.elementId;
 
     const nextState =
-      futureRef.current.pop();
+      future[
+        future.length - 1
+      ];
 
-    if (!nextState) {
-      return;
-    }
+    const currentState =
+      JSON.stringify(
+        canvas.toJSON([
+          "elementId",
+          "elementType",
+          "imageSrc",
+        ])
+      );
+
+    setHistory((previous) => [
+      ...previous,
+      currentState,
+    ]);
+
+    setFuture((previous) =>
+      previous.slice(0, -1)
+    );
 
     canvas
       .loadFromJSON(
         JSON.parse(nextState)
       )
       .then(() => {
-        canvas.renderAll();
-
-        setSelectedObject(null);
-
-        updateHistoryButtons();
-      });
-  };
-
-  /*
-   * =========================
-   * CONVERT CANVAS DATA
-   * =========================
-   */
-
-  const convertCanvasToElements =
-    (): EditorElement[] => {
-      const canvas =
-        canvasRef.current;
-
-      if (!canvas) {
-        return [];
-      }
-
-      return canvas
-        .getObjects()
-        .map((object) => {
-          const meta =
-            object as FabricObjectWithMeta;
-
-          const id =
-            meta.elementId ??
-            createId();
-
-          const type =
-            meta.elementType;
-
-          /*
-           * TEXT
-           */
-
-          if (
-            object instanceof IText
-          ) {
-            let textType:
-              | "heading"
-              | "subheading"
-              | "text";
-
-            if (
-              type === "heading" ||
-              type === "subheading" ||
-              type === "text"
-            ) {
-              textType = type;
-            } else {
-              textType = "text";
-            }
-
-            return {
-              id,
-
-              type: textType,
-
-              x:
-                object.left ?? 0,
-
-              y:
-                object.top ?? 0,
-
-              width:
-                object.getScaledWidth(),
-
-              height:
-                object.getScaledHeight(),
-
-              text:
-                object.text ?? "",
-
-              fontSize:
-                object.fontSize ?? 18,
-
-              fontFamily:
-                object.fontFamily ??
-                "Arial",
-
-              color:
-                typeof object.fill ===
-                "string"
-                  ? object.fill
-                  : "#111827",
-
-              fontWeight:
-                object.fontWeight ===
-                "bold"
-                  ? "bold"
-                  : "normal",
-
-              fontStyle:
-                object.fontStyle ===
-                "italic"
-                  ? "italic"
-                  : "normal",
-            };
-          }
-
-          /*
-           * CIRCLE
-           */
-
-          if (
-            object instanceof Circle
-          ) {
-            return {
-              id,
-
-              type: "circle",
-
-              x:
-                object.left ?? 0,
-
-              y:
-                object.top ?? 0,
-
-              width:
-                object.getScaledWidth(),
-
-              height:
-                object.getScaledHeight(),
-
-              backgroundColor:
-                typeof object.fill ===
-                "string"
-                  ? object.fill
-                  : "#2563eb",
-            };
-          }
-
-          /*
-           * TRIANGLE
-           */
-
-          if (
-            object instanceof Triangle
-          ) {
-            return {
-              id,
-
-              type: "triangle",
-
-              x:
-                object.left ?? 0,
-
-              y:
-                object.top ?? 0,
-
-              width:
-                object.getScaledWidth(),
-
-              height:
-                object.getScaledHeight(),
-
-              backgroundColor:
-                typeof object.fill ===
-                "string"
-                  ? object.fill
-                  : "#2563eb",
-            };
-          }
-
-          /*
-           * RECTANGLE
-           */
-
-          if (
-            object instanceof Rect
-          ) {
-            return {
-              id,
-
-              type: "rectangle",
-
-              x:
-                object.left ?? 0,
-
-              y:
-                object.top ?? 0,
-
-              width:
-                object.getScaledWidth(),
-
-              height:
-                object.getScaledHeight(),
-
-              backgroundColor:
-                typeof object.fill ===
-                "string"
-                  ? object.fill
-                  : "#2563eb",
-            };
-          }
-
-          return null;
-        })
-        .filter(
-          (
-            element
-          ): element is EditorElement =>
-            element !== null
+        restoreSelection(
+          selectedId
         );
-    };
+      });
+  }
 
-  /*
-   * =========================
-   * SAVE DESIGN
-   * =========================
-   */
+  function saveCurrentDesign(
+    name: string
+  ) {
+    const elements =
+      convertCanvasToElements();
 
-  const saveCurrentDesign = (
-    name?: string
-  ) => {
-    const canvas =
-      canvasRef.current;
-
-    if (!canvas) {
+    if (elements.length === 0) {
       return;
     }
 
-    const canvasElements =
-      convertCanvasToElements();
+    const trimmedName =
+      name.trim();
+
+    if (!trimmedName) {
+      return;
+    }
 
     saveDesign(
-      name,
-      canvasElements,
-      backgroundColor
+      trimmedName,
+      elements
     );
+
+    clearCanvas();
+
+    setHistory([]);
+
+    setFuture([]);
+
+    const canvas =
+      canvasRef.current;
+
+    if (canvas) {
+      canvas.discardActiveObject();
+
+      canvas.renderAll();
+    }
+
+    setSelectedObject(null);
+  }
+
+  function getDownloadName() {
+    const name =
+      currentDesignName &&
+      currentDesignName.trim()
+        ? currentDesignName.trim()
+        : "certificate";
+
+    return name
+      .replace(
+        /[^a-zA-Z0-9-_ ]/g,
+        ""
+      )
+      .replace(/\s+/g, "-")
+      .toLowerCase();
+  }
+
+  function downloadPNG() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+    const activeObject =
+      canvas.getActiveObject();
+
+    canvas.discardActiveObject();
+
+    canvas.renderAll();
+
+    const dataUrl =
+      canvas.toDataURL({
+        format: "png",
+        multiplier: 2,
+        quality: 1,
+      });
+
+    const link =
+      document.createElement("a");
+
+    link.href = dataUrl;
+
+    link.download =
+      `${getDownloadName()}.png`;
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+    if (activeObject) {
+      canvas.setActiveObject(
+        activeObject
+      );
+
+      setSelectedObject(
+        activeObject
+      );
+
+      canvas.renderAll();
+    }
+  }
+
+  function downloadPDF() {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+    const activeObject =
+      canvas.getActiveObject();
+
+    canvas.discardActiveObject();
+
+    canvas.renderAll();
+
+    const width =
+      canvas.getWidth();
+
+    const height =
+      canvas.getHeight();
+
+    const dataUrl =
+      canvas.toDataURL({
+        format: "png",
+        multiplier: 2,
+        quality: 1,
+      });
+
+    const pdf =
+      new jsPDF({
+        orientation:
+          width >= height
+            ? "landscape"
+            : "portrait",
+
+        unit: "px",
+
+        format: [
+          width,
+          height,
+        ],
+      });
+
+    pdf.addImage(
+      dataUrl,
+      "PNG",
+      0,
+      0,
+      width,
+      height
+    );
+
+    pdf.save(
+      `${getDownloadName()}.pdf`
+    );
+
+    if (activeObject) {
+      canvas.setActiveObject(
+        activeObject
+      );
+
+      setSelectedObject(
+        activeObject
+      );
+
+      canvas.renderAll();
+    }
+  }
+
+  const value: FabricContextType = {
+    canvasRef,
+
+    selectedObject,
+
+    setSelectedObject,
+
+    convertCanvasToElements,
+
+    selectObjectById,
+
+    addText,
+
+    addShape,
+
+    addImage,
+
+    deleteSelected,
+
+    duplicateSelected,
+
+    increaseFontSize,
+
+    decreaseFontSize,
+
+    setFontSize,
+
+    setTextColor,
+
+    setShapeColor,
+
+    setFontFamily,
+
+    toggleBold,
+
+    toggleItalic,
+
+    alignObject,
+
+    rotateSelected,
+
+    bringForward,
+
+    sendBackward,
+
+    bringToFront,
+
+    sendToBack,
+
+    undo,
+
+    redo,
+
+    canUndo:
+      history.length > 0,
+
+    canRedo:
+      future.length > 0,
+
+    selectedFontSize,
+
+    saveCurrentDesign,
+
+    downloadPNG,
+
+    downloadPDF,
   };
 
   return (
     <FabricContext.Provider
-      value={{
-        canvasRef,
-
-        selectedObject:
-          selectedObjectState,
-
-        setSelectedObject,
-
-        selectedFontSize,
-
-        addHeading,
-        addSubheading,
-        addText,
-
-        addRectangle,
-        addCircle,
-        addTriangle,
-
-        deleteSelected,
-        duplicateSelected,
-
-        increaseFontSize,
-        decreaseFontSize,
-
-        setFontSize,
-
-        setFontFamily,
-
-        setTextColor,
-
-        setShapeColor,
-
-        toggleBold,
-        toggleItalic,
-
-        alignObject,
-
-        undo,
-        redo,
-
-        canUndo,
-        canRedo,
-
-        saveCanvasState,
-
-        saveCurrentDesign,
-
-        convertCanvasToElements,
-      }}
+      value={value}
     >
       {children}
     </FabricContext.Provider>

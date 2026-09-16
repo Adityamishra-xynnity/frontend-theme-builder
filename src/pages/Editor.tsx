@@ -1,23 +1,48 @@
 import { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import {
+  useLocation,
+  useParams,
+} from "react-router-dom";
 
 import Toolbar from "../components/editor/Toolbar";
 import ElementsPanel from "../components/editor/ElementsPanel";
 import FabricEditorCanvas from "../components/editor/fabric/FabricCanvas";
 
 import { templates } from "../data/templates";
-import { useEditor } from "../context/EditorContext";
+import {
+  useEditor,
+  type SavedDesign,
+} from "../context/EditorContext";
+
+interface EditorLocationState {
+  savedDesign?: SavedDesign;
+}
 
 export default function Editor() {
   const { id } = useParams();
 
+  const location = useLocation();
+
   const {
     loadTemplate,
+    loadSavedDesign,
     clearCanvas,
-    currentDesignId,
   } = useEditor();
 
+  const locationState =
+    location.state as EditorLocationState | null;
+
+  const savedDesign =
+    locationState?.savedDesign;
+
   useEffect(() => {
+    // Saved Design open karna
+    if (savedDesign) {
+      loadSavedDesign(savedDesign);
+      return;
+    }
+
+    // Template open karna
     if (id) {
       const template = templates.find(
         (item) => item.id === id
@@ -29,49 +54,45 @@ export default function Editor() {
       }
     }
 
-    if (!currentDesignId) {
+    // Blank editor
+    if (!id) {
       clearCanvas();
     }
-  }, [id, currentDesignId]);
+  }, [id]);
 
   const selectedTemplate = templates.find(
     (template) => template.id === id
   );
 
   return (
-    <div className="w-full">
-      {/* Editor heading */}
+    <div className="w-full px-6 py-6">
+      {/* Editor Header */}
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">
           Certificate Editor
         </h1>
 
         <p className="text-gray-500 mt-1">
-          {selectedTemplate
+          {savedDesign
+            ? `Editing: ${savedDesign.name}`
+            : selectedTemplate
             ? `Editing: ${selectedTemplate.name}`
-            : currentDesignId
-            ? "Editing your saved certificate."
             : "Create your certificate from a blank canvas."}
         </p>
       </div>
 
-      {/* Editor box */}
+      {/* Editor */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-
-        {/* TOOLBAR */}
+        {/* Toolbar */}
         <div className="relative z-50">
           <Toolbar />
         </div>
 
-        {/* Editor workspace */}
+        {/* Sidebar + Canvas */}
         <div className="flex h-[700px]">
-
-          {/* Left elements panel */}
           <ElementsPanel />
 
-          {/* Fabric canvas */}
           <FabricEditorCanvas />
-
         </div>
       </div>
     </div>

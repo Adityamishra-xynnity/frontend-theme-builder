@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useRef,
-} from "react";
+import { useEffect, useRef } from "react";
 
 import {
   Canvas as FabricCanvas,
@@ -9,25 +6,23 @@ import {
   Rect,
   Circle,
   Triangle,
+  FabricImage,
 } from "fabric";
 
 import { useEditor } from "../../../context/EditorContext";
 import { useFabric } from "../../../context/FabricContext";
 
-import type {
-  ElementType,
-} from "../../../types/editor";
+import type { ElementType } from "../../../types/editor";
 
 type FabricObjectWithMeta = {
   elementId?: string;
   elementType?: ElementType;
+  imageSrc?: string;
 };
 
 export default function FabricEditorCanvas() {
   const canvasElementRef =
-    useRef<HTMLCanvasElement | null>(
-      null
-    );
+    useRef<HTMLCanvasElement | null>(null);
 
   const internalChangeRef =
     useRef(false);
@@ -45,45 +40,38 @@ export default function FabricEditorCanvas() {
   } = useFabric();
 
   useEffect(() => {
-    if (!canvasElementRef.current) {
-      return;
-    }
+    if (!canvasElementRef.current) return;
 
     const canvas = new FabricCanvas(
       canvasElementRef.current,
       {
         width: 900,
         height: 650,
-
         backgroundColor,
-
         selection: true,
-
         preserveObjectStacking: true,
       }
     );
 
     canvasRef.current = canvas;
 
-    const updateEditorFromCanvas =
-      () => {
-        const latestElements =
-          convertCanvasToElements();
+    const updateEditorFromCanvas = () => {
+      const latestElements =
+        convertCanvasToElements();
 
-        internalChangeRef.current =
-          true;
+      internalChangeRef.current = true;
 
-        syncElementsFromCanvas(
-          latestElements
-        );
+      syncElementsFromCanvas(
+        latestElements
+      );
 
-        const object =
-          canvas.getActiveObject();
+      const object =
+        canvas.getActiveObject();
 
-        setSelectedObject(
-          object ?? null
-        );
-      };
+      setSelectedObject(
+        object ?? null
+      );
+    };
 
     const handleSelectionCreated = (
       event: any
@@ -106,15 +94,13 @@ export default function FabricEditorCanvas() {
       setSelectedObject(object);
     };
 
-    const handleSelectionCleared =
-      () => {
-        setSelectedObject(null);
-      };
+    const handleSelectionCleared = () => {
+      setSelectedObject(null);
+    };
 
-    const handleObjectModified =
-      () => {
-        updateEditorFromCanvas();
-      };
+    const handleObjectModified = () => {
+      updateEditorFromCanvas();
+    };
 
     const handleTextChanged = () => {
       updateEditorFromCanvas();
@@ -126,9 +112,7 @@ export default function FabricEditorCanvas() {
       const object =
         event.target;
 
-      if (!object) {
-        return;
-      }
+      if (!object) return;
 
       setSelectedObject(object);
     };
@@ -139,9 +123,7 @@ export default function FabricEditorCanvas() {
       const object =
         event.target;
 
-      if (!object) {
-        return;
-      }
+      if (!object) return;
 
       setSelectedObject(object);
 
@@ -247,9 +229,7 @@ export default function FabricEditorCanvas() {
     const canvas =
       canvasRef.current;
 
-    if (!canvas) {
-      return;
-    }
+    if (!canvas) return;
 
     if (
       internalChangeRef.current
@@ -265,27 +245,34 @@ export default function FabricEditorCanvas() {
       return;
     }
 
-    canvas.clear();
+    let cancelled = false;
 
-    canvas.backgroundColor =
-      backgroundColor;
+    async function renderElements() {
+      canvas.clear();
 
-    elements.forEach(
-      (element) => {
+      canvas.backgroundColor =
+        backgroundColor;
+
+      for (const element of elements) {
+        if (cancelled) return;
+
+        /*
+         * TEXT
+         */
         if (
-          element.type ===
-            "heading" ||
-          element.type ===
-            "subheading" ||
-          element.type ===
-            "text"
+          element.type === "heading" ||
+          element.type === "subheading" ||
+          element.type === "text"
         ) {
           const text =
             new IText(
               element.text ?? "",
               {
-                left: element.x,
-                top: element.y,
+                left:
+                  element.x,
+
+                top:
+                  element.y,
 
                 fontSize:
                   element.fontSize ??
@@ -308,16 +295,34 @@ export default function FabricEditorCanvas() {
                   "normal",
 
                 originX: "left",
+
                 originY: "top",
 
+                scaleX:
+                  element.scaleX ??
+                  1,
+
+                scaleY:
+                  element.scaleY ??
+                  1,
+
+                angle:
+                  element.angle ??
+                  0,
+
+                opacity:
+                  element.opacity ??
+                  1,
+
                 editable: true,
+
                 selectable: true,
+
                 evented: true,
 
                 padding: 4,
 
-                transparentCorners:
-                  false,
+                transparentCorners: false,
 
                 cornerColor:
                   "#111827",
@@ -342,29 +347,56 @@ export default function FabricEditorCanvas() {
 
           canvas.add(text);
 
-          return;
+          continue;
         }
 
+        /*
+         * RECTANGLE
+         */
         if (
           element.type ===
           "rectangle"
         ) {
           const rectangle =
             new Rect({
-              left: element.x,
-              top: element.y,
+              left:
+                element.x,
 
-              width: element.width,
-              height: element.height,
+              top:
+                element.y,
+
+              width:
+                element.width,
+
+              height:
+                element.height,
+
+              scaleX:
+                element.scaleX ??
+                1,
+
+              scaleY:
+                element.scaleY ??
+                1,
+
+              angle:
+                element.angle ??
+                0,
+
+              opacity:
+                element.opacity ??
+                1,
 
               fill:
                 element.backgroundColor ??
                 "#2563eb",
 
               originX: "left",
+
               originY: "top",
 
               selectable: true,
+
               evented: true,
 
               transparentCorners:
@@ -390,36 +422,61 @@ export default function FabricEditorCanvas() {
           meta.elementType =
             element.type;
 
-          canvas.add(rectangle);
+          canvas.add(
+            rectangle
+          );
 
-          return;
+          continue;
         }
 
+        /*
+         * CIRCLE
+         */
         if (
           element.type ===
           "circle"
         ) {
           const radius =
-            Math.min(
-              element.width,
-              element.height
-            ) / 2;
+            70;
 
           const circle =
             new Circle({
-              left: element.x,
-              top: element.y,
+              left:
+                element.x,
+
+              top:
+                element.y,
 
               radius,
+
+              scaleX:
+                element.scaleX ??
+                element.width /
+                  (radius * 2),
+
+              scaleY:
+                element.scaleY ??
+                element.height /
+                  (radius * 2),
+
+              angle:
+                element.angle ??
+                0,
+
+              opacity:
+                element.opacity ??
+                1,
 
               fill:
                 element.backgroundColor ??
                 "#2563eb",
 
               originX: "left",
+
               originY: "top",
 
               selectable: true,
+
               evented: true,
 
               transparentCorners:
@@ -447,29 +504,56 @@ export default function FabricEditorCanvas() {
 
           canvas.add(circle);
 
-          return;
+          continue;
         }
 
+        /*
+         * TRIANGLE
+         */
         if (
           element.type ===
           "triangle"
         ) {
           const triangle =
             new Triangle({
-              left: element.x,
-              top: element.y,
+              left:
+                element.x,
 
-              width: element.width,
-              height: element.height,
+              top:
+                element.y,
+
+              width:
+                element.width,
+
+              height:
+                element.height,
+
+              scaleX:
+                element.scaleX ??
+                1,
+
+              scaleY:
+                element.scaleY ??
+                1,
+
+              angle:
+                element.angle ??
+                0,
+
+              opacity:
+                element.opacity ??
+                1,
 
               fill:
                 element.backgroundColor ??
                 "#2563eb",
 
               originX: "left",
+
               originY: "top",
 
               selectable: true,
+
               evented: true,
 
               transparentCorners:
@@ -496,15 +580,116 @@ export default function FabricEditorCanvas() {
             element.type;
 
           canvas.add(triangle);
+
+          continue;
+        }
+
+        /*
+         * IMAGE
+         */
+        if (
+          element.type === "image" &&
+          element.src
+        ) {
+          try {
+            const image =
+              await FabricImage.fromURL(
+                element.src
+              );
+
+            if (cancelled)
+              return;
+
+            const originalWidth =
+              image.width || 1;
+
+            const originalHeight =
+              image.height || 1;
+
+            image.set({
+              left:
+                element.x,
+
+              top:
+                element.y,
+
+              scaleX:
+                element.scaleX ??
+                element.width /
+                  originalWidth,
+
+              scaleY:
+                element.scaleY ??
+                element.height /
+                  originalHeight,
+
+              angle:
+                element.angle ??
+                0,
+
+              opacity:
+                element.opacity ??
+                1,
+
+              selectable: true,
+
+              evented: true,
+
+              transparentCorners:
+                false,
+
+              cornerColor:
+                "#111827",
+
+              cornerStyle:
+                "circle",
+
+              borderColor:
+                "#111827",
+
+              originX: "left",
+
+              originY: "top",
+            });
+
+            const meta =
+              image as typeof image &
+                FabricObjectWithMeta;
+
+            meta.elementId =
+              element.id;
+
+            meta.elementType =
+              "image";
+
+            meta.imageSrc =
+              element.src;
+
+            canvas.add(image);
+          } catch (error) {
+            console.error(
+              "Could not restore image:",
+              error
+            );
+          }
         }
       }
-    );
 
-    canvas.discardActiveObject();
+      if (cancelled)
+        return;
 
-    setSelectedObject(null);
+      canvas.discardActiveObject();
 
-    canvas.renderAll();
+      setSelectedObject(null);
+
+      canvas.renderAll();
+    }
+
+    renderElements();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     elements,
     backgroundColor,
@@ -527,7 +712,6 @@ export default function FabricEditorCanvas() {
             height={650}
             style={{
               display: "block",
-
               width: "900px",
               height: "650px",
             }}

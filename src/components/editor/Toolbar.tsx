@@ -1,7 +1,27 @@
 import {
-  useEffect,
-  useState,
-} from "react";
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowUpToLine,
+  RotateCcw,
+  RotateCw,
+  Trash2,
+  Copy,
+  Undo2,
+  Redo2,
+  Bold,
+  Italic,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Save,
+  X,
+  Download,
+  ImageDown,
+  FileDown,
+} from "lucide-react";
+
+import { useEffect, useState } from "react";
 
 import { useFabric } from "../../context/FabricContext";
 import { useEditor } from "../../context/EditorContext";
@@ -9,7 +29,6 @@ import { useEditor } from "../../context/EditorContext";
 export default function Toolbar() {
   const {
     selectedObject,
-
     selectedFontSize,
 
     deleteSelected,
@@ -20,6 +39,7 @@ export default function Toolbar() {
 
     increaseFontSize,
     decreaseFontSize,
+
     setFontSize,
 
     setTextColor,
@@ -32,7 +52,20 @@ export default function Toolbar() {
 
     alignObject,
 
+    rotateSelected,
+
+    bringForward,
+    sendBackward,
+    bringToFront,
+    sendToBack,
+
+    canUndo,
+    canRedo,
+
     saveCurrentDesign,
+
+    downloadPNG,
+    downloadPDF,
   } = useFabric();
 
   const {
@@ -41,452 +74,576 @@ export default function Toolbar() {
     currentDesignName,
   } = useEditor();
 
-  /*
-   * Check whether selected object
-   * is a text object.
-   */
+  const [fontSize, setFontSizeState] = useState(
+    selectedFontSize ?? 18
+  );
+
+  const [showSaveModal, setShowSaveModal] =
+    useState(false);
+
+  const [designName, setDesignName] =
+    useState("");
+
+  const [saveError, setSaveError] =
+    useState("");
+
+  const [showDownloadMenu, setShowDownloadMenu] =
+    useState(false);
+
+  useEffect(() => {
+    if (selectedFontSize !== null) {
+      setFontSizeState(selectedFontSize);
+    }
+  }, [selectedFontSize]);
 
   const isText =
     selectedObject?.type === "i-text" ||
     selectedObject?.type === "textbox";
 
-  /*
-   * Font size input ko string rakha hai
-   * taki typing smooth rahe.
-   */
+  const isShape =
+    selectedObject?.type === "rect" ||
+    selectedObject?.type === "circle" ||
+    selectedObject?.type === "triangle";
 
-  const [fontSize, setFontSizeValue] =
-    useState("18");
+  const isImage =
+    selectedObject?.type === "image";
 
-  /*
-   * Jab selected object ya font size change
-   * hota hai to input automatically update hoga.
-   */
-
-  useEffect(() => {
-    if (isText) {
-      setFontSizeValue(
-        String(selectedFontSize)
-      );
-    }
-  }, [
-    selectedFontSize,
-    isText,
-  ]);
-
-  /*
-   * Manual font size input.
-   */
-
-  const handleFontSizeChange = (
+  function handleFontSizeChange(
     event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const value =
-      event.target.value;
+  ) {
+    const value = Number(
+      event.target.value
+    );
 
-    setFontSizeValue(value);
+    setFontSizeState(value);
 
-    if (value === "") {
+    if (
+      value >= 8 &&
+      value <= 200
+    ) {
+      setFontSize(value);
+    }
+  }
+
+  function openSaveModal() {
+    setDesignName(
+      currentDesignName &&
+        currentDesignName !== "My Certificate"
+        ? currentDesignName
+        : ""
+    );
+
+    setSaveError("");
+    setShowSaveModal(true);
+  }
+
+  function closeSaveModal() {
+    setShowSaveModal(false);
+    setSaveError("");
+  }
+
+  function handleSave() {
+    const trimmedName =
+      designName.trim();
+
+    if (!trimmedName) {
+      setSaveError(
+        "Please enter a certificate name."
+      );
       return;
     }
 
-    const numberValue =
-      Number(value);
+    saveCurrentDesign(trimmedName);
 
-    if (
-      Number.isNaN(numberValue)
-    ) {
-      return;
-    }
+    setShowSaveModal(false);
+    setDesignName("");
+    setSaveError("");
+  }
 
-    if (
-      numberValue >= 8 &&
-      numberValue <= 200
-    ) {
-      setFontSize(numberValue);
-    }
-  };
+  function handleDownloadPNG() {
+    setShowDownloadMenu(false);
+    downloadPNG();
+  }
 
-  /*
-   * Input se bahar click karne par
-   * invalid value ko correct kar denge.
-   */
-
-  const handleFontSizeBlur = () => {
-    let numberValue =
-      Number(fontSize);
-
-    if (
-      Number.isNaN(numberValue)
-    ) {
-      numberValue =
-        selectedFontSize;
-    }
-
-    numberValue = Math.max(
-      8,
-      Math.min(
-        200,
-        Math.round(numberValue)
-      )
-    );
-
-    setFontSizeValue(
-      String(numberValue)
-    );
-
-    setFontSize(numberValue);
-  };
-
-  /*
-   * Font family.
-   */
-
-  const currentFontFamily =
-    selectedObject?.fontFamily ??
-    "Arial";
-
-  /*
-   * Text color.
-   */
-
-  const currentTextColor =
-    typeof selectedObject?.fill ===
-    "string"
-      ? selectedObject.fill
-      : "#111827";
-
-  /*
-   * Bold state.
-   */
-
-  const isBold =
-    selectedObject?.fontWeight ===
-    "bold";
-
-  /*
-   * Italic state.
-   */
-
-  const isItalic =
-    selectedObject?.fontStyle ===
-    "italic";
+  function handleDownloadPDF() {
+    setShowDownloadMenu(false);
+    downloadPDF();
+  }
 
   return (
-    <div className="w-full bg-white border-b border-gray-200 shadow-sm">
+    <>
+      <div className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
 
-      {/* =========================
-          MAIN TOOLBAR
-      ========================= */}
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1 border-r border-gray-200 pr-3">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Undo"
+            >
+              <Undo2 size={17} />
+            </button>
 
-      <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto">
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Redo"
+            >
+              <Redo2 size={17} />
+            </button>
+          </div>
 
-        {/* Undo */}
+          {/* Layer controls */}
+          {selectedObject && (
+            <div className="flex items-center gap-1 border-r border-gray-200 pr-3">
+              <button
+                onClick={bringToFront}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Bring to front"
+              >
+                <ArrowUpToLine size={17} />
+              </button>
 
-        <button
-          type="button"
-          onClick={undo}
-          className="toolbar-button"
-          title="Undo"
-        >
-          ↩
-        </button>
+              <button
+                onClick={bringForward}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Bring forward"
+              >
+                <ArrowUp size={17} />
+              </button>
 
-        {/* Redo */}
+              <button
+                onClick={sendBackward}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Send backward"
+              >
+                <ArrowDown size={17} />
+              </button>
 
-        <button
-          type="button"
-          onClick={redo}
-          className="toolbar-button"
-          title="Redo"
-        >
-          ↪
-        </button>
+              <button
+                onClick={sendToBack}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Send to back"
+              >
+                <ArrowDownToLine size={17} />
+              </button>
+            </div>
+          )}
 
-        <div className="toolbar-divider" />
+          {/* Text controls */}
+          {isText && (
+            <div className="flex items-center gap-2 border-r border-gray-200 pr-3">
 
-        {/* Background */}
+              <select
+                value={
+                  selectedObject?.fontFamily ??
+                  "Arial"
+                }
+                onChange={(event) =>
+                  setFontFamily(
+                    event.target.value
+                  )
+                }
+                className="h-9 px-2 border border-gray-300 rounded-lg text-sm outline-none"
+              >
+                <option value="Arial">
+                  Arial
+                </option>
 
-        <span className="text-xs font-semibold text-gray-500">
-          Background
-        </span>
+                <option value="Helvetica">
+                  Helvetica
+                </option>
 
-        <input
-          type="color"
-          value={backgroundColor}
-          onChange={(event) =>
-            setCanvasBackground(
-              event.target.value
-            )
-          }
-          className="toolbar-color"
-          title="Certificate background color"
-        />
+                <option value="Times New Roman">
+                  Times New Roman
+                </option>
 
-        <div className="toolbar-divider" />
+                <option value="Georgia">
+                  Georgia
+                </option>
 
-        {/* Save */}
+                <option value="Verdana">
+                  Verdana
+                </option>
 
-        <button
-          type="button"
-          onClick={() =>
-            saveCurrentDesign(
-              currentDesignName ||
-                "My Certificate"
-            )
-          }
-          className="toolbar-action-button"
-          title="Save certificate"
-        >
-          💾 Save
-        </button>
+                <option value="Courier New">
+                  Courier New
+                </option>
+              </select>
 
-        {/* Selected object buttons */}
+              <button
+                onClick={decreaseFontSize}
+                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100"
+                title="Decrease font size"
+              >
+                −
+              </button>
 
-        {selectedObject && (
-          <>
-            <div className="toolbar-divider" />
+              <input
+                type="number"
+                min="8"
+                max="200"
+                value={fontSize}
+                onChange={
+                  handleFontSizeChange
+                }
+                className="w-16 h-8 border border-gray-300 rounded-lg text-center text-sm"
+              />
+
+              <button
+                onClick={increaseFontSize}
+                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100"
+                title="Increase font size"
+              >
+                +
+              </button>
+
+              <label
+                className="w-8 h-8 rounded-lg border border-gray-300 cursor-pointer flex items-center justify-center overflow-hidden"
+                title="Text color"
+              >
+                <input
+                  type="color"
+                  value={
+                    typeof selectedObject?.fill ===
+                    "string"
+                      ? selectedObject.fill
+                      : "#111827"
+                  }
+                  onChange={(event) =>
+                    setTextColor(
+                      event.target.value
+                    )
+                  }
+                  className="w-6 h-6 cursor-pointer"
+                />
+              </label>
+
+              <button
+                onClick={toggleBold}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Bold"
+              >
+                <Bold size={17} />
+              </button>
+
+              <button
+                onClick={toggleItalic}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Italic"
+              >
+                <Italic size={17} />
+              </button>
+
+              <button
+                onClick={() =>
+                  alignObject("left")
+                }
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Align left"
+              >
+                <AlignLeft size={17} />
+              </button>
+
+              <button
+                onClick={() =>
+                  alignObject("center")
+                }
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Align center"
+              >
+                <AlignCenter size={17} />
+              </button>
+
+              <button
+                onClick={() =>
+                  alignObject("right")
+                }
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Align right"
+              >
+                <AlignRight size={17} />
+              </button>
+            </div>
+          )}
+
+          {/* Shape controls */}
+          {isShape && (
+            <div className="flex items-center gap-2 border-r border-gray-200 pr-3">
+              <span className="text-xs font-medium text-gray-500">
+                Shape
+              </span>
+
+              <label
+                className="w-8 h-8 rounded-lg border border-gray-300 cursor-pointer flex items-center justify-center overflow-hidden"
+                title="Shape color"
+              >
+                <input
+                  type="color"
+                  value={
+                    typeof selectedObject?.fill ===
+                    "string"
+                      ? selectedObject.fill
+                      : "#2563eb"
+                  }
+                  onChange={(event) =>
+                    setShapeColor(
+                      event.target.value
+                    )
+                  }
+                  className="w-6 h-6 cursor-pointer"
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Image controls */}
+          {isImage && (
+            <div className="flex items-center gap-2 border-r border-gray-200 pr-3">
+              <span className="text-xs font-medium text-gray-500">
+                Image
+              </span>
+
+              <button
+                onClick={() =>
+                  rotateSelected(-15)
+                }
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm"
+                title="Rotate left"
+              >
+                <RotateCcw size={15} />
+                15°
+              </button>
+
+              <button
+                onClick={() =>
+                  rotateSelected(15)
+                }
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm"
+                title="Rotate right"
+              >
+                <RotateCw size={15} />
+                15°
+              </button>
+
+              <span className="text-xs text-gray-400">
+                Drag corners to resize
+              </span>
+            </div>
+          )}
+
+          {/* Right side controls */}
+          <div className="ml-auto flex items-center gap-2">
+
+            {/* Canvas background */}
+            <label
+              className="flex items-center gap-2 text-sm text-gray-600"
+              title="Canvas background"
+            >
+              <span>Background</span>
+
+              <input
+                type="color"
+                value={backgroundColor}
+                onChange={(event) =>
+                  setCanvasBackground(
+                    event.target.value
+                  )
+                }
+                className="w-8 h-8 cursor-pointer"
+              />
+            </label>
 
             {/* Duplicate */}
-
-            <button
-              type="button"
-              onClick={
-                duplicateSelected
-              }
-              className="toolbar-button"
-              title="Duplicate"
-            >
-              ⧉
-            </button>
+            {selectedObject && (
+              <button
+                onClick={duplicateSelected}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm"
+              >
+                <Copy size={15} />
+                Duplicate
+              </button>
+            )}
 
             {/* Delete */}
+            {selectedObject && (
+              <button
+                onClick={deleteSelected}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm"
+              >
+                <Trash2 size={15} />
+                Delete
+              </button>
+            )}
 
+            {/* Save */}
             <button
-              type="button"
-              onClick={
-                deleteSelected
-              }
-              className="toolbar-button delete-button"
-              title="Delete"
+              onClick={openSaveModal}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium"
             >
-              🗑
+              <Save size={15} />
+              Save
             </button>
-          </>
+
+            {/* Download */}
+            <div className="relative">
+              <button
+                onClick={() =>
+                  setShowDownloadMenu(
+                    (previous) =>
+                      !previous
+                  )
+                }
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 text-sm font-medium"
+              >
+                <Download size={15} />
+                Download
+
+                <span className="text-xs">
+                  ▾
+                </span>
+              </button>
+
+              {showDownloadMenu && (
+                <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-gray-200 rounded-xl shadow-xl z-[80] overflow-hidden">
+
+                  <button
+                    onClick={
+                      handleDownloadPNG
+                    }
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50"
+                  >
+                    <ImageDown
+                      size={18}
+                    />
+
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        Download PNG
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        High quality image
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={
+                      handleDownloadPDF
+                    }
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 border-t border-gray-100"
+                  >
+                    <FileDown
+                      size={18}
+                    />
+
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        Download PDF
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        Printable certificate
+                      </p>
+                    </div>
+                  </button>
+
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {currentDesignName && (
+          <p className="text-xs text-gray-400 mt-2">
+            Editing: {currentDesignName}
+          </p>
         )}
       </div>
 
-      {/* =========================
-          TEXT TOOLBAR
-      ========================= */}
+      {/* Save Certificate Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
 
-      {isText && (
-        <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-100 overflow-x-auto">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Save Certificate
+                </h2>
 
-          {/* Font Family */}
+                <p className="text-sm text-gray-500 mt-1">
+                  Enter a name for your certificate.
+                </p>
+              </div>
 
-          <select
-            className="toolbar-select"
-            value={currentFontFamily}
-            onChange={(event) =>
-              setFontFamily(
-                event.target.value
-              )
-            }
-          >
-            <option value="Arial">
-              Arial
-            </option>
+              <button
+                onClick={closeSaveModal}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <option value="Georgia">
-              Georgia
-            </option>
-
-            <option value="Times New Roman">
-              Times New Roman
-            </option>
-
-            <option value="Verdana">
-              Verdana
-            </option>
-
-            <option value="Courier New">
-              Courier New
-            </option>
-
-            <option value="Trebuchet MS">
-              Trebuchet MS
-            </option>
-          </select>
-
-          {/* Decrease Font */}
-
-          <button
-            type="button"
-            onClick={
-              decreaseFontSize
-            }
-            className="toolbar-button"
-            title="Decrease font size"
-          >
-            A−
-          </button>
-
-          {/* Font Size Input */}
-
-          <input
-            type="number"
-            min="8"
-            max="200"
-            value={fontSize}
-            onChange={
-              handleFontSizeChange
-            }
-            onBlur={
-              handleFontSizeBlur
-            }
-            className="w-16 h-[38px] px-2 text-center border border-gray-300 rounded-lg outline-none focus:border-gray-900"
-            title="Font size"
-          />
-
-          {/* Increase Font */}
-
-          <button
-            type="button"
-            onClick={
-              increaseFontSize
-            }
-            className="toolbar-button"
-            title="Increase font size"
-          >
-            A+
-          </button>
-
-          <div className="toolbar-divider" />
-
-          {/* Text */}
-
-          <span className="text-xs font-semibold text-gray-500">
-            Text
-          </span>
-
-          {/* Text Color */}
-
-          <input
-            type="color"
-            value={currentTextColor}
-            className="toolbar-color"
-            title="Text color"
-            onChange={(event) =>
-              setTextColor(
-                event.target.value
-              )
-            }
-          />
-
-          {/* Bold */}
-
-          <button
-            type="button"
-            onClick={toggleBold}
-            className={`toolbar-button ${
-              isBold
-                ? "bg-gray-200 border-gray-300"
-                : ""
-            }`}
-            title="Bold"
-          >
-            <strong>B</strong>
-          </button>
-
-          {/* Italic */}
-
-          <button
-            type="button"
-            onClick={toggleItalic}
-            className={`toolbar-button ${
-              isItalic
-                ? "bg-gray-200 border-gray-300"
-                : ""
-            }`}
-            title="Italic"
-          >
-            <span className="italic">
-              I
-            </span>
-          </button>
-
-          <div className="toolbar-divider" />
-
-          {/* Alignment */}
-
-          <span className="text-xs font-semibold text-gray-500">
-            Align
-          </span>
-
-          <button
-            type="button"
-            onClick={() =>
-              alignObject("left")
-            }
-            className="toolbar-button"
-            title="Align left"
-          >
-            ⬅
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              alignObject("center")
-            }
-            className="toolbar-button"
-            title="Align center"
-          >
-            ↔
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              alignObject("right")
-            }
-            className="toolbar-button"
-            title="Align right"
-          >
-            ➡
-          </button>
-        </div>
-      )}
-
-      {/* =========================
-          SHAPE TOOLBAR
-      ========================= */}
-
-      {selectedObject &&
-        !isText && (
-          <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-100">
-
-            <span className="text-xs font-semibold text-gray-500">
-              Shape Color
-            </span>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Certificate Name
+            </label>
 
             <input
-              type="color"
-              className="toolbar-color"
-              title="Shape color"
-              onChange={(event) =>
-                setShapeColor(
+              autoFocus
+              type="text"
+              value={designName}
+              onChange={(event) => {
+                setDesignName(
                   event.target.value
-                )
-              }
+                );
+
+                setSaveError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  handleSave();
+                }
+
+                if (event.key === "Escape") {
+                  closeSaveModal();
+                }
+              }}
+              placeholder="Example: Web Development Certificate"
+              className="w-full h-11 px-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-black focus:border-black"
             />
 
-            <span className="text-xs text-gray-500">
-              Select a shape to edit
-            </span>
+            {saveError && (
+              <p className="text-sm text-red-600 mt-2">
+                {saveError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6">
+
+              <button
+                onClick={closeSaveModal}
+                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm font-medium"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleSave}
+                className="px-5 py-2 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium"
+              >
+                Save Certificate
+              </button>
+
+            </div>
           </div>
-        )}
-    </div>
+        </div>
+      )}
+    </>
   );
 }

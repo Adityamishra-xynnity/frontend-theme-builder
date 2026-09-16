@@ -31,41 +31,29 @@ interface EditorContextType {
 
   canRedo: boolean;
 
-  addElement: (
-    element: EditorElement
-  ) => void;
+  addElement: (element: EditorElement) => void;
 
-  selectElement: (
-    id: string | null
-  ) => void;
+  selectElement: (id: string | null) => void;
 
   updateElement: (
     id: string,
     updates: Partial<EditorElement>
   ) => void;
 
-  deleteElement: (
-    id: string
-  ) => void;
+  deleteElement: (id: string) => void;
 
-  duplicateElement: (
-    id: string
-  ) => void;
+  duplicateElement: (id: string) => void;
 
-  loadTemplate: (
-    template: {
-      id: string;
-      name: string;
-      backgroundColor: string;
-      elements: EditorElement[];
-    }
-  ) => void;
+  loadTemplate: (template: {
+    id: string;
+    name: string;
+    backgroundColor: string;
+    elements: EditorElement[];
+  }) => void;
 
   clearCanvas: () => void;
 
-  setCanvasBackground: (
-    color: string
-  ) => void;
+  setCanvasBackground: (color: string) => void;
 
   undo: () => void;
 
@@ -77,15 +65,11 @@ interface EditorContextType {
     backgroundOverride?: string
   ) => void;
 
-  loadSavedDesign: (
-    design: SavedDesign
-  ) => void;
+  loadSavedDesign: (design: SavedDesign) => void;
 
   getSavedDesigns: () => SavedDesign[];
 
-  deleteSavedDesign: (
-    id: string
-  ) => void;
+  deleteSavedDesign: (id: string) => void;
 
   syncElementsFromCanvas: (
     elements: EditorElement[]
@@ -93,15 +77,12 @@ interface EditorContextType {
 }
 
 const EditorContext =
-  createContext<
-    EditorContextType | null
-  >(null);
+  createContext<EditorContextType | null>(null);
 
 const STORAGE_KEY =
   "theme-builder-saved-designs";
 
-const DEFAULT_BACKGROUND =
-  "#ffffff";
+const DEFAULT_BACKGROUND = "#ffffff";
 
 interface EditorState {
   elements: EditorElement[];
@@ -118,24 +99,18 @@ export function EditorProvider({
   const [elements, setElements] =
     useState<EditorElement[]>([]);
 
-  const [
-    selectedId,
-    setSelectedId,
-  ] = useState<string | null>(null);
+  const [selectedId, setSelectedId] =
+    useState<string | null>(null);
 
   const [
     backgroundColor,
     setBackgroundColorState,
-  ] = useState(
-    DEFAULT_BACKGROUND
-  );
+  ] = useState(DEFAULT_BACKGROUND);
 
   const [
     currentDesignId,
     setCurrentDesignId,
-  ] = useState<string | null>(
-    null
-  );
+  ] = useState<string | null>(null);
 
   const [
     currentDesignName,
@@ -236,11 +211,8 @@ export function EditorProvider({
 
     const duplicate: EditorElement = {
       ...element,
-
       id: createId(),
-
       x: element.x + 30,
-
       y: element.y + 30,
     };
 
@@ -270,7 +242,9 @@ export function EditorProvider({
       template.elements.map(
         (element) => ({
           ...element,
-          id: element.id || createId(),
+          id:
+            element.id ||
+            createId(),
         })
       )
     );
@@ -369,24 +343,135 @@ export function EditorProvider({
     );
   };
 
+  /*
+   * Old ya corrupted localStorage data
+   * ko safely read karta hai.
+   */
+  const getSavedDesigns =
+    (): SavedDesign[] => {
+      try {
+        const raw =
+          localStorage.getItem(
+            STORAGE_KEY
+          );
+
+        if (!raw) {
+          return [];
+        }
+
+        const parsed =
+          JSON.parse(raw);
+
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+
+        const validDesigns =
+          parsed
+            .filter(
+              (design) =>
+                design &&
+                typeof design ===
+                  "object"
+            )
+            .map((design) => {
+              const safeName =
+                typeof design.name ===
+                "string"
+                  ? design.name
+                  : "My Certificate";
+
+              const safeElements =
+                Array.isArray(
+                  design.elements
+                )
+                  ? design.elements
+                  : [];
+
+              return {
+                id:
+                  typeof design.id ===
+                  "string"
+                    ? design.id
+                    : createId(),
+
+                name: safeName,
+
+                elements:
+                  safeElements,
+
+                backgroundColor:
+                  typeof design.backgroundColor ===
+                  "string"
+                    ? design.backgroundColor
+                    : DEFAULT_BACKGROUND,
+
+                createdAt:
+                  typeof design.createdAt ===
+                  "string"
+                    ? design.createdAt
+                    : new Date().toISOString(),
+
+                updatedAt:
+                  typeof design.updatedAt ===
+                  "string"
+                    ? design.updatedAt
+                    : new Date().toISOString(),
+              };
+            });
+
+        /*
+         * Corrupted names ko fix karke
+         * localStorage mein dobara save karta hai.
+         */
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(validDesigns)
+        );
+
+        return validDesigns;
+      } catch (error) {
+        console.error(
+          "Failed to read saved designs:",
+          error
+        );
+
+        return [];
+      }
+    };
+
   const saveDesign = (
     name?: string,
     elementsOverride?: EditorElement[],
     backgroundOverride?: string
   ) => {
+    /*
+     * Important:
+     * Agar galti se array/object name ke
+     * andar aa gaya ho to use ignore karo.
+     */
+    const safeName =
+      typeof name === "string" &&
+      name.trim().length > 0
+        ? name
+        : currentDesignName ||
+          "My Certificate";
+
     const finalElements =
-      elementsOverride ?? elements;
+      Array.isArray(
+        elementsOverride
+      )
+        ? elementsOverride
+        : elements;
 
     const finalBackground =
-      backgroundOverride ??
-      backgroundColor;
+      typeof backgroundOverride ===
+      "string"
+        ? backgroundOverride
+        : backgroundColor;
 
-    const designs: SavedDesign[] =
-      JSON.parse(
-        localStorage.getItem(
-          STORAGE_KEY
-        ) || "[]"
-      );
+    const designs =
+      getSavedDesigns();
 
     const now =
       new Date().toISOString();
@@ -400,10 +485,7 @@ export function EditorProvider({
               ? {
                   ...design,
 
-                  name:
-                    name ||
-                    currentDesignName ||
-                    design.name,
+                  name: safeName,
 
                   elements:
                     finalElements,
@@ -425,9 +507,7 @@ export function EditorProvider({
         {
           id: createId(),
 
-          name:
-            name ||
-            "My Certificate",
+          name: safeName,
 
           elements:
             finalElements,
@@ -472,11 +552,14 @@ export function EditorProvider({
     setFuture([]);
 
     setElements(
-      design.elements
+      Array.isArray(design.elements)
+        ? design.elements
+        : []
     );
 
     setBackgroundColorState(
-      design.backgroundColor
+      design.backgroundColor ||
+        DEFAULT_BACKGROUND
     );
 
     setCurrentDesignId(
@@ -484,20 +567,14 @@ export function EditorProvider({
     );
 
     setCurrentDesignName(
-      design.name
+      typeof design.name ===
+        "string"
+        ? design.name
+        : "My Certificate"
     );
 
     setSelectedId(null);
   };
-
-  const getSavedDesigns =
-    (): SavedDesign[] => {
-      return JSON.parse(
-        localStorage.getItem(
-          STORAGE_KEY
-        ) || "[]"
-      );
-    };
 
   const deleteSavedDesign = (
     id: string
@@ -518,19 +595,10 @@ export function EditorProvider({
 
     if (currentDesignId === id) {
       setCurrentDesignId(null);
-
       setCurrentDesignName("");
     }
   };
 
-  /*
-   * Fabric canvas se latest elements
-   * React state mein sync karta hai.
-   *
-   * Is function mein history add nahi
-   * ki jaati, kyunki Fabric already
-   * apni editing history manage karta hai.
-   */
   const syncElementsFromCanvas = (
     canvasElements: EditorElement[]
   ) => {

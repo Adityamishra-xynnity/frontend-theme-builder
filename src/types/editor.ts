@@ -4,10 +4,12 @@ export type ElementType =
   | "text"
   | "rectangle"
   | "circle"
-  | "triangle";
+  | "triangle"
+  | "image";
 
 export interface EditorElement {
   id: string;
+
   type: ElementType;
 
   x: number;
@@ -15,6 +17,12 @@ export interface EditorElement {
 
   width: number;
   height: number;
+
+  scaleX?: number;
+  scaleY?: number;
+
+  angle?: number;
+  opacity?: number;
 
   text?: string;
 
@@ -27,4 +35,6 @@ export interface EditorElement {
 
   fontWeight?: "normal" | "bold";
   fontStyle?: "normal" | "italic";
+
+  src?: string;
 }
