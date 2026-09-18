@@ -70,6 +70,10 @@ interface FabricContextType {
 
   toggleItalic: () => void;
 
+  setLineSpacing: (value: number) => void;
+
+  setLetterSpacing: (value: number) => void;
+
   alignObject: (
     alignment: "left" | "center" | "right"
   ) => void;
@@ -254,6 +258,26 @@ export function FabricProvider({
           textObject.fontStyle === "italic"
             ? "italic"
             : "normal";
+
+        element.lineHeight =
+          textObject.lineHeight ?? 1.16;
+
+        /*
+          IMPORTANT
+
+          Fabric charSpacing is stored as
+          1/1000 of font size.
+
+          Example:
+
+          UI 10  -> Fabric 100
+          UI 50  -> Fabric 500
+          UI 100 -> Fabric 1000
+          UI 200 -> Fabric 2000
+        */
+
+        element.charSpacing =
+          textObject.charSpacing ?? 0;
       }
 
       if (
@@ -353,6 +377,16 @@ export function FabricProvider({
 
         fontWeight:
           config.fontWeight,
+
+        /*
+          Default line spacing.
+        */
+        lineHeight: 1.16,
+
+        /*
+          Default letter spacing.
+        */
+        charSpacing: 0,
 
         originX: "left",
         originY: "top",
@@ -694,6 +728,8 @@ export function FabricProvider({
       fontSize: size,
     });
 
+    selectedObject.setCoords();
+
     canvasRef.current?.renderAll();
   }
 
@@ -821,6 +857,133 @@ export function FabricProvider({
     });
 
     canvasRef.current?.renderAll();
+  }
+
+  /*
+    LINE SPACING
+
+    Fabric lineHeight is a multiplier.
+
+    1.0 = normal
+    1.25 = little gap
+    1.5 = visible gap
+    2.0 = one-line style gap
+    3.0 = very large gap
+  */
+  function setLineSpacing(
+    value: number
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    const safeValue = Math.min(
+      3,
+      Math.max(1, value)
+    );
+
+    saveCanvasState();
+
+    selectedObject.set({
+      lineHeight: safeValue,
+    });
+
+    /*
+      Force Fabric to recalculate
+      the text dimensions.
+    */
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
+
+    const canvas =
+      canvasRef.current;
+
+    if (canvas) {
+      canvas.setActiveObject(
+        selectedObject
+      );
+
+      canvas.requestRenderAll();
+    }
+
+    setSelectedObject(
+      selectedObject
+    );
+  }
+
+  /*
+    LETTER SPACING
+
+    UI:
+      0 -> 200
+
+    Fabric:
+      0 -> 2000
+
+    Fabric uses 1/1000 em.
+    Therefore UI value * 10 is
+    passed to Fabric.
+  */
+  function setLetterSpacing(
+    value: number
+  ) {
+    if (!selectedObject)
+      return;
+
+    if (
+      selectedObject.type !==
+        "i-text" &&
+      selectedObject.type !==
+        "textbox"
+    ) {
+      return;
+    }
+
+    const safeValue = Math.min(
+      200,
+      Math.max(0, value)
+    );
+
+    const fabricValue =
+      safeValue * 10;
+
+    saveCanvasState();
+
+    selectedObject.set({
+      charSpacing: fabricValue,
+    });
+
+    /*
+      Force Fabric to recalculate
+      text dimensions.
+    */
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
+
+    const canvas =
+      canvasRef.current;
+
+    if (canvas) {
+      canvas.setActiveObject(
+        selectedObject
+      );
+
+      canvas.requestRenderAll();
+    }
+
+    setSelectedObject(
+      selectedObject
+    );
   }
 
   function alignObject(
@@ -1385,6 +1548,10 @@ export function FabricProvider({
     toggleBold,
 
     toggleItalic,
+
+    setLineSpacing,
+
+    setLetterSpacing,
 
     alignObject,
 

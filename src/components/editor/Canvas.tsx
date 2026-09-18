@@ -1,409 +1,120 @@
 import {
-  useState,
-  type MouseEvent,
-} from "react";
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+} from "lucide-react";
 
-import { useEditor } from "../../context/EditorContext";
+import { useState } from "react";
 
-interface CanvasProps {
-  backgroundColor?: string;
-}
+import FabricCanvas from "./fabric/FabricCanvas";
 
-export default function Canvas({
-  backgroundColor = "#ffffff",
-}: CanvasProps) {
-  const {
-    elements,
-    selectedId,
-    selectElement,
-    updateElement,
-  } = useEditor();
+export default function Canvas() {
+  const [zoom, setZoom] = useState(100);
 
-  const [draggingId, setDraggingId] =
-    useState<string | null>(null);
+  function handleZoomIn() {
+    setZoom((previous) =>
+      Math.min(previous + 10, 150)
+    );
+  }
 
-  const [resizingId, setResizingId] =
-    useState<string | null>(null);
+  function handleZoomOut() {
+    setZoom((previous) =>
+      Math.max(previous - 10, 50)
+    );
+  }
 
-  const [dragStart, setDragStart] = useState({
-    mouseX: 0,
-    mouseY: 0,
-    elementX: 0,
-    elementY: 0,
-  });
-
-  const [resizeStart, setResizeStart] =
-    useState({
-      mouseX: 0,
-      mouseY: 0,
-      width: 0,
-      height: 0,
-    });
-
-  const startDragging = (
-    event: MouseEvent,
-    elementId: string,
-    elementX: number,
-    elementY: number
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    selectElement(elementId);
-
-    setDraggingId(elementId);
-
-    setDragStart({
-      mouseX: event.clientX,
-      mouseY: event.clientY,
-      elementX,
-      elementY,
-    });
-  };
-
-  const startResizing = (
-    event: MouseEvent,
-    elementId: string,
-    width: number,
-    height: number
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    selectElement(elementId);
-
-    setResizingId(elementId);
-
-    setResizeStart({
-      mouseX: event.clientX,
-      mouseY: event.clientY,
-      width,
-      height,
-    });
-  };
-
-  const handleMouseMove = (
-    event: MouseEvent
-  ) => {
-    if (draggingId) {
-      const deltaX =
-        event.clientX - dragStart.mouseX;
-
-      const deltaY =
-        event.clientY - dragStart.mouseY;
-
-      updateElement(draggingId, {
-        x: Math.max(
-          0,
-          dragStart.elementX + deltaX
-        ),
-        y: Math.max(
-          0,
-          dragStart.elementY + deltaY
-        ),
-      });
-    }
-
-    if (resizingId) {
-      const deltaX =
-        event.clientX - resizeStart.mouseX;
-
-      const deltaY =
-        event.clientY - resizeStart.mouseY;
-
-      updateElement(resizingId, {
-        width: Math.max(
-          50,
-          resizeStart.width + deltaX
-        ),
-        height: Math.max(
-          30,
-          resizeStart.height + deltaY
-        ),
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setDraggingId(null);
-    setResizingId(null);
-  };
+  function handleResetZoom() {
+    setZoom(100);
+  }
 
   return (
-    <div
-      className="flex-1 overflow-auto bg-gray-200 p-10"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onClick={() => selectElement(null)}
-    >
-      <div
-        className="relative mx-auto shadow-2xl overflow-hidden"
-        style={{
-          width: "900px",
-          height: "650px",
-          backgroundColor,
-        }}
-        onClick={(event) =>
-          event.stopPropagation()
-        }
-      >
+    <section className="flex-1 min-w-0 h-full bg-gray-100 relative overflow-hidden">
 
-        {/* Decorative Certificate Border */}
+      {/* Canvas Workspace */}
+      <div className="absolute inset-0 overflow-auto">
 
-        <div
-          className="absolute inset-4 border-2 pointer-events-none"
-          style={{
-            borderColor: "#374151",
-          }}
-        />
+        <div className="min-h-full min-w-full flex items-center justify-center p-10">
 
-        <div
-          className="absolute inset-7 border pointer-events-none"
-          style={{
-            borderColor: "#9ca3af",
-          }}
-        />
-
-        {elements.map((element) => {
-          const isSelected =
-            selectedId === element.id;
-
-          const baseStyle = {
-            position: "absolute" as const,
-            left: element.x,
-            top: element.y,
-            width: element.width,
-            height: element.height,
-          };
-
-          // Rectangle
-          if (element.type === "rectangle") {
-            return (
-              <div
-                key={element.id}
-                onMouseDown={(event) =>
-                  startDragging(
-                    event,
-                    element.id,
-                    element.x,
-                    element.y
-                  )
-                }
-                style={{
-                  ...baseStyle,
-                  backgroundColor:
-                    element.backgroundColor,
-                  border: isSelected
-                    ? "2px solid #2563eb"
-                    : "none",
-                  cursor: "move",
-                }}
-              >
-                {isSelected && (
-                  <ResizeHandle
-                    onMouseDown={(event) =>
-                      startResizing(
-                        event,
-                        element.id,
-                        element.width,
-                        element.height
-                      )
-                    }
-                  />
-                )}
-              </div>
-            );
-          }
-
-          // Circle
-          if (element.type === "circle") {
-            return (
-              <div
-                key={element.id}
-                onMouseDown={(event) =>
-                  startDragging(
-                    event,
-                    element.id,
-                    element.x,
-                    element.y
-                  )
-                }
-                style={{
-                  ...baseStyle,
-                  backgroundColor:
-                    element.backgroundColor,
-                  borderRadius: "50%",
-                  border: isSelected
-                    ? "2px solid #2563eb"
-                    : "none",
-                  cursor: "move",
-                }}
-              >
-                {isSelected && (
-                  <ResizeHandle
-                    onMouseDown={(event) =>
-                      startResizing(
-                        event,
-                        element.id,
-                        element.width,
-                        element.height
-                      )
-                    }
-                  />
-                )}
-              </div>
-            );
-          }
-
-          // Triangle
-          if (element.type === "triangle") {
-            return (
-              <div
-                key={element.id}
-                onMouseDown={(event) =>
-                  startDragging(
-                    event,
-                    element.id,
-                    element.x,
-                    element.y
-                  )
-                }
-                style={{
-                  position: "absolute",
-                  left: element.x,
-                  top: element.y,
-                  width: element.width,
-                  height: element.height,
-                  cursor: "move",
-                }}
-              >
-                <div
-                  style={{
-                    width: 0,
-                    height: 0,
-                    borderLeft: `${element.width / 2}px solid transparent`,
-                    borderRight: `${element.width / 2}px solid transparent`,
-                    borderBottom: `${element.height}px solid ${element.backgroundColor}`,
-                  }}
-                />
-
-                {isSelected && (
-                  <ResizeHandle
-                    onMouseDown={(event) =>
-                      startResizing(
-                        event,
-                        element.id,
-                        element.width,
-                        element.height
-                      )
-                    }
-                  />
-                )}
-              </div>
-            );
-          }
-
-          // Text / Heading / Subheading
-          return (
-            <div
-              key={element.id}
-              onMouseDown={(event) =>
-                startDragging(
-                  event,
-                  element.id,
-                  element.x,
-                  element.y
-                )
-              }
-              onDoubleClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-
-                const newText =
-                  window.prompt(
-                    "Edit text",
-                    element.text || ""
-                  );
-
-                if (newText !== null) {
-                  updateElement(
-                    element.id,
-                    {
-                      text: newText,
-                    }
-                  );
-                }
-              }}
-              style={{
-                ...baseStyle,
-
-                fontSize:
-                  element.fontSize,
-
-                fontFamily:
-                  element.fontFamily,
-
-                color:
-                  element.color,
-
-                fontWeight:
-                  element.fontWeight,
-
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-
-                textAlign: "center",
-
-                padding: "5px",
-
-                boxSizing: "border-box",
-
-                border: isSelected
-                  ? "2px solid #2563eb"
-                  : "1px solid transparent",
-
-                cursor: "move",
-
-                userSelect: "none",
-
-                zIndex: isSelected ? 20 : 10,
-              }}
-            >
-              {element.text}
-
-              {isSelected && (
-                <ResizeHandle
-                  onMouseDown={(event) =>
-                    startResizing(
-                      event,
-                      element.id,
-                      element.width,
-                      element.height
-                    )
-                  }
-                />
-              )}
+          {/* Certificate Container */}
+          <div
+            className="relative shrink-0 transition-transform duration-200 ease-out"
+            style={{
+              transform: `scale(${zoom / 100})`,
+            }}
+          >
+            <div className="bg-white shadow-2xl rounded-sm overflow-hidden">
+              <FabricCanvas />
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+          </div>
 
-function ResizeHandle({
-  onMouseDown,
-}: {
-  onMouseDown: (
-    event: MouseEvent
-  ) => void;
-}) {
-  return (
-    <div
-      onMouseDown={onMouseDown}
-      className="absolute -right-2 -bottom-2 w-4 h-4 bg-blue-600 border-2 border-white rounded-sm cursor-se-resize z-50"
-    />
+        </div>
+      </div>
+
+      {/* Zoom Controls */}
+      <div className="absolute bottom-5 right-5 z-30">
+
+        <div className="flex items-center gap-1 bg-white border border-gray-200 shadow-lg rounded-xl p-1.5">
+
+          {/* Zoom Out */}
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            disabled={zoom <= 50}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Zoom out"
+          >
+            <ZoomOut size={17} />
+          </button>
+
+          {/* Zoom Percentage */}
+          <button
+            type="button"
+            onClick={handleResetZoom}
+            className="min-w-[58px] h-9 px-2 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
+            title="Reset zoom"
+          >
+            {zoom}%
+          </button>
+
+          {/* Zoom In */}
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            disabled={zoom >= 150}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Zoom in"
+          >
+            <ZoomIn size={17} />
+          </button>
+
+          {/* Reset */}
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+
+          <button
+            type="button"
+            onClick={handleResetZoom}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition"
+            title="Reset zoom"
+          >
+            <Maximize size={16} />
+          </button>
+
+        </div>
+      </div>
+
+      {/* Bottom Status */}
+      <div className="absolute bottom-5 left-5 z-30 hidden md:block">
+
+        <div className="px-3 py-2 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm">
+
+          <p className="text-[11px] text-gray-500">
+            Certificate Editor
+          </p>
+
+        </div>
+
+      </div>
+
+    </section>
   );
 }

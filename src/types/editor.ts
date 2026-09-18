@@ -22,11 +22,13 @@ export interface EditorElement {
   scaleY?: number;
 
   angle?: number;
+
   opacity?: number;
 
   text?: string;
 
   fontSize?: number;
+
   fontFamily?: string;
 
   color?: string;
@@ -34,7 +36,12 @@ export interface EditorElement {
   backgroundColor?: string;
 
   fontWeight?: "normal" | "bold";
+
   fontStyle?: "normal" | "italic";
+
+  lineHeight?: number;
+
+  charSpacing?: number;
 
   src?: string;
 }

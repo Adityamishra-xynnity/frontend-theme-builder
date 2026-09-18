@@ -294,6 +294,27 @@ export default function FabricEditorCanvas() {
                   element.fontStyle ??
                   "normal",
 
+                /*
+                 * LINE SPACING
+                 *
+                 * Saved value ko wapas
+                 * Fabric IText mein restore
+                 * kar rahe hain.
+                 */
+                lineHeight:
+                  element.lineHeight ??
+                  1.16,
+
+                /*
+                 * LETTER SPACING
+                 *
+                 * Fabric ka charSpacing
+                 * raw Fabric value mein stored hai.
+                 */
+                charSpacing:
+                  element.charSpacing ??
+                  0,
+
                 originX: "left",
 
                 originY: "top",
@@ -334,6 +355,25 @@ export default function FabricEditorCanvas() {
                   "#111827",
               }
             );
+
+          /*
+           * Safety restore:
+           * Fabric object banne ke baad bhi
+           * spacing values explicitly set kar rahe hain.
+           */
+          text.set({
+            lineHeight:
+              element.lineHeight ??
+              1.16,
+
+            charSpacing:
+              element.charSpacing ??
+              0,
+          });
+
+          text.initDimensions();
+
+          text.setCoords();
 
           const meta =
             text as typeof text &
