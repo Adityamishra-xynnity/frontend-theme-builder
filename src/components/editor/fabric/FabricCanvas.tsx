@@ -39,6 +39,9 @@ export default function FabricEditorCanvas() {
     convertCanvasToElements,
   } = useFabric();
 
+  /*
+   * Create Fabric canvas only once.
+   */
   useEffect(() => {
     if (!canvasElementRef.current) return;
 
@@ -225,22 +228,59 @@ export default function FabricEditorCanvas() {
     };
   }, []);
 
+  /*
+   * BACKGROUND COLOR
+   *
+   * IMPORTANT:
+   * Background change par canvas.clear()
+   * nahi karna hai.
+   *
+   * Sirf Fabric canvas ka background
+   * update karna hai.
+   */
   useEffect(() => {
     const canvas =
       canvasRef.current;
 
     if (!canvas) return;
 
+    canvas.backgroundColor =
+      backgroundColor;
+
+    canvas.requestRenderAll();
+  }, [
+    backgroundColor,
+  ]);
+
+  /*
+   * RENDER / RESTORE ELEMENTS
+   *
+   * Ye effect elements change hone par
+   * canvas objects ko restore karta hai.
+   *
+   * Background color is effect ki
+   * dependency nahi hai.
+   *
+   * Isliye sirf background change hone
+   * par objects clear/recreate nahi honge.
+   */
+  useEffect(() => {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+    /*
+     * Agar change directly Fabric canvas
+     * se aaya hai, to EditorContext ke
+     * elements ko dobara render karne ki
+     * zarurat nahi hai.
+     */
     if (
       internalChangeRef.current
     ) {
       internalChangeRef.current =
         false;
-
-      canvas.backgroundColor =
-        backgroundColor;
-
-      canvas.renderAll();
 
       return;
     }
@@ -248,8 +288,16 @@ export default function FabricEditorCanvas() {
     let cancelled = false;
 
     async function renderElements() {
+      /*
+       * Elements actually change hone par
+       * existing objects ko rebuild karna
+       * hai.
+       */
       canvas.clear();
 
+      /*
+       * Background ko bhi preserve rakho.
+       */
       canvas.backgroundColor =
         backgroundColor;
 
@@ -296,10 +344,6 @@ export default function FabricEditorCanvas() {
 
                 /*
                  * LINE SPACING
-                 *
-                 * Saved value ko wapas
-                 * Fabric IText mein restore
-                 * kar rahe hain.
                  */
                 lineHeight:
                   element.lineHeight ??
@@ -307,9 +351,6 @@ export default function FabricEditorCanvas() {
 
                 /*
                  * LETTER SPACING
-                 *
-                 * Fabric ka charSpacing
-                 * raw Fabric value mein stored hai.
                  */
                 charSpacing:
                   element.charSpacing ??
@@ -358,8 +399,7 @@ export default function FabricEditorCanvas() {
 
           /*
            * Safety restore:
-           * Fabric object banne ke baad bhi
-           * spacing values explicitly set kar rahe hain.
+           * spacing values explicitly set.
            */
           text.set({
             lineHeight:
@@ -732,7 +772,6 @@ export default function FabricEditorCanvas() {
     };
   }, [
     elements,
-    backgroundColor,
   ]);
 
   return (

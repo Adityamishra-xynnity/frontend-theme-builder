@@ -262,20 +262,6 @@ export function FabricProvider({
         element.lineHeight =
           textObject.lineHeight ?? 1.16;
 
-        /*
-          IMPORTANT
-
-          Fabric charSpacing is stored as
-          1/1000 of font size.
-
-          Example:
-
-          UI 10  -> Fabric 100
-          UI 50  -> Fabric 500
-          UI 100 -> Fabric 1000
-          UI 200 -> Fabric 2000
-        */
-
         element.charSpacing =
           textObject.charSpacing ?? 0;
       }
@@ -378,14 +364,8 @@ export function FabricProvider({
         fontWeight:
           config.fontWeight,
 
-        /*
-          Default line spacing.
-        */
         lineHeight: 1.16,
 
-        /*
-          Default letter spacing.
-        */
         charSpacing: 0,
 
         originX: "left",
@@ -861,15 +841,8 @@ export function FabricProvider({
 
   /*
     LINE SPACING
-
-    Fabric lineHeight is a multiplier.
-
-    1.0 = normal
-    1.25 = little gap
-    1.5 = visible gap
-    2.0 = one-line style gap
-    3.0 = very large gap
   */
+
   function setLineSpacing(
     value: number
   ) {
@@ -896,10 +869,6 @@ export function FabricProvider({
       lineHeight: safeValue,
     });
 
-    /*
-      Force Fabric to recalculate
-      the text dimensions.
-    */
     selectedObject.initDimensions();
 
     selectedObject.setCoords();
@@ -922,17 +891,8 @@ export function FabricProvider({
 
   /*
     LETTER SPACING
-
-    UI:
-      0 -> 200
-
-    Fabric:
-      0 -> 2000
-
-    Fabric uses 1/1000 em.
-    Therefore UI value * 10 is
-    passed to Fabric.
   */
+
   function setLetterSpacing(
     value: number
   ) {
@@ -962,10 +922,6 @@ export function FabricProvider({
       charSpacing: fabricValue,
     });
 
-    /*
-      Force Fabric to recalculate
-      text dimensions.
-    */
     selectedObject.initDimensions();
 
     selectedObject.setCoords();
@@ -985,6 +941,25 @@ export function FabricProvider({
       selectedObject
     );
   }
+
+  /*
+    ALIGNMENT
+
+    IMPORTANT:
+
+    1. Existing functionality remains:
+       object is positioned left,
+       center or right on canvas.
+
+    2. We ALSO update Fabric's
+       textAlign property.
+
+       This is required so the
+       Toolbar can know which alignment
+       is currently active.
+
+    3. Nothing else is changed.
+  */
 
   function alignObject(
     alignment:
@@ -1011,6 +986,28 @@ export function FabricProvider({
 
     const objectWidth =
       selectedObject.getScaledWidth();
+
+    /*
+      IMPORTANT FIX
+
+      Store the actual text alignment
+      inside Fabric object.
+
+      Toolbar reads this value:
+
+      left   -> Left active
+      center -> Center active
+      right  -> Right active
+    */
+
+    selectedObject.set({
+      textAlign: alignment,
+    });
+
+    /*
+      Keep existing canvas-position
+      alignment functionality.
+    */
 
     if (alignment === "left") {
       selectedObject.set({
@@ -1040,17 +1037,35 @@ export function FabricProvider({
       });
     }
 
+    /*
+      Recalculate object coordinates.
+    */
+
     selectedObject.setCoords();
+
+    /*
+      Keep the object selected.
+    */
 
     canvas.setActiveObject(
       selectedObject
     );
 
+    /*
+      IMPORTANT:
+
+      Update React state with the
+      same Fabric object.
+
+      This causes Toolbar to read
+      the newly updated textAlign.
+    */
+
     setSelectedObject(
       selectedObject
     );
 
-    canvas.renderAll();
+    canvas.requestRenderAll();
   }
 
   function rotateSelected(
