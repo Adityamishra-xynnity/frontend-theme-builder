@@ -184,7 +184,7 @@ export default function Templates() {
 
                             fontSize: `${Math.max(
                               8,
-                              (element.fontSize /
+                             (  (element.fontSize ?? 18 )/
                                 900) *
                                 900 *
                                 0.55

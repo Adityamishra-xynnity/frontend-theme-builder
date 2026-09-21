@@ -324,6 +324,7 @@ export default function FabricEditorCanvas() {
     let cancelled = false;
 
     async function renderElements() {
+      if (!canvas) return;
       /*
        * Existing objects remove.
        */

@@ -151,12 +151,9 @@ export function FabricProvider({
     if (!canvas) return;
 
     const json = JSON.stringify(
-      canvas.toJSON([
-        "elementId",
-        "elementType",
-        "imageSrc",
-      ])
-    );
+      canvas.toJSON()
+
+      );
 
     setHistory((previous) => [
       ...previous,
@@ -1397,11 +1394,8 @@ export function FabricProvider({
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON([
-          "elementId",
-          "elementType",
-          "imageSrc",
-        ])
+        canvas.toJSON()
+         
       );
 
     setFuture((previous) => [
@@ -1456,11 +1450,7 @@ export function FabricProvider({
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON([
-          "elementId",
-          "elementType",
-          "imageSrc",
-        ])
+        canvas.toJSON()
       );
 
     setHistory((previous) => [
