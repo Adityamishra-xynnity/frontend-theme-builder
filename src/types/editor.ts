@@ -1,3 +1,4 @@
+
 export type ElementType =
   | "heading"
   | "subheading"
@@ -39,9 +40,25 @@ export interface EditorElement {
 
   fontStyle?: "normal" | "italic";
 
+  src?: string;
+
+  /*
+   * Text line spacing.
+   */
   lineHeight?: number;
 
+  /*
+   * Fabric charSpacing value.
+   *
+   * UI value is converted inside FabricContext.
+   */
   charSpacing?: number;
 
-  src?: string;
+  /*
+   * Text alignment inside the text box.
+   */
+  textAlign?:
+    | "left"
+    | "center"
+    | "right";
 }

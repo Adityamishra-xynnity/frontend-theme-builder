@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import {
   Canvas as FabricCanvas,
+  Textbox,
   IText,
   Rect,
   Circle,
@@ -10,144 +11,189 @@ import {
 } from "fabric";
 
 import { useEditor } from "../../../context/EditorContext";
+
 import { useFabric } from "../../../context/FabricContext";
 
-import type { ElementType } from "../../../types/editor";
+import type {
+  ElementType,
+} from "../../../types/editor";
 
 type FabricObjectWithMeta = {
   elementId?: string;
+
   elementType?: ElementType;
+
   imageSrc?: string;
 };
 
 export default function FabricEditorCanvas() {
   const canvasElementRef =
-    useRef<HTMLCanvasElement | null>(null);
+    useRef<HTMLCanvasElement | null>(
+      null
+    );
 
   const internalChangeRef =
     useRef(false);
 
   const {
     elements,
+
     backgroundColor,
+
     syncElementsFromCanvas,
   } = useEditor();
 
   const {
     canvasRef,
+
     setSelectedObject,
+
     convertCanvasToElements,
   } = useFabric();
 
   /*
-   * Create Fabric canvas only once.
+   * CREATE FABRIC CANVAS
+   *
+   * Canvas sirf ek baar create hota hai.
    */
   useEffect(() => {
-    if (!canvasElementRef.current) return;
+    if (
+      !canvasElementRef.current
+    ) {
+      return;
+    }
 
-    const canvas = new FabricCanvas(
-      canvasElementRef.current,
-      {
-        width: 900,
-        height: 650,
-        backgroundColor,
-        selection: true,
-        preserveObjectStacking: true,
-      }
-    );
+    const canvas =
+      new FabricCanvas(
+        canvasElementRef.current,
+        {
+          width: 900,
 
-    canvasRef.current = canvas;
+          height: 650,
 
-    const updateEditorFromCanvas = () => {
-      const latestElements =
-        convertCanvasToElements();
+          backgroundColor,
 
-      internalChangeRef.current = true;
+          selection: true,
 
-      syncElementsFromCanvas(
-        latestElements
+          preserveObjectStacking:
+            true,
+        }
       );
 
-      const object =
-        canvas.getActiveObject();
+    canvasRef.current =
+      canvas;
 
-      setSelectedObject(
-        object ?? null
-      );
-    };
+    /*
+     * Fabric se EditorContext
+     * ko latest elements sync karna.
+     */
+    const updateEditorFromCanvas =
+      () => {
+        const latestElements =
+          convertCanvasToElements();
 
-    const handleSelectionCreated = (
-      event: any
-    ) => {
-      const object =
-        event.selected?.[0] ??
-        null;
+        internalChangeRef.current =
+          true;
 
-      setSelectedObject(object);
-    };
-
-    const handleSelectionUpdated = (
-      event: any
-    ) => {
-      const object =
-        event.selected?.[0] ??
-        canvas.getActiveObject() ??
-        null;
-
-      setSelectedObject(object);
-    };
-
-    const handleSelectionCleared = () => {
-      setSelectedObject(null);
-    };
-
-    const handleObjectModified = () => {
-      updateEditorFromCanvas();
-    };
-
-    const handleTextChanged = () => {
-      updateEditorFromCanvas();
-    };
-
-    const handleMouseDown = (
-      event: any
-    ) => {
-      const object =
-        event.target;
-
-      if (!object) return;
-
-      setSelectedObject(object);
-    };
-
-    const handleDoubleClick = (
-      event: any
-    ) => {
-      const object =
-        event.target;
-
-      if (!object) return;
-
-      setSelectedObject(object);
-
-      if (
-        object.type === "i-text" ||
-        object.type === "textbox"
-      ) {
-        const textObject =
-          object as IText;
-
-        canvas.setActiveObject(
-          textObject
+        syncElementsFromCanvas(
+          latestElements
         );
 
-        textObject.enterEditing();
+        const object =
+          canvas.getActiveObject();
 
-        textObject.selectAll();
+        setSelectedObject(
+          object ?? null
+        );
+      };
 
-        canvas.renderAll();
-      }
-    };
+    const handleSelectionCreated =
+      (event: any) => {
+        const object =
+          event.selected?.[0] ??
+          null;
+
+        setSelectedObject(
+          object
+        );
+      };
+
+    const handleSelectionUpdated =
+      (event: any) => {
+        const object =
+          event.selected?.[0] ??
+          canvas.getActiveObject() ??
+          null;
+
+        setSelectedObject(
+          object
+        );
+      };
+
+    const handleSelectionCleared =
+      () => {
+        setSelectedObject(
+          null
+        );
+      };
+
+    const handleObjectModified =
+      () => {
+        updateEditorFromCanvas();
+      };
+
+    const handleTextChanged =
+      () => {
+        updateEditorFromCanvas();
+      };
+
+    const handleMouseDown =
+      (event: any) => {
+        const object =
+          event.target;
+
+        if (!object) return;
+
+        setSelectedObject(
+          object
+        );
+      };
+
+    const handleDoubleClick =
+      (event: any) => {
+        const object =
+          event.target;
+
+        if (!object) return;
+
+        setSelectedObject(
+          object
+        );
+
+        /*
+         * Both old IText and new
+         * Textbox can be edited.
+         */
+        if (
+          object.type ===
+            "i-text" ||
+          object.type ===
+            "textbox"
+        ) {
+          const textObject =
+            object as IText;
+
+          canvas.setActiveObject(
+            textObject
+          );
+
+          textObject.enterEditing();
+
+          textObject.selectAll();
+
+          canvas.renderAll();
+        }
+      };
 
     canvas.on(
       "selection:created",
@@ -222,21 +268,21 @@ export default function FabricEditorCanvas() {
 
       canvas.dispose();
 
-      canvasRef.current = null;
+      canvasRef.current =
+        null;
 
-      setSelectedObject(null);
+      setSelectedObject(
+        null
+      );
     };
   }, []);
 
   /*
    * BACKGROUND COLOR
    *
-   * IMPORTANT:
-   * Background change par canvas.clear()
-   * nahi karna hai.
-   *
-   * Sirf Fabric canvas ka background
-   * update karna hai.
+   * Important:
+   * Background change par objects
+   * clear nahi honge.
    */
   useEffect(() => {
     const canvas =
@@ -253,16 +299,7 @@ export default function FabricEditorCanvas() {
   ]);
 
   /*
-   * RENDER / RESTORE ELEMENTS
-   *
-   * Ye effect elements change hone par
-   * canvas objects ko restore karta hai.
-   *
-   * Background color is effect ki
-   * dependency nahi hai.
-   *
-   * Isliye sirf background change hone
-   * par objects clear/recreate nahi honge.
+   * RESTORE / RENDER ELEMENTS
    */
   useEffect(() => {
     const canvas =
@@ -271,10 +308,9 @@ export default function FabricEditorCanvas() {
     if (!canvas) return;
 
     /*
-     * Agar change directly Fabric canvas
-     * se aaya hai, to EditorContext ke
-     * elements ko dobara render karne ki
-     * zarurat nahi hai.
+     * Agar update directly Fabric
+     * se aaya hai to dobara objects
+     * recreate nahi karne.
      */
     if (
       internalChangeRef.current
@@ -289,31 +325,53 @@ export default function FabricEditorCanvas() {
 
     async function renderElements() {
       /*
-       * Elements actually change hone par
-       * existing objects ko rebuild karna
-       * hai.
+       * Existing objects remove.
        */
       canvas.clear();
 
       /*
-       * Background ko bhi preserve rakho.
+       * Background preserve.
        */
       canvas.backgroundColor =
         backgroundColor;
 
-      for (const element of elements) {
+      for (
+        const element of elements
+      ) {
         if (cancelled) return;
 
         /*
          * TEXT
+         *
+         * IMPORTANT:
+         *
+         * New elements are created as
+         * Fabric Textbox.
+         *
+         * This gives:
+         * - resizable width
+         * - wrapping
+         * - textAlign
+         * - Canva-like behaviour
          */
         if (
-          element.type === "heading" ||
-          element.type === "subheading" ||
-          element.type === "text"
+          element.type ===
+            "heading" ||
+          element.type ===
+            "subheading" ||
+          element.type ===
+            "text"
         ) {
-          const text =
-            new IText(
+          /*
+           * Existing saved designs may
+           * contain old IText objects.
+           *
+           * For restored EditorElements,
+           * always create a Textbox.
+           */
+
+          const textObject =
+            new Textbox(
               element.text ?? "",
               {
                 left:
@@ -321,6 +379,27 @@ export default function FabricEditorCanvas() {
 
                 top:
                   element.y,
+
+                /*
+                 * Saved width restore.
+                 *
+                 * Prevent extremely small
+                 * or zero width boxes.
+                 */
+                width:
+                  Math.max(
+                    80,
+                    element.width ||
+                      (
+                        element.type ===
+                        "heading"
+                          ? 500
+                          : element.type ===
+                              "subheading"
+                            ? 450
+                            : 400
+                      )
+                  ),
 
                 fontSize:
                   element.fontSize ??
@@ -356,9 +435,18 @@ export default function FabricEditorCanvas() {
                   element.charSpacing ??
                   0,
 
-                originX: "left",
+                /*
+                 * TEXT ALIGNMENT
+                 */
+                textAlign:
+                  element.textAlign ??
+                  "left",
 
-                originY: "top",
+                originX:
+                  "left",
+
+                originY:
+                  "top",
 
                 scaleX:
                   element.scaleX ??
@@ -376,15 +464,20 @@ export default function FabricEditorCanvas() {
                   element.opacity ??
                   1,
 
-                editable: true,
+                editable:
+                  true,
 
-                selectable: true,
+                selectable:
+                  true,
 
-                evented: true,
+                evented:
+                  true,
 
-                padding: 4,
+                padding:
+                  4,
 
-                transparentCorners: false,
+                transparentCorners:
+                  false,
 
                 cornerColor:
                   "#111827",
@@ -394,14 +487,17 @@ export default function FabricEditorCanvas() {
 
                 borderColor:
                   "#111827",
+
+                splitByGrapheme:
+                  false,
               }
             );
 
           /*
-           * Safety restore:
-           * spacing values explicitly set.
+           * Explicitly restore all
+           * text properties.
            */
-          text.set({
+          textObject.set({
             lineHeight:
               element.lineHeight ??
               1.16,
@@ -409,14 +505,18 @@ export default function FabricEditorCanvas() {
             charSpacing:
               element.charSpacing ??
               0,
+
+            textAlign:
+              element.textAlign ??
+              "left",
           });
 
-          text.initDimensions();
+          textObject.initDimensions();
 
-          text.setCoords();
+          textObject.setCoords();
 
           const meta =
-            text as typeof text &
+            textObject as typeof textObject &
               FabricObjectWithMeta;
 
           meta.elementId =
@@ -425,7 +525,9 @@ export default function FabricEditorCanvas() {
           meta.elementType =
             element.type;
 
-          canvas.add(text);
+          canvas.add(
+            textObject
+          );
 
           continue;
         }
@@ -471,13 +573,17 @@ export default function FabricEditorCanvas() {
                 element.backgroundColor ??
                 "#2563eb",
 
-              originX: "left",
+              originX:
+                "left",
 
-              originY: "top",
+              originY:
+                "top",
 
-              selectable: true,
+              selectable:
+                true,
 
-              evented: true,
+              evented:
+                true,
 
               transparentCorners:
                 false,
@@ -551,13 +657,17 @@ export default function FabricEditorCanvas() {
                 element.backgroundColor ??
                 "#2563eb",
 
-              originX: "left",
+              originX:
+                "left",
 
-              originY: "top",
+              originY:
+                "top",
 
-              selectable: true,
+              selectable:
+                true,
 
-              evented: true,
+              evented:
+                true,
 
               transparentCorners:
                 false,
@@ -628,13 +738,17 @@ export default function FabricEditorCanvas() {
                 element.backgroundColor ??
                 "#2563eb",
 
-              originX: "left",
+              originX:
+                "left",
 
-              originY: "top",
+              originY:
+                "top",
 
-              selectable: true,
+              selectable:
+                true,
 
-              evented: true,
+              evented:
+                true,
 
               transparentCorners:
                 false,
@@ -659,7 +773,9 @@ export default function FabricEditorCanvas() {
           meta.elementType =
             element.type;
 
-          canvas.add(triangle);
+          canvas.add(
+            triangle
+          );
 
           continue;
         }
@@ -668,7 +784,8 @@ export default function FabricEditorCanvas() {
          * IMAGE
          */
         if (
-          element.type === "image" &&
+          element.type ===
+            "image" &&
           element.src
         ) {
           try {
@@ -711,9 +828,11 @@ export default function FabricEditorCanvas() {
                 element.opacity ??
                 1,
 
-              selectable: true,
+              selectable:
+                true,
 
-              evented: true,
+              evented:
+                true,
 
               transparentCorners:
                 false,
@@ -727,9 +846,11 @@ export default function FabricEditorCanvas() {
               borderColor:
                 "#111827",
 
-              originX: "left",
+              originX:
+                "left",
 
-              originY: "top",
+              originY:
+                "top",
             });
 
             const meta =
@@ -760,7 +881,9 @@ export default function FabricEditorCanvas() {
 
       canvas.discardActiveObject();
 
-      setSelectedObject(null);
+      setSelectedObject(
+        null
+      );
 
       canvas.renderAll();
     }
@@ -781,17 +904,26 @@ export default function FabricEditorCanvas() {
           className="bg-white shadow-2xl"
           style={{
             width: "900px",
+
             height: "650px",
+
             flexShrink: 0,
           }}
         >
           <canvas
-            ref={canvasElementRef}
+            ref={
+              canvasElementRef
+            }
+
             width={900}
+
             height={650}
+
             style={{
               display: "block",
+
               width: "900px",
+
               height: "650px",
             }}
           />

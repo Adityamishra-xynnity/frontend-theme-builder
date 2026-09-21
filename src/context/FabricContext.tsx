@@ -2,6 +2,7 @@ import {
   Canvas as FabricCanvas,
   FabricImage,
   IText,
+  Textbox,
   Rect,
   Circle,
   Triangle,
@@ -106,7 +107,9 @@ interface FabricContextType {
 }
 
 const FabricContext =
-  createContext<FabricContextType | null>(null);
+  createContext<FabricContextType | null>(
+    null
+  );
 
 export function FabricProvider({
   children,
@@ -119,13 +122,13 @@ export function FabricProvider({
   const [selectedObject, setSelectedObject] =
     useState<any>(null);
 
-  const [history, setHistory] = useState<string[]>(
-    []
-  );
+  const [history, setHistory] = useState<
+    string[]
+  >([]);
 
-  const [future, setFuture] = useState<string[]>(
-    []
-  );
+  const [future, setFuture] = useState<
+    string[]
+  >([]);
 
   const {
     saveDesign,
@@ -168,128 +171,179 @@ export function FabricProvider({
 
     if (!canvas) return [];
 
-    return canvas.getObjects().map((object) => {
-      const fabricObject =
-        object as typeof object &
-          FabricObjectWithMeta;
+    return canvas
+      .getObjects()
+      .map((object) => {
+        const fabricObject =
+          object as typeof object &
+            FabricObjectWithMeta;
 
-      let elementType =
-        fabricObject.elementType;
+        let elementType =
+          fabricObject.elementType;
 
-      if (!elementType) {
+        if (!elementType) {
+          if (
+            object.type === "i-text" ||
+            object.type === "textbox"
+          ) {
+            elementType = "text";
+          } else if (
+            object.type === "rect"
+          ) {
+            elementType = "rectangle";
+          } else if (
+            object.type === "circle"
+          ) {
+            elementType = "circle";
+          } else if (
+            object.type === "triangle"
+          ) {
+            elementType = "triangle";
+          } else if (
+            object.type === "image"
+          ) {
+            elementType = "image";
+          } else {
+            elementType = "text";
+          }
+        }
+
+        const element: EditorElement = {
+          id:
+            fabricObject.elementId ??
+            crypto.randomUUID(),
+
+          type: elementType,
+
+          x: object.left ?? 0,
+
+          y: object.top ?? 0,
+
+          /*
+           * For Textbox, Fabric changes
+           * the actual width while resizing.
+           *
+           * For all other objects,
+           * existing width behaviour remains.
+           */
+          width:
+            object.width ?? 0,
+
+          height:
+            object.height ?? 0,
+
+          scaleX:
+            object.scaleX ?? 1,
+
+          scaleY:
+            object.scaleY ?? 1,
+
+          angle:
+            object.angle ?? 0,
+
+          opacity:
+            object.opacity ?? 1,
+        };
+
+        /*
+         * TEXT / TEXTBOX
+         */
         if (
           object.type === "i-text" ||
           object.type === "textbox"
         ) {
-          elementType = "text";
-        } else if (
-          object.type === "rect"
-        ) {
-          elementType = "rectangle";
-        } else if (
-          object.type === "circle"
-        ) {
-          elementType = "circle";
-        } else if (
+          const textObject =
+            object as IText;
+
+          element.text =
+            textObject.text ?? "";
+
+          element.fontSize =
+            textObject.fontSize ?? 18;
+
+          element.fontFamily =
+            textObject.fontFamily ??
+            "Arial";
+
+          element.color =
+            typeof textObject.fill ===
+            "string"
+              ? textObject.fill
+              : "#111827";
+
+          element.fontWeight =
+            textObject.fontWeight ===
+            "bold"
+              ? "bold"
+              : "normal";
+
+          element.fontStyle =
+            textObject.fontStyle ===
+            "italic"
+              ? "italic"
+              : "normal";
+
+          element.lineHeight =
+            textObject.lineHeight ??
+            1.16;
+
+          element.charSpacing =
+            textObject.charSpacing ??
+            0;
+
+          /*
+           * Save text alignment.
+           */
+          const textAlign =
+            (
+              textObject as IText & {
+                textAlign?:
+                  | "left"
+                  | "center"
+                  | "right";
+              }
+            ).textAlign;
+
+          element.textAlign =
+            textAlign ??
+            "left";
+        }
+
+        /*
+         * SHAPES
+         */
+        if (
+          object.type === "rect" ||
+          object.type === "circle" ||
           object.type === "triangle"
         ) {
-          elementType = "triangle";
-        } else if (
+          element.backgroundColor =
+            typeof object.fill ===
+            "string"
+              ? object.fill
+              : "#2563eb";
+        }
+
+        /*
+         * IMAGE
+         */
+        if (
           object.type === "image"
         ) {
-          elementType = "image";
-        } else {
-          elementType = "text";
+          element.src =
+            fabricObject.imageSrc ??
+            "";
         }
-      }
 
-      const element: EditorElement = {
-        id:
-          fabricObject.elementId ??
-          crypto.randomUUID(),
-
-        type: elementType,
-
-        x: object.left ?? 0,
-
-        y: object.top ?? 0,
-
-        width: object.width ?? 0,
-
-        height: object.height ?? 0,
-
-        scaleX: object.scaleX ?? 1,
-
-        scaleY: object.scaleY ?? 1,
-
-        angle: object.angle ?? 0,
-
-        opacity: object.opacity ?? 1,
-      };
-
-      if (
-        object.type === "i-text" ||
-        object.type === "textbox"
-      ) {
-        const textObject =
-          object as IText;
-
-        element.text =
-          textObject.text ?? "";
-
-        element.fontSize =
-          textObject.fontSize ?? 18;
-
-        element.fontFamily =
-          textObject.fontFamily ??
-          "Arial";
-
-        element.color =
-          typeof textObject.fill === "string"
-            ? textObject.fill
-            : "#111827";
-
-        element.fontWeight =
-          textObject.fontWeight === "bold"
-            ? "bold"
-            : "normal";
-
-        element.fontStyle =
-          textObject.fontStyle === "italic"
-            ? "italic"
-            : "normal";
-
-        element.lineHeight =
-          textObject.lineHeight ?? 1.16;
-
-        element.charSpacing =
-          textObject.charSpacing ?? 0;
-      }
-
-      if (
-        object.type === "rect" ||
-        object.type === "circle" ||
-        object.type === "triangle"
-      ) {
-        element.backgroundColor =
-          typeof object.fill === "string"
-            ? object.fill
-            : "#2563eb";
-      }
-
-      if (
-        object.type === "image"
-      ) {
-        element.src =
-          fabricObject.imageSrc ?? "";
-      }
-
-      return element;
-    });
+        return element;
+      });
   }
 
-  function selectObjectById(id: string) {
-    const canvas = canvasRef.current;
+  function selectObjectById(
+    id: string
+  ) {
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) return;
 
@@ -305,7 +359,9 @@ export function FabricProvider({
 
     if (!object) return;
 
-    canvas.setActiveObject(object);
+    canvas.setActiveObject(
+      object
+    );
 
     setSelectedObject(object);
 
@@ -318,7 +374,8 @@ export function FabricProvider({
       | "subheading"
       | "text" = "text"
   ) {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) return;
 
@@ -347,46 +404,91 @@ export function FabricProvider({
       },
     };
 
-    const config = settings[type];
+    const config =
+      settings[type];
 
-    const textObject = new IText(
-      config.text,
-      {
-        left: 100,
-        top: 100,
+    /*
+     * TEXTBOX
+     *
+     * Fixed starting width allows
+     * text alignment inside the box.
+     *
+     * User can resize the width
+     * using Fabric's textbox controls.
+     */
+    const textObject =
+      new Textbox(
+        config.text,
+        {
+          left: 100,
 
-        fontSize: config.fontSize,
+          top: 100,
 
-        fontFamily: "Arial",
+          width:
+            type === "heading"
+              ? 500
+              : type === "subheading"
+                ? 450
+                : 400,
 
-        fill: "#111827",
+          fontSize:
+            config.fontSize,
 
-        fontWeight:
-          config.fontWeight,
+          fontFamily:
+            "Arial",
 
-        lineHeight: 1.16,
+          fill:
+            "#111827",
 
-        charSpacing: 0,
+          fontWeight:
+            config.fontWeight,
 
-        originX: "left",
-        originY: "top",
+          fontStyle:
+            "normal",
 
-        editable: true,
+          lineHeight:
+            1.16,
 
-        selectable: true,
-        evented: true,
+          charSpacing:
+            0,
 
-        padding: 4,
+          textAlign:
+            "left",
 
-        transparentCorners: false,
+          originX:
+            "left",
 
-        cornerColor: "#111827",
+          originY:
+            "top",
 
-        cornerStyle: "circle",
+          editable:
+            true,
 
-        borderColor: "#111827",
-      }
-    );
+          selectable:
+            true,
+
+          evented:
+            true,
+
+          padding:
+            4,
+
+          transparentCorners:
+            false,
+
+          cornerColor:
+            "#111827",
+
+          cornerStyle:
+            "circle",
+
+          borderColor:
+            "#111827",
+
+          splitByGrapheme:
+            false,
+        }
+      );
 
     const meta =
       textObject as typeof textObject &
@@ -395,9 +497,12 @@ export function FabricProvider({
     meta.elementId =
       crypto.randomUUID();
 
-    meta.elementType = type;
+    meta.elementType =
+      type;
 
-    canvas.add(textObject);
+    canvas.add(
+      textObject
+    );
 
     canvas.setActiveObject(
       textObject
@@ -416,7 +521,8 @@ export function FabricProvider({
       | "circle"
       | "triangle"
   ) {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) return;
 
@@ -424,7 +530,9 @@ export function FabricProvider({
 
     let object: any;
 
-    if (type === "rectangle") {
+    if (
+      type === "rectangle"
+    ) {
       object = new Rect({
         left: 100,
         top: 100,
@@ -434,7 +542,9 @@ export function FabricProvider({
       });
     }
 
-    if (type === "circle") {
+    if (
+      type === "circle"
+    ) {
       object = new Circle({
         left: 100,
         top: 100,
@@ -443,29 +553,38 @@ export function FabricProvider({
       });
     }
 
-    if (type === "triangle") {
-      object = new Triangle({
-        left: 100,
-        top: 100,
-        width: 150,
-        height: 120,
-        fill: "#2563eb",
-      });
+    if (
+      type === "triangle"
+    ) {
+      object =
+        new Triangle({
+          left: 100,
+          top: 100,
+          width: 150,
+          height: 120,
+          fill: "#2563eb",
+        });
     }
 
     object.set({
       selectable: true,
+
       evented: true,
 
-      transparentCorners: false,
+      transparentCorners:
+        false,
 
-      cornerColor: "#111827",
+      cornerColor:
+        "#111827",
 
-      cornerStyle: "circle",
+      cornerStyle:
+        "circle",
 
-      borderColor: "#111827",
+      borderColor:
+        "#111827",
 
       originX: "left",
+
       originY: "top",
     });
 
@@ -476,13 +595,18 @@ export function FabricProvider({
     meta.elementId =
       crypto.randomUUID();
 
-    meta.elementType = type;
+    meta.elementType =
+      type;
 
     canvas.add(object);
 
-    canvas.setActiveObject(object);
+    canvas.setActiveObject(
+      object
+    );
 
-    setSelectedObject(object);
+    setSelectedObject(
+      object
+    );
 
     canvas.renderAll();
   }
@@ -490,7 +614,8 @@ export function FabricProvider({
   async function addImage(
     dataUrl: string
   ) {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) return;
 
@@ -502,7 +627,8 @@ export function FabricProvider({
           dataUrl
         );
 
-      const maxWidth = 350;
+      const maxWidth =
+        350;
 
       const originalWidth =
         image.width || 1;
@@ -513,9 +639,11 @@ export function FabricProvider({
 
       image.set({
         left: 100,
+
         top: 100,
 
         scaleX: scale,
+
         scaleY: scale,
 
         angle: 0,
@@ -523,18 +651,26 @@ export function FabricProvider({
         opacity: 1,
 
         selectable: true,
+
         evented: true,
 
-        transparentCorners: false,
+        transparentCorners:
+          false,
 
-        cornerColor: "#111827",
+        cornerColor:
+          "#111827",
 
-        cornerStyle: "circle",
+        cornerStyle:
+          "circle",
 
-        borderColor: "#111827",
+        borderColor:
+          "#111827",
 
-        originX: "left",
-        originY: "top",
+        originX:
+          "left",
+
+        originY:
+          "top",
       });
 
       const meta =
@@ -544,15 +680,21 @@ export function FabricProvider({
       meta.elementId =
         crypto.randomUUID();
 
-      meta.elementType = "image";
+      meta.elementType =
+        "image";
 
-      meta.imageSrc = dataUrl;
+      meta.imageSrc =
+        dataUrl;
 
       canvas.add(image);
 
-      canvas.setActiveObject(image);
+      canvas.setActiveObject(
+        image
+      );
 
-      setSelectedObject(image);
+      setSelectedObject(
+        image
+      );
 
       canvas.renderAll();
     } catch (error) {
@@ -564,10 +706,15 @@ export function FabricProvider({
   }
 
   function deleteSelected() {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -577,16 +724,23 @@ export function FabricProvider({
 
     canvas.discardActiveObject();
 
-    setSelectedObject(null);
+    setSelectedObject(
+      null
+    );
 
     canvas.renderAll();
   }
 
   function duplicateSelected() {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -595,12 +749,12 @@ export function FabricProvider({
       .then((cloned: any) => {
         cloned.set({
           left:
-            (selectedObject.left ?? 0) +
-            20,
+            (selectedObject.left ??
+              0) + 20,
 
           top:
-            (selectedObject.top ?? 0) +
-            20,
+            (selectedObject.top ??
+              0) + 20,
         });
 
         const originalMeta =
@@ -634,15 +788,25 @@ export function FabricProvider({
       });
   }
 
-  function increaseFontSize() {
-    if (!selectedObject)
-      return;
+  function isTextObject(
+    object: any
+  ) {
+    return (
+      object &&
+      (
+        object.type ===
+          "i-text" ||
+        object.type ===
+          "textbox"
+      )
+    );
+  }
 
+  function increaseFontSize() {
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -650,24 +814,26 @@ export function FabricProvider({
     saveCanvasState();
 
     const current =
-      selectedObject.fontSize ?? 18;
+      selectedObject.fontSize ??
+      18;
 
     selectedObject.set({
-      fontSize: current + 2,
+      fontSize:
+        current + 2,
     });
+
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
 
     canvasRef.current?.renderAll();
   }
 
   function decreaseFontSize() {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -675,14 +841,20 @@ export function FabricProvider({
     saveCanvasState();
 
     const current =
-      selectedObject.fontSize ?? 18;
+      selectedObject.fontSize ??
+      18;
 
     selectedObject.set({
-      fontSize: Math.max(
-        8,
-        current - 2
-      ),
+      fontSize:
+        Math.max(
+          8,
+          current - 2
+        ),
     });
+
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
 
     canvasRef.current?.renderAll();
   }
@@ -690,14 +862,10 @@ export function FabricProvider({
   function setFontSize(
     size: number
   ) {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -708,6 +876,8 @@ export function FabricProvider({
       fontSize: size,
     });
 
+    selectedObject.initDimensions();
+
     selectedObject.setCoords();
 
     canvasRef.current?.renderAll();
@@ -716,14 +886,10 @@ export function FabricProvider({
   function setTextColor(
     color: string
   ) {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -766,14 +932,10 @@ export function FabricProvider({
   function setFontFamily(
     fontFamily: string
   ) {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -784,18 +946,18 @@ export function FabricProvider({
       fontFamily,
     });
 
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
+
     canvasRef.current?.renderAll();
   }
 
   function toggleBold() {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -810,18 +972,18 @@ export function FabricProvider({
           : "bold",
     });
 
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
+
     canvasRef.current?.renderAll();
   }
 
   function toggleItalic() {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
@@ -836,37 +998,39 @@ export function FabricProvider({
           : "italic",
     });
 
+    selectedObject.initDimensions();
+
+    selectedObject.setCoords();
+
     canvasRef.current?.renderAll();
   }
 
   /*
-    LINE SPACING
-  */
+   * LINE SPACING
+   */
 
   function setLineSpacing(
     value: number
   ) {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
 
-    const safeValue = Math.min(
-      3,
-      Math.max(1, value)
-    );
+    const safeValue =
+      Math.min(
+        3,
+        Math.max(1, value)
+      );
 
     saveCanvasState();
 
     selectedObject.set({
-      lineHeight: safeValue,
+      lineHeight:
+        safeValue,
     });
 
     selectedObject.initDimensions();
@@ -890,28 +1054,25 @@ export function FabricProvider({
   }
 
   /*
-    LETTER SPACING
-  */
+   * LETTER SPACING
+   */
 
   function setLetterSpacing(
     value: number
   ) {
-    if (!selectedObject)
-      return;
-
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
 
-    const safeValue = Math.min(
-      200,
-      Math.max(0, value)
-    );
+    const safeValue =
+      Math.min(
+        200,
+        Math.max(0, value)
+      );
 
     const fabricValue =
       safeValue * 10;
@@ -919,7 +1080,8 @@ export function FabricProvider({
     saveCanvasState();
 
     selectedObject.set({
-      charSpacing: fabricValue,
+      charSpacing:
+        fabricValue,
     });
 
     selectedObject.initDimensions();
@@ -943,23 +1105,18 @@ export function FabricProvider({
   }
 
   /*
-    ALIGNMENT
-
-    IMPORTANT:
-
-    1. Existing functionality remains:
-       object is positioned left,
-       center or right on canvas.
-
-    2. We ALSO update Fabric's
-       textAlign property.
-
-       This is required so the
-       Toolbar can know which alignment
-       is currently active.
-
-    3. Nothing else is changed.
-  */
+   * TEXT ALIGNMENT
+   *
+   * IMPORTANT:
+   *
+   * Alignment is now applied INSIDE
+   * the Textbox.
+   *
+   * The textbox itself does not move
+   * left/center/right on the canvas.
+   *
+   * This gives Canva-style behaviour.
+   */
 
   function alignObject(
     alignment:
@@ -970,96 +1127,35 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     if (
-      selectedObject.type !==
-        "i-text" &&
-      selectedObject.type !==
-        "textbox"
+      !isTextObject(
+        selectedObject
+      )
     ) {
       return;
     }
 
     saveCanvasState();
 
-    const objectWidth =
-      selectedObject.getScaledWidth();
-
-    /*
-      IMPORTANT FIX
-
-      Store the actual text alignment
-      inside Fabric object.
-
-      Toolbar reads this value:
-
-      left   -> Left active
-      center -> Center active
-      right  -> Right active
-    */
-
     selectedObject.set({
-      textAlign: alignment,
+      textAlign:
+        alignment,
     });
 
-    /*
-      Keep existing canvas-position
-      alignment functionality.
-    */
-
-    if (alignment === "left") {
-      selectedObject.set({
-        left: 0,
-        originX: "left",
-      });
-    }
-
-    if (alignment === "center") {
-      selectedObject.set({
-        left:
-          (canvas.getWidth() -
-            objectWidth) /
-          2,
-
-        originX: "left",
-      });
-    }
-
-    if (alignment === "right") {
-      selectedObject.set({
-        left:
-          canvas.getWidth() -
-          objectWidth,
-
-        originX: "left",
-      });
-    }
-
-    /*
-      Recalculate object coordinates.
-    */
+    selectedObject.initDimensions();
 
     selectedObject.setCoords();
-
-    /*
-      Keep the object selected.
-    */
 
     canvas.setActiveObject(
       selectedObject
     );
-
-    /*
-      IMPORTANT:
-
-      Update React state with the
-      same Fabric object.
-
-      This causes Toolbar to read
-      the newly updated textAlign.
-    */
 
     setSelectedObject(
       selectedObject
@@ -1074,17 +1170,23 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
     const currentAngle =
-      selectedObject.angle ?? 0;
+      selectedObject.angle ??
+      0;
 
     selectedObject.set({
       angle:
-        currentAngle + degrees,
+        currentAngle +
+        degrees,
     });
 
     selectedObject.setCoords();
@@ -1104,8 +1206,12 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -1128,8 +1234,12 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -1152,8 +1262,12 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -1176,8 +1290,12 @@ export function FabricProvider({
     const canvas =
       canvasRef.current;
 
-    if (!canvas || !selectedObject)
+    if (
+      !canvas ||
+      !selectedObject
+    ) {
       return;
+    }
 
     saveCanvasState();
 
@@ -1197,7 +1315,9 @@ export function FabricProvider({
   }
 
   function restoreSelection(
-    selectedId: string | undefined
+    selectedId:
+      | string
+      | undefined
   ) {
     const canvas =
       canvasRef.current;
@@ -1207,7 +1327,9 @@ export function FabricProvider({
     if (!selectedId) {
       canvas.discardActiveObject();
 
-      setSelectedObject(null);
+      setSelectedObject(
+        null
+      );
 
       canvas.renderAll();
 
@@ -1237,7 +1359,9 @@ export function FabricProvider({
     } else {
       canvas.discardActiveObject();
 
-      setSelectedObject(null);
+      setSelectedObject(
+        null
+      );
     }
 
     canvas.renderAll();
@@ -1291,7 +1415,9 @@ export function FabricProvider({
 
     canvas
       .loadFromJSON(
-        JSON.parse(previousState)
+        JSON.parse(
+          previousState
+        )
       )
       .then(() => {
         restoreSelection(
@@ -1348,7 +1474,9 @@ export function FabricProvider({
 
     canvas
       .loadFromJSON(
-        JSON.parse(nextState)
+        JSON.parse(
+          nextState
+        )
       )
       .then(() => {
         restoreSelection(
@@ -1363,7 +1491,9 @@ export function FabricProvider({
     const elements =
       convertCanvasToElements();
 
-    if (elements.length === 0) {
+    if (
+      elements.length === 0
+    ) {
       return;
     }
 
@@ -1394,7 +1524,9 @@ export function FabricProvider({
       canvas.renderAll();
     }
 
-    setSelectedObject(null);
+    setSelectedObject(
+      null
+    );
   }
 
   function getDownloadName() {
@@ -1409,7 +1541,10 @@ export function FabricProvider({
         /[^a-zA-Z0-9-_ ]/g,
         ""
       )
-      .replace(/\s+/g, "-")
+      .replace(
+        /\s+/g,
+        "-"
+      )
       .toLowerCase();
   }
 
@@ -1441,11 +1576,15 @@ export function FabricProvider({
     link.download =
       `${getDownloadName()}.png`;
 
-    document.body.appendChild(link);
+    document.body.appendChild(
+      link
+    );
 
     link.click();
 
-    document.body.removeChild(link);
+    document.body.removeChild(
+      link
+    );
 
     if (activeObject) {
       canvas.setActiveObject(
@@ -1527,7 +1666,8 @@ export function FabricProvider({
     }
   }
 
-  const value: FabricContextType = {
+  const value:
+    FabricContextType = {
     canvasRef,
 
     selectedObject,
@@ -1610,7 +1750,9 @@ export function FabricProvider({
 
 export function useFabric() {
   const context =
-    useContext(FabricContext);
+    useContext(
+      FabricContext
+    );
 
   if (!context) {
     throw new Error(
