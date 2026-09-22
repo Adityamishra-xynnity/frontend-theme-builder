@@ -6,6 +6,9 @@ import {
   Rect,
   Circle,
   Triangle,
+  Polygon,
+  Line,
+  Path,
 } from "fabric";
 
 import {
@@ -28,6 +31,7 @@ type FabricObjectWithMeta = {
   elementId?: string;
   elementType?: ElementType;
   imageSrc?: string;
+  shapeSides?: number;
 };
 
 interface FabricContextType {
@@ -46,7 +50,21 @@ interface FabricContextType {
   ) => void;
 
   addShape: (
-    type: "rectangle" | "circle" | "triangle"
+    type:
+      | "rectangle"
+      | "circle"
+      | "triangle"
+      | "square"
+      | "polygon"
+      | "pentagon"
+      | "hexagon"
+      | "heptagon"
+      | "octagon"
+      | "line"
+      | "arrow"
+      | "double-arrow"
+      | "dashed-line"
+      | "dotted-line"
   ) => void;
 
   addImage: (dataUrl: string) => void;
@@ -132,7 +150,6 @@ export function FabricProvider({
 
   const {
     saveDesign,
-    clearCanvas,
     currentDesignName,
   } = useEditor();
 
@@ -145,17 +162,22 @@ export function FabricProvider({
       ? selectedObject.fontSize ?? 18
       : null;
 
+  function getCanvasJSON(canvas: FabricCanvas) {
+    return canvas.toJSON([
+      "elementId",
+      "elementType",
+      "imageSrc",
+      "shapeSides",
+    ]);
+  }
+
   function saveCanvasState() {
     const canvas = canvasRef.current;
 
     if (!canvas) return;
 
     const json = JSON.stringify(
-      canvas.toJSON([
-        "elementId",
-        "elementType",
-        "imageSrc",
-      ])
+      getCanvasJSON(canvas)
     );
 
     setHistory((previous) => [
@@ -200,6 +222,18 @@ export function FabricProvider({
           ) {
             elementType = "triangle";
           } else if (
+            object.type === "polygon"
+          ) {
+            elementType = "polygon";
+          } else if (
+            object.type === "line"
+          ) {
+            elementType = "line";
+          } else if (
+            object.type === "path"
+          ) {
+            elementType = "line";
+          } else if (
             object.type === "image"
           ) {
             elementType = "image";
@@ -215,17 +249,12 @@ export function FabricProvider({
 
           type: elementType,
 
-          x: object.left ?? 0,
+          x:
+            object.left ?? 0,
 
-          y: object.top ?? 0,
+          y:
+            object.top ?? 0,
 
-          /*
-           * For Textbox, Fabric changes
-           * the actual width while resizing.
-           *
-           * For all other objects,
-           * existing width behaviour remains.
-           */
           width:
             object.width ?? 0,
 
@@ -246,7 +275,7 @@ export function FabricProvider({
         };
 
         /*
-         * TEXT / TEXTBOX
+         * TEXT
          */
         if (
           object.type === "i-text" ||
@@ -291,9 +320,6 @@ export function FabricProvider({
             textObject.charSpacing ??
             0;
 
-          /*
-           * Save text alignment.
-           */
           const textAlign =
             (
               textObject as IText & {
@@ -310,18 +336,82 @@ export function FabricProvider({
         }
 
         /*
-         * SHAPES
+         * FILLED SHAPES
          */
+        const filledShapeTypes: ElementType[] =
+          [
+            "rectangle",
+            "square",
+            "circle",
+            "triangle",
+            "polygon",
+            "pentagon",
+            "hexagon",
+            "heptagon",
+            "octagon",
+          ];
+
         if (
-          object.type === "rect" ||
-          object.type === "circle" ||
-          object.type === "triangle"
+          filledShapeTypes.includes(
+            elementType
+          )
         ) {
           element.backgroundColor =
             typeof object.fill ===
             "string"
               ? object.fill
               : "#2563eb";
+
+          const meta =
+            fabricObject as
+              FabricObjectWithMeta;
+
+          if (meta.shapeSides) {
+            element.shapeSides =
+              meta.shapeSides;
+          }
+        }
+
+        /*
+         * LINES
+         */
+        const lineTypes: ElementType[] =
+          [
+            "line",
+            "arrow",
+            "double-arrow",
+            "dashed-line",
+            "dotted-line",
+          ];
+
+        if (
+          lineTypes.includes(
+            elementType
+          )
+        ) {
+          element.strokeColor =
+            typeof object.stroke ===
+            "string"
+              ? object.stroke
+              : "#111827";
+
+          element.strokeWidth =
+            typeof object.strokeWidth ===
+            "number"
+              ? object.strokeWidth
+              : 4;
+
+          const dash =
+            (
+              object as typeof object & {
+                strokeDashArray?: number[];
+              }
+            ).strokeDashArray;
+
+          if (dash) {
+            element.lineDash =
+              [...dash];
+          }
         }
 
         /*
@@ -407,15 +497,6 @@ export function FabricProvider({
     const config =
       settings[type];
 
-    /*
-     * TEXTBOX
-     *
-     * Fixed starting width allows
-     * text alignment inside the box.
-     *
-     * User can resize the width
-     * using Fabric's textbox controls.
-     */
     const textObject =
       new Textbox(
         config.text,
@@ -515,57 +596,59 @@ export function FabricProvider({
     canvas.renderAll();
   }
 
-  function addShape(
-    type:
-      | "rectangle"
-      | "circle"
-      | "triangle"
+  function getPolygonSides(
+    type: string
   ) {
-    const canvas =
-      canvasRef.current;
+    if (type === "pentagon")
+      return 5;
 
-    if (!canvas) return;
+    if (type === "hexagon")
+      return 6;
 
-    saveCanvasState();
+    if (type === "heptagon")
+      return 7;
 
-    let object: any;
+    if (type === "octagon")
+      return 8;
 
-    if (
-      type === "rectangle"
+    return 6;
+  }
+
+  function getPolygonPoints(
+    sides: number,
+    radius: number
+  ) {
+    const points = [];
+
+    for (
+      let index = 0;
+      index < sides;
+      index++
     ) {
-      object = new Rect({
-        left: 100,
-        top: 100,
-        width: 180,
-        height: 100,
-        fill: "#2563eb",
+      const angle =
+        -Math.PI / 2 +
+        (index * 2 * Math.PI) /
+          sides;
+
+      points.push({
+        x:
+          radius +
+          radius *
+            Math.cos(angle),
+
+        y:
+          radius +
+          radius *
+            Math.sin(angle),
       });
     }
 
-    if (
-      type === "circle"
-    ) {
-      object = new Circle({
-        left: 100,
-        top: 100,
-        radius: 70,
-        fill: "#2563eb",
-      });
-    }
+    return points;
+  }
 
-    if (
-      type === "triangle"
-    ) {
-      object =
-        new Triangle({
-          left: 100,
-          top: 100,
-          width: 150,
-          height: 120,
-          fill: "#2563eb",
-        });
-    }
-
+  function applyObjectControls(
+    object: any
+  ) {
     object.set({
       selectable: true,
 
@@ -583,10 +666,279 @@ export function FabricProvider({
       borderColor:
         "#111827",
 
-      originX: "left",
+      originX:
+        "left",
 
-      originY: "top",
+      originY:
+        "top",
     });
+  }
+
+  function createLineObject(
+    type:
+      | "line"
+      | "arrow"
+      | "double-arrow"
+      | "dashed-line"
+      | "dotted-line"
+  ) {
+    const width = 220;
+
+    const stroke =
+      "#111827";
+
+    const strokeWidth =
+      4;
+
+    const commonOptions = {
+      left: 100,
+
+      top: 100,
+
+      fill: "",
+
+      stroke,
+
+      strokeWidth,
+
+      strokeLineCap:
+        "round" as const,
+
+      strokeLineJoin:
+        "round" as const,
+
+      originX:
+        "left" as const,
+
+      originY:
+        "top" as const,
+
+      selectable: true,
+
+      evented: true,
+
+      transparentCorners:
+        false,
+
+      cornerColor:
+        "#111827",
+
+      cornerStyle:
+        "circle" as const,
+
+      borderColor:
+        "#111827",
+    };
+
+    if (
+      type === "line" ||
+      type === "dashed-line" ||
+      type === "dotted-line"
+    ) {
+      return new Line(
+        [
+          0,
+          0,
+          width,
+          0,
+        ],
+        {
+          ...commonOptions,
+
+          strokeDashArray:
+            type === "dashed-line"
+              ? [18, 10]
+              : type === "dotted-line"
+                ? [2, 10]
+                : undefined,
+        }
+      );
+    }
+
+    if (
+      type === "arrow"
+    ) {
+      return new Path(
+        `
+        M 0 0
+        L ${width} 0
+
+        M ${width} 0
+        L ${width - 18} -12
+
+        M ${width} 0
+        L ${width - 18} 12
+        `,
+        commonOptions
+      );
+    }
+
+    return new Path(
+      `
+      M 0 0
+      L ${width} 0
+
+      M 0 0
+      L 18 -12
+
+      M 0 0
+      L 18 12
+
+      M ${width} 0
+      L ${width - 18} -12
+
+      M ${width} 0
+      L ${width - 18} 12
+      `,
+      commonOptions
+    );
+  }
+
+  function addShape(
+    type:
+      | "rectangle"
+      | "circle"
+      | "triangle"
+      | "square"
+      | "polygon"
+      | "pentagon"
+      | "hexagon"
+      | "heptagon"
+      | "octagon"
+      | "line"
+      | "arrow"
+      | "double-arrow"
+      | "dashed-line"
+      | "dotted-line"
+  ) {
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+    saveCanvasState();
+
+    let object: any;
+
+    /*
+     * RECTANGLE
+     */
+    if (
+      type === "rectangle"
+    ) {
+      object = new Rect({
+        left: 100,
+        top: 100,
+        width: 180,
+        height: 100,
+        fill: "#2563eb",
+      });
+    }
+
+    /*
+     * SQUARE
+     */
+    if (
+      type === "square"
+    ) {
+      object = new Rect({
+        left: 100,
+        top: 100,
+        width: 140,
+        height: 140,
+        fill: "#2563eb",
+      });
+    }
+
+    /*
+     * CIRCLE
+     */
+    if (
+      type === "circle"
+    ) {
+      object = new Circle({
+        left: 100,
+        top: 100,
+        radius: 70,
+        fill: "#2563eb",
+      });
+    }
+
+    /*
+     * TRIANGLE
+     */
+    if (
+      type === "triangle"
+    ) {
+      object =
+        new Triangle({
+          left: 100,
+          top: 100,
+          width: 150,
+          height: 120,
+          fill: "#2563eb",
+        });
+    }
+
+    /*
+     * POLYGON FAMILY
+     */
+    if (
+      type === "polygon" ||
+      type === "pentagon" ||
+      type === "hexagon" ||
+      type === "heptagon" ||
+      type === "octagon"
+    ) {
+      const sides =
+        getPolygonSides(type);
+
+      const radius = 75;
+
+      object =
+        new Polygon(
+          getPolygonPoints(
+            sides,
+            radius
+          ),
+          {
+            left: 100,
+
+            top: 100,
+
+            fill: "#2563eb",
+          }
+        );
+
+      const polygonMeta =
+        object as typeof object &
+          FabricObjectWithMeta;
+
+      polygonMeta.shapeSides =
+        sides;
+    }
+
+    /*
+     * LINES
+     */
+    if (
+      type === "line" ||
+      type === "arrow" ||
+      type === "double-arrow" ||
+      type === "dashed-line" ||
+      type === "dotted-line"
+    ) {
+      object =
+        createLineObject(type);
+    }
+
+    if (!object) {
+      return;
+    }
+
+    applyObjectControls(
+      object
+    );
 
     const meta =
       object as typeof object &
@@ -774,6 +1126,9 @@ export function FabricProvider({
         clonedMeta.imageSrc =
           originalMeta.imageSrc;
 
+        clonedMeta.shapeSides =
+          originalMeta.shapeSides;
+
         canvas.add(cloned);
 
         canvas.setActiveObject(
@@ -909,22 +1264,64 @@ export function FabricProvider({
     if (!selectedObject)
       return;
 
+    const meta =
+      selectedObject as
+        FabricObjectWithMeta;
+
+    const lineTypes: ElementType[] =
+      [
+        "line",
+        "arrow",
+        "double-arrow",
+        "dashed-line",
+        "dotted-line",
+      ];
+
+    const shapeTypes: ElementType[] =
+      [
+        "rectangle",
+        "square",
+        "circle",
+        "triangle",
+        "polygon",
+        "pentagon",
+        "hexagon",
+        "heptagon",
+        "octagon",
+      ];
+
     if (
-      selectedObject.type !==
-        "rect" &&
-      selectedObject.type !==
-        "circle" &&
-      selectedObject.type !==
-        "triangle"
+      !meta.elementType
+    ) {
+      return;
+    }
+
+    if (
+      !lineTypes.includes(
+        meta.elementType
+      ) &&
+      !shapeTypes.includes(
+        meta.elementType
+      )
     ) {
       return;
     }
 
     saveCanvasState();
 
-    selectedObject.set({
-      fill: color,
-    });
+    if (
+      lineTypes.includes(
+        meta.elementType
+      )
+    ) {
+      selectedObject.set({
+        stroke: color,
+      });
+    } else {
+      selectedObject.set({
+        fill: color,
+      });
+    }
 
     canvasRef.current?.renderAll();
   }
@@ -1005,10 +1402,6 @@ export function FabricProvider({
     canvasRef.current?.renderAll();
   }
 
-  /*
-   * LINE SPACING
-   */
-
   function setLineSpacing(
     value: number
   ) {
@@ -1052,10 +1445,6 @@ export function FabricProvider({
       selectedObject
     );
   }
-
-  /*
-   * LETTER SPACING
-   */
 
   function setLetterSpacing(
     value: number
@@ -1103,20 +1492,6 @@ export function FabricProvider({
       selectedObject
     );
   }
-
-  /*
-   * TEXT ALIGNMENT
-   *
-   * IMPORTANT:
-   *
-   * Alignment is now applied INSIDE
-   * the Textbox.
-   *
-   * The textbox itself does not move
-   * left/center/right on the canvas.
-   *
-   * This gives Canva-style behaviour.
-   */
 
   function alignObject(
     alignment:
@@ -1397,11 +1772,7 @@ export function FabricProvider({
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON([
-          "elementId",
-          "elementType",
-          "imageSrc",
-        ])
+        getCanvasJSON(canvas)
       );
 
     setFuture((previous) => [
@@ -1456,11 +1827,7 @@ export function FabricProvider({
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON([
-          "elementId",
-          "elementType",
-          "imageSrc",
-        ])
+        getCanvasJSON(canvas)
       );
 
     setHistory((previous) => [
@@ -1504,12 +1871,22 @@ export function FabricProvider({
       return;
     }
 
+    /*
+     * IMPORTANT:
+     *
+     * Yahan pehle clearCanvas()
+     * call ho raha tha.
+     *
+     * Isi wajah se Save ke baad
+     * canvas empty ho jaata tha.
+     *
+     * Ab save ke baad canvas clear
+     * nahi hoga.
+     */
     saveDesign(
       trimmedName,
       elements
     );
-
-    clearCanvas();
 
     setHistory([]);
 

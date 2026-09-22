@@ -29,7 +29,11 @@ import {
   MoveVertical,
 } from "lucide-react";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { useFabric } from "../../context/FabricContext";
 import { useEditor } from "../../context/EditorContext";
@@ -85,36 +89,43 @@ export default function Toolbar() {
     currentDesignName,
   } = useEditor();
 
-  const [fontSize, setFontSizeState] = useState(
-    selectedFontSize ?? 18
-  );
+  const [fontSize, setFontSizeState] =
+    useState(selectedFontSize ?? 18);
 
-  const [lineSpacing, setLineSpacingState] = useState(
-    selectedObject?.lineHeight ?? 1.16
-  );
+  const [lineSpacing, setLineSpacingState] =
+    useState(
+      selectedObject?.lineHeight ?? 1.16
+    );
 
-  const [letterSpacing, setLetterSpacingState] = useState(
-    selectedObject?.charSpacing
-      ? selectedObject.charSpacing / 10
-      : 0
-  );
+  const [letterSpacing, setLetterSpacingState] =
+    useState(
+      selectedObject?.charSpacing
+        ? selectedObject.charSpacing / 10
+        : 0
+    );
 
-  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showSaveModal, setShowSaveModal] =
+    useState(false);
 
-  const [designName, setDesignName] = useState("");
+  const [designName, setDesignName] =
+    useState("");
 
-  const [saveError, setSaveError] = useState("");
+  const [saveError, setSaveError] =
+    useState("");
 
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] =
+    useState(false);
 
   const downloadButtonRef =
     useRef<HTMLButtonElement | null>(null);
 
-  const [downloadMenuPosition, setDownloadMenuPosition] =
-    useState({
-      top: 0,
-      right: 16,
-    });
+  const [
+    downloadMenuPosition,
+    setDownloadMenuPosition,
+  ] = useState({
+    top: 0,
+    right: 16,
+  });
 
   useEffect(() => {
     if (selectedFontSize !== null) {
@@ -140,29 +151,61 @@ export default function Toolbar() {
     }
   }, [selectedObject]);
 
+  /*
+   * TEXT OBJECT
+   */
   const isText =
     selectedObject?.type === "i-text" ||
     selectedObject?.type === "textbox";
 
+  /*
+   * SHAPE OBJECT
+   *
+   * Old shapes:
+   * rectangle
+   * circle
+   * triangle
+   *
+   * New shapes:
+   * square
+   * polygon
+   * pentagon
+   * hexagon
+   * heptagon
+   * octagon
+   *
+   * Lines:
+   * line
+   * dashed-line
+   * dotted-line
+   * arrow
+   * double-arrow
+   *
+   * Fabric mein:
+   * square/polygon = rect/polygon
+   * lines/arrows = line/path
+   */
   const isShape =
     selectedObject?.type === "rect" ||
     selectedObject?.type === "circle" ||
-    selectedObject?.type === "triangle";
+    selectedObject?.type === "triangle" ||
+    selectedObject?.type === "polygon" ||
+    selectedObject?.type === "line" ||
+    selectedObject?.type === "path";
 
-  const isImage = selectedObject?.type === "image";
+  const isImage =
+    selectedObject?.type === "image";
 
   /*
    * CURRENT TEXT STATES
-   *
-   * These values are directly taken from
-   * the currently selected Fabric text object.
    */
-
   const isBold =
-    isText && selectedObject?.fontWeight === "bold";
+    isText &&
+    selectedObject?.fontWeight === "bold";
 
   const isItalic =
-    isText && selectedObject?.fontStyle === "italic";
+    isText &&
+    selectedObject?.fontStyle === "italic";
 
   const currentTextAlign =
     isText
@@ -172,11 +215,15 @@ export default function Toolbar() {
   function handleFontSizeChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const value = Number(event.target.value);
+    const value =
+      Number(event.target.value);
 
     setFontSizeState(value);
 
-    if (value >= 8 && value <= 200) {
+    if (
+      value >= 8 &&
+      value <= 200
+    ) {
       setFontSize(value);
     }
   }
@@ -184,86 +231,128 @@ export default function Toolbar() {
   function handleLineSpacingChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const value = Number(event.target.value);
+    const value =
+      Number(event.target.value);
 
-    const safeValue = Math.min(
-      3,
-      Math.max(1, value)
+    const safeValue =
+      Math.min(
+        3,
+        Math.max(1, value)
+      );
+
+    setLineSpacingState(
+      safeValue
     );
 
-    setLineSpacingState(safeValue);
-
-    setLineSpacing(safeValue);
+    setLineSpacing(
+      safeValue
+    );
   }
 
   function decreaseLineSpacing() {
-    const nextValue = Math.max(
-      1,
-      Number(
-        (lineSpacing - 0.05).toFixed(2)
-      )
+    const nextValue =
+      Math.max(
+        1,
+        Number(
+          (
+            lineSpacing - 0.05
+          ).toFixed(2)
+        )
+      );
+
+    setLineSpacingState(
+      nextValue
     );
 
-    setLineSpacingState(nextValue);
-    setLineSpacing(nextValue);
+    setLineSpacing(
+      nextValue
+    );
   }
 
   function increaseLineSpacing() {
-    const nextValue = Math.min(
-      3,
-      Number(
-        (lineSpacing + 0.05).toFixed(2)
-      )
+    const nextValue =
+      Math.min(
+        3,
+        Number(
+          (
+            lineSpacing + 0.05
+          ).toFixed(2)
+        )
+      );
+
+    setLineSpacingState(
+      nextValue
     );
 
-    setLineSpacingState(nextValue);
-    setLineSpacing(nextValue);
+    setLineSpacing(
+      nextValue
+    );
   }
 
   function handleLetterSpacingChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const value = Number(event.target.value);
+    const value =
+      Number(event.target.value);
 
-    const safeValue = Math.min(
-      200,
-      Math.max(0, value)
+    const safeValue =
+      Math.min(
+        200,
+        Math.max(0, value)
+      );
+
+    setLetterSpacingState(
+      safeValue
     );
 
-    setLetterSpacingState(safeValue);
-
-    setLetterSpacing(safeValue);
+    setLetterSpacing(
+      safeValue
+    );
   }
 
   function decreaseLetterSpacing() {
-    const nextValue = Math.max(
-      0,
-      letterSpacing - 5
+    const nextValue =
+      Math.max(
+        0,
+        letterSpacing - 5
+      );
+
+    setLetterSpacingState(
+      nextValue
     );
 
-    setLetterSpacingState(nextValue);
-    setLetterSpacing(nextValue);
+    setLetterSpacing(
+      nextValue
+    );
   }
 
   function increaseLetterSpacing() {
-    const nextValue = Math.min(
-      200,
-      letterSpacing + 5
+    const nextValue =
+      Math.min(
+        200,
+        letterSpacing + 5
+      );
+
+    setLetterSpacingState(
+      nextValue
     );
 
-    setLetterSpacingState(nextValue);
-    setLetterSpacing(nextValue);
+    setLetterSpacing(
+      nextValue
+    );
   }
 
   function openSaveModal() {
     setDesignName(
       currentDesignName &&
-        currentDesignName !== "My Certificate"
+        currentDesignName !==
+          "My Certificate"
         ? currentDesignName
         : ""
     );
 
     setSaveError("");
+
     setShowSaveModal(true);
   }
 
@@ -273,7 +362,8 @@ export default function Toolbar() {
   }
 
   function handleSave() {
-    const trimmedName = designName.trim();
+    const trimmedName =
+      designName.trim();
 
     if (!trimmedName) {
       setSaveError(
@@ -283,7 +373,9 @@ export default function Toolbar() {
       return;
     }
 
-    saveCurrentDesign(trimmedName);
+    saveCurrentDesign(
+      trimmedName
+    );
 
     setShowSaveModal(false);
     setDesignName("");
@@ -291,27 +383,33 @@ export default function Toolbar() {
   }
 
   function openDownloadMenu() {
-    const button = downloadButtonRef.current;
+    const button =
+      downloadButtonRef.current;
 
     if (!button) {
       setShowDownloadMenu(
-        (previous) => !previous
+        (previous) =>
+          !previous
       );
 
       return;
     }
 
-    const rect = button.getBoundingClientRect();
+    const rect =
+      button.getBoundingClientRect();
 
     const menuWidth = 240;
     const menuHeight = 190;
 
-    const right = Math.max(
-      12,
-      window.innerWidth - rect.right
-    );
+    const right =
+      Math.max(
+        12,
+        window.innerWidth -
+          rect.right
+      );
 
-    let top = rect.bottom + 8;
+    let top =
+      rect.bottom + 8;
 
     if (
       top + menuHeight >
@@ -338,7 +436,8 @@ export default function Toolbar() {
     });
 
     setShowDownloadMenu(
-      (previous) => !previous
+      (previous) =>
+        !previous
     );
   }
 
@@ -348,23 +447,28 @@ export default function Toolbar() {
     }
 
     function updateDownloadMenuPosition() {
-      const button = downloadButtonRef.current;
+      const button =
+        downloadButtonRef.current;
 
       if (!button) {
         return;
       }
 
-      const rect = button.getBoundingClientRect();
+      const rect =
+        button.getBoundingClientRect();
 
       const menuWidth = 240;
       const menuHeight = 190;
 
-      const right = Math.max(
-        12,
-        window.innerWidth - rect.right
-      );
+      const right =
+        Math.max(
+          12,
+          window.innerWidth -
+            rect.right
+        );
 
-      let top = rect.bottom + 8;
+      let top =
+        rect.bottom + 8;
 
       if (
         top + menuHeight >
@@ -426,9 +530,11 @@ export default function Toolbar() {
     function handleOutsideClick(
       event: MouseEvent
     ) {
-      const target = event.target as Node;
+      const target =
+        event.target as Node;
 
-      const button = downloadButtonRef.current;
+      const button =
+        downloadButtonRef.current;
 
       if (
         button &&
@@ -542,7 +648,9 @@ export default function Toolbar() {
                     className={activeIconButton}
                     title="Bring to front"
                   >
-                    <ArrowUpToLine size={17} />
+                    <ArrowUpToLine
+                      size={17}
+                    />
                   </button>
 
                   <button
@@ -550,7 +658,9 @@ export default function Toolbar() {
                     className={activeIconButton}
                     title="Bring forward"
                   >
-                    <ArrowUp size={17} />
+                    <ArrowUp
+                      size={17}
+                    />
                   </button>
 
                   <button
@@ -558,7 +668,9 @@ export default function Toolbar() {
                     className={activeIconButton}
                     title="Send backward"
                   >
-                    <ArrowDown size={17} />
+                    <ArrowDown
+                      size={17}
+                    />
                   </button>
 
                   <button
@@ -566,7 +678,9 @@ export default function Toolbar() {
                     className={activeIconButton}
                     title="Send to back"
                   >
-                    <ArrowDownToLine size={17} />
+                    <ArrowDownToLine
+                      size={17}
+                    />
                   </button>
 
                 </div>
@@ -731,8 +845,6 @@ export default function Toolbar() {
 
                     <div className="flex-shrink-0 flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5">
 
-                      {/* LEFT */}
-
                       <button
                         onClick={() =>
                           alignObject("left")
@@ -748,8 +860,6 @@ export default function Toolbar() {
                         <AlignLeft size={16} />
                       </button>
 
-                      {/* CENTER */}
-
                       <button
                         onClick={() =>
                           alignObject("center")
@@ -762,10 +872,10 @@ export default function Toolbar() {
                         }`}
                         title="Align center"
                       >
-                        <AlignCenter size={16} />
+                        <AlignCenter
+                          size={16}
+                        />
                       </button>
-
-                      {/* RIGHT */}
 
                       <button
                         onClick={() =>
@@ -779,7 +889,9 @@ export default function Toolbar() {
                         }`}
                         title="Align right"
                       >
-                        <AlignRight size={16} />
+                        <AlignRight
+                          size={16}
+                        />
                       </button>
 
                     </div>
@@ -789,7 +901,9 @@ export default function Toolbar() {
                     <div className="flex-shrink-0 flex items-center gap-1 h-9 border border-gray-200 rounded-lg overflow-hidden bg-white">
 
                       <button
-                        onClick={decreaseLineSpacing}
+                        onClick={
+                          decreaseLineSpacing
+                        }
                         className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
                         title="Decrease line spacing"
                       >
@@ -808,7 +922,9 @@ export default function Toolbar() {
                           min="1"
                           max="3"
                           step="0.05"
-                          value={lineSpacing}
+                          value={
+                            lineSpacing
+                          }
                           onChange={
                             handleLineSpacingChange
                           }
@@ -819,7 +935,9 @@ export default function Toolbar() {
                       </div>
 
                       <button
-                        onClick={increaseLineSpacing}
+                        onClick={
+                          increaseLineSpacing
+                        }
                         className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
                         title="Increase line spacing"
                       >
@@ -833,7 +951,9 @@ export default function Toolbar() {
                     <div className="flex-shrink-0 flex items-center gap-1 h-9 border border-gray-200 rounded-lg overflow-hidden bg-white">
 
                       <button
-                        onClick={decreaseLetterSpacing}
+                        onClick={
+                          decreaseLetterSpacing
+                        }
                         className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
                         title="Decrease letter spacing"
                       >
@@ -852,7 +972,9 @@ export default function Toolbar() {
                           min="0"
                           max="200"
                           step="5"
-                          value={letterSpacing}
+                          value={
+                            letterSpacing
+                          }
                           onChange={
                             handleLetterSpacingChange
                           }
@@ -863,7 +985,9 @@ export default function Toolbar() {
                       </div>
 
                       <button
-                        onClick={increaseLetterSpacing}
+                        onClick={
+                          increaseLetterSpacing
+                        }
                         className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
                         title="Increase letter spacing"
                       >
@@ -875,7 +999,7 @@ export default function Toolbar() {
                   </div>
                 )}
 
-                {/* SHAPE CONTROLS */}
+                {/* SHAPE + LINE CONTROLS */}
 
                 {isShape && (
                   <div className="flex-shrink-0 flex items-center gap-2 px-2 border-r border-gray-200">
@@ -895,27 +1019,40 @@ export default function Toolbar() {
 
                     <label
                       className="relative w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-100 cursor-pointer overflow-hidden"
-                      title="Shape color"
+                      title={
+                        selectedObject?.type ===
+                          "line" ||
+                        selectedObject?.type ===
+                          "path"
+                          ? "Line color"
+                          : "Shape color"
+                      }
                     >
 
                       <span
                         className="w-5 h-5 rounded-md border border-gray-300"
                         style={{
                           backgroundColor:
-                            typeof selectedObject?.fill ===
+                            typeof selectedObject?.stroke ===
                             "string"
-                              ? selectedObject.fill
-                              : "#2563eb",
+                              ? selectedObject.stroke
+                              : typeof selectedObject?.fill ===
+                                "string"
+                                ? selectedObject.fill
+                                : "#2563eb",
                         }}
                       />
 
                       <input
                         type="color"
                         value={
-                          typeof selectedObject?.fill ===
+                          typeof selectedObject?.stroke ===
                           "string"
-                            ? selectedObject.fill
-                            : "#2563eb"
+                            ? selectedObject.stroke
+                            : typeof selectedObject?.fill ===
+                              "string"
+                              ? selectedObject.fill
+                              : "#2563eb"
                         }
                         onChange={(event) =>
                           setShapeColor(
@@ -946,8 +1083,13 @@ export default function Toolbar() {
                       className="flex-shrink-0 flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-sm text-gray-700 transition"
                       title="Rotate left"
                     >
-                      <RotateCcw size={15} />
-                      <span>15°</span>
+                      <RotateCcw
+                        size={15}
+                      />
+
+                      <span>
+                        15°
+                      </span>
                     </button>
 
                     <button
@@ -957,8 +1099,13 @@ export default function Toolbar() {
                       className="flex-shrink-0 flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-sm text-gray-700 transition"
                       title="Rotate right"
                     >
-                      <RotateCw size={15} />
-                      <span>15°</span>
+                      <RotateCw
+                        size={15}
+                      />
+
+                      <span>
+                        15°
+                      </span>
                     </button>
 
                   </div>
@@ -967,18 +1114,25 @@ export default function Toolbar() {
                 {/* DUPLICATE */}
 
                 <button
-                  onClick={duplicateSelected}
+                  onClick={
+                    duplicateSelected
+                  }
                   className="flex-shrink-0 flex items-center gap-2 h-9 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-sm text-gray-700 transition"
                   title="Duplicate"
                 >
                   <Copy size={15} />
-                  <span>Duplicate</span>
+
+                  <span>
+                    Duplicate
+                  </span>
                 </button>
 
                 {/* DELETE */}
 
                 <button
-                  onClick={deleteSelected}
+                  onClick={
+                    deleteSelected
+                  }
                   className="flex-shrink-0 flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm transition"
                   title="Delete"
                 >
@@ -1017,7 +1171,9 @@ export default function Toolbar() {
 
                 <input
                   type="color"
-                  value={backgroundColor}
+                  value={
+                    backgroundColor
+                  }
                   onChange={(event) =>
                     setCanvasBackground(
                       event.target.value
@@ -1031,7 +1187,9 @@ export default function Toolbar() {
               {/* SAVE */}
 
               <button
-                onClick={openSaveModal}
+                onClick={
+                  openSaveModal
+                }
                 className="flex-shrink-0 flex items-center gap-2 h-9 px-4 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium transition"
               >
                 <Save size={15} />
@@ -1046,12 +1204,17 @@ export default function Toolbar() {
               <div className="relative flex-shrink-0">
 
                 <button
-                  ref={downloadButtonRef}
-                  onClick={openDownloadMenu}
+                  ref={
+                    downloadButtonRef
+                  }
+                  onClick={
+                    openDownloadMenu
+                  }
                   className="flex-shrink-0 flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-sm font-medium text-gray-700 transition"
                 >
-
-                  <Download size={15} />
+                  <Download
+                    size={15}
+                  />
 
                   <span>
                     Download
@@ -1065,7 +1228,6 @@ export default function Toolbar() {
                         : "transition"
                     }
                   />
-
                 </button>
 
               </div>
@@ -1073,7 +1235,6 @@ export default function Toolbar() {
             </div>
 
           </div>
-
         </div>
 
         {/* CURRENT DESIGN */}
@@ -1125,12 +1286,16 @@ export default function Toolbar() {
           {/* PNG */}
 
           <button
-            onClick={handleDownloadPNG}
+            onClick={
+              handleDownloadPNG
+            }
             className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition"
           >
 
             <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <ImageDown size={18} />
+              <ImageDown
+                size={18}
+              />
             </div>
 
             <div>
@@ -1150,12 +1315,16 @@ export default function Toolbar() {
           {/* PDF */}
 
           <button
-            onClick={handleDownloadPDF}
+            onClick={
+              handleDownloadPDF
+            }
             className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-t border-gray-100 transition"
           >
 
             <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <FileDown size={18} />
+              <FileDown
+                size={18}
+              />
             </div>
 
             <div>
@@ -1199,7 +1368,9 @@ export default function Toolbar() {
               </div>
 
               <button
-                onClick={closeSaveModal}
+                onClick={
+                  closeSaveModal
+                }
                 className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition"
                 title="Close"
               >
@@ -1219,7 +1390,9 @@ export default function Toolbar() {
               <input
                 autoFocus
                 type="text"
-                value={designName}
+                value={
+                  designName
+                }
                 onChange={(event) => {
                   setDesignName(
                     event.target.value
@@ -1228,15 +1401,19 @@ export default function Toolbar() {
                   setSaveError("");
                 }}
                 onKeyDown={(event) => {
-
-                  if (event.key === "Enter") {
+                  if (
+                    event.key ===
+                    "Enter"
+                  ) {
                     handleSave();
                   }
 
-                  if (event.key === "Escape") {
+                  if (
+                    event.key ===
+                    "Escape"
+                  ) {
                     closeSaveModal();
                   }
-
                 }}
                 placeholder="Example: Web Development Certificate"
                 className="w-full h-11 px-3.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-black focus:border-black transition"
@@ -1251,14 +1428,18 @@ export default function Toolbar() {
               <div className="flex justify-end gap-3 mt-6">
 
                 <button
-                  onClick={closeSaveModal}
+                  onClick={
+                    closeSaveModal
+                  }
                   className="h-10 px-4 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm font-medium text-gray-700 transition"
                 >
                   Cancel
                 </button>
 
                 <button
-                  onClick={handleSave}
+                  onClick={
+                    handleSave
+                  }
                   className="h-10 px-5 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium transition"
                 >
                   Save Certificate
