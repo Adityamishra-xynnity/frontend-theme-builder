@@ -1,4 +1,3 @@
-
 export type ElementType =
   | "heading"
   | "subheading"
@@ -6,6 +5,17 @@ export type ElementType =
   | "rectangle"
   | "circle"
   | "triangle"
+  | "square"
+  | "polygon"
+  | "pentagon"
+  | "hexagon"
+  | "heptagon"
+  | "octagon"
+  | "line"
+  | "arrow"
+  | "double-arrow"
+  | "dashed-line"
+  | "dotted-line"
   | "image";
 
 export interface EditorElement {
@@ -43,23 +53,20 @@ export interface EditorElement {
 
   src?: string;
 
-  /*
-   * Text line spacing.
-   */
   lineHeight?: number;
 
-  /*
-   * Fabric charSpacing value.
-   *
-   * UI value is converted inside FabricContext.
-   */
   charSpacing?: number;
 
-  /*
-   * Text alignment inside the text box.
-   */
   textAlign?:
     | "left"
     | "center"
     | "right";
+
+  strokeColor?: string;
+
+  strokeWidth?: number;
+
+  lineDash?: number[];
+
+  shapeSides?: number;
 }

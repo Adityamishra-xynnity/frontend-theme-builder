@@ -1,4 +1,7 @@
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
 
 import {
   Canvas as FabricCanvas,
@@ -7,6 +10,9 @@ import {
   Rect,
   Circle,
   Triangle,
+  Polygon,
+  Line,
+  Path,
   FabricImage,
 } from "fabric";
 
@@ -24,7 +30,238 @@ type FabricObjectWithMeta = {
   elementType?: ElementType;
 
   imageSrc?: string;
+
+  shapeSides?: number;
 };
+
+function getPolygonPoints(
+  sides: number,
+  radius: number
+) {
+  const points = [];
+
+  for (
+    let index = 0;
+    index < sides;
+    index++
+  ) {
+    const angle =
+      -Math.PI / 2 +
+      (index * 2 * Math.PI) /
+        sides;
+
+    points.push({
+      x:
+        radius +
+        radius * Math.cos(angle),
+
+      y:
+        radius +
+        radius * Math.sin(angle),
+    });
+  }
+
+  return points;
+}
+
+function applyControls(
+  object: any
+) {
+  object.set({
+    selectable: true,
+
+    evented: true,
+
+    transparentCorners:
+      false,
+
+    cornerColor:
+      "#111827",
+
+    cornerStyle:
+      "circle",
+
+    borderColor:
+      "#111827",
+
+    originX:
+      "left",
+
+    originY:
+      "top",
+  });
+}
+
+function createLineObject(
+  element: {
+    type:
+      | "line"
+      | "arrow"
+      | "double-arrow"
+      | "dashed-line"
+      | "dotted-line";
+
+    x: number;
+
+    y: number;
+
+    width: number;
+
+    height: number;
+
+    scaleX?: number;
+
+    scaleY?: number;
+
+    angle?: number;
+
+    opacity?: number;
+
+    strokeColor?: string;
+
+    strokeWidth?: number;
+
+    lineDash?: number[];
+  }
+) {
+  const width =
+    Math.max(
+      40,
+      element.width || 220
+    );
+
+  const stroke =
+    element.strokeColor ??
+    "#111827";
+
+  const strokeWidth =
+    element.strokeWidth ??
+    4;
+
+  const commonOptions = {
+    left: element.x,
+
+    top: element.y,
+
+    scaleX:
+      element.scaleX ?? 1,
+
+    scaleY:
+      element.scaleY ?? 1,
+
+    angle:
+      element.angle ?? 0,
+
+    opacity:
+      element.opacity ?? 1,
+
+    fill: "",
+
+    stroke,
+
+    strokeWidth,
+
+    strokeLineCap:
+      "round" as const,
+
+    strokeLineJoin:
+      "round" as const,
+
+    originX:
+      "left" as const,
+
+    originY:
+      "top" as const,
+
+    selectable: true,
+
+    evented: true,
+
+    transparentCorners:
+      false,
+
+    cornerColor:
+      "#111827",
+
+    cornerStyle:
+      "circle" as const,
+
+    borderColor:
+      "#111827",
+  };
+
+  if (
+    element.type ===
+      "line" ||
+    element.type ===
+      "dashed-line" ||
+    element.type ===
+      "dotted-line"
+  ) {
+    return new Line(
+      [
+        0,
+        0,
+        width,
+        0,
+      ],
+      {
+        ...commonOptions,
+
+        strokeDashArray:
+          element.lineDash ??
+          (
+            element.type ===
+            "dashed-line"
+              ? [18, 10]
+              : element.type ===
+                  "dotted-line"
+                ? [2, 10]
+                : undefined
+          ),
+      }
+    );
+  }
+
+  if (
+    element.type ===
+    "arrow"
+  ) {
+    return new Path(
+      `
+      M 0 0
+      L ${width} 0
+
+      M ${width} 0
+      L ${width - 18} -12
+
+      M ${width} 0
+      L ${width - 18} 12
+      `,
+      commonOptions
+    );
+  }
+
+  return new Path(
+    `
+    M 0 0
+    L ${width} 0
+
+    M 0 0
+    L 18 -12
+
+    M 0 0
+    L 18 12
+
+    M ${width} 0
+    L ${width - 18} -12
+
+    M ${width} 0
+    L ${width - 18} 12
+    `,
+    commonOptions
+  );
+}
 
 export default function FabricEditorCanvas() {
   const canvasElementRef =
@@ -51,11 +288,6 @@ export default function FabricEditorCanvas() {
     convertCanvasToElements,
   } = useFabric();
 
-  /*
-   * CREATE FABRIC CANVAS
-   *
-   * Canvas sirf ek baar create hota hai.
-   */
   useEffect(() => {
     if (
       !canvasElementRef.current
@@ -83,10 +315,6 @@ export default function FabricEditorCanvas() {
     canvasRef.current =
       canvas;
 
-    /*
-     * Fabric se EditorContext
-     * ko latest elements sync karna.
-     */
     const updateEditorFromCanvas =
       () => {
         const latestElements =
@@ -170,10 +398,6 @@ export default function FabricEditorCanvas() {
           object
         );
 
-        /*
-         * Both old IText and new
-         * Textbox can be edited.
-         */
         if (
           object.type ===
             "i-text" ||
@@ -277,13 +501,6 @@ export default function FabricEditorCanvas() {
     };
   }, []);
 
-  /*
-   * BACKGROUND COLOR
-   *
-   * Important:
-   * Background change par objects
-   * clear nahi honge.
-   */
   useEffect(() => {
     const canvas =
       canvasRef.current;
@@ -298,20 +515,12 @@ export default function FabricEditorCanvas() {
     backgroundColor,
   ]);
 
-  /*
-   * RESTORE / RENDER ELEMENTS
-   */
   useEffect(() => {
     const canvas =
       canvasRef.current;
 
     if (!canvas) return;
 
-    /*
-     * Agar update directly Fabric
-     * se aaya hai to dobara objects
-     * recreate nahi karne.
-     */
     if (
       internalChangeRef.current
     ) {
@@ -330,9 +539,6 @@ export default function FabricEditorCanvas() {
        */
       canvas.clear();
 
-      /*
-       * Background preserve.
-       */
       canvas.backgroundColor =
         backgroundColor;
 
@@ -343,17 +549,6 @@ export default function FabricEditorCanvas() {
 
         /*
          * TEXT
-         *
-         * IMPORTANT:
-         *
-         * New elements are created as
-         * Fabric Textbox.
-         *
-         * This gives:
-         * - resizable width
-         * - wrapping
-         * - textAlign
-         * - Canva-like behaviour
          */
         if (
           element.type ===
@@ -363,14 +558,6 @@ export default function FabricEditorCanvas() {
           element.type ===
             "text"
         ) {
-          /*
-           * Existing saved designs may
-           * contain old IText objects.
-           *
-           * For restored EditorElements,
-           * always create a Textbox.
-           */
-
           const textObject =
             new Textbox(
               element.text ?? "",
@@ -381,12 +568,6 @@ export default function FabricEditorCanvas() {
                 top:
                   element.y,
 
-                /*
-                 * Saved width restore.
-                 *
-                 * Prevent extremely small
-                 * or zero width boxes.
-                 */
                 width:
                   Math.max(
                     80,
@@ -422,23 +603,14 @@ export default function FabricEditorCanvas() {
                   element.fontStyle ??
                   "normal",
 
-                /*
-                 * LINE SPACING
-                 */
                 lineHeight:
                   element.lineHeight ??
                   1.16,
 
-                /*
-                 * LETTER SPACING
-                 */
                 charSpacing:
                   element.charSpacing ??
                   0,
 
-                /*
-                 * TEXT ALIGNMENT
-                 */
                 textAlign:
                   element.textAlign ??
                   "left",
@@ -494,10 +666,6 @@ export default function FabricEditorCanvas() {
               }
             );
 
-          /*
-           * Explicitly restore all
-           * text properties.
-           */
           textObject.set({
             lineHeight:
               element.lineHeight ??
@@ -549,10 +717,12 @@ export default function FabricEditorCanvas() {
                 element.y,
 
               width:
-                element.width,
+                element.width ||
+                180,
 
               height:
-                element.height,
+                element.height ||
+                100,
 
               scaleX:
                 element.scaleX ??
@@ -579,25 +749,11 @@ export default function FabricEditorCanvas() {
 
               originY:
                 "top",
-
-              selectable:
-                true,
-
-              evented:
-                true,
-
-              transparentCorners:
-                false,
-
-              cornerColor:
-                "#111827",
-
-              cornerStyle:
-                "circle",
-
-              borderColor:
-                "#111827",
             });
+
+          applyControls(
+            rectangle
+          );
 
           const meta =
             rectangle as typeof rectangle &
@@ -611,6 +767,83 @@ export default function FabricEditorCanvas() {
 
           canvas.add(
             rectangle
+          );
+
+          continue;
+        }
+
+        /*
+         * SQUARE
+         */
+        if (
+          element.type ===
+          "square"
+        ) {
+          const size =
+            Math.max(
+              40,
+              element.width ||
+                element.height ||
+                140
+            );
+
+          const square =
+            new Rect({
+              left:
+                element.x,
+
+              top:
+                element.y,
+
+              width:
+                size,
+
+              height:
+                size,
+
+              scaleX:
+                element.scaleX ??
+                1,
+
+              scaleY:
+                element.scaleY ??
+                1,
+
+              angle:
+                element.angle ??
+                0,
+
+              opacity:
+                element.opacity ??
+                1,
+
+              fill:
+                element.backgroundColor ??
+                "#2563eb",
+
+              originX:
+                "left",
+
+              originY:
+                "top",
+            });
+
+          applyControls(
+            square
+          );
+
+          const meta =
+            square as typeof square &
+              FabricObjectWithMeta;
+
+          meta.elementId =
+            element.id;
+
+          meta.elementType =
+            "square";
+
+          canvas.add(
+            square
           );
 
           continue;
@@ -638,13 +871,21 @@ export default function FabricEditorCanvas() {
 
               scaleX:
                 element.scaleX ??
-                element.width /
-                  (radius * 2),
+                (
+                  element.width
+                    ? element.width /
+                      (radius * 2)
+                    : 1
+                ),
 
               scaleY:
                 element.scaleY ??
-                element.height /
-                  (radius * 2),
+                (
+                  element.height
+                    ? element.height /
+                      (radius * 2)
+                    : 1
+                ),
 
               angle:
                 element.angle ??
@@ -663,25 +904,11 @@ export default function FabricEditorCanvas() {
 
               originY:
                 "top",
-
-              selectable:
-                true,
-
-              evented:
-                true,
-
-              transparentCorners:
-                false,
-
-              cornerColor:
-                "#111827",
-
-              cornerStyle:
-                "circle",
-
-              borderColor:
-                "#111827",
             });
+
+          applyControls(
+            circle
+          );
 
           const meta =
             circle as typeof circle &
@@ -691,9 +918,11 @@ export default function FabricEditorCanvas() {
             element.id;
 
           meta.elementType =
-            element.type;
+            "circle";
 
-          canvas.add(circle);
+          canvas.add(
+            circle
+          );
 
           continue;
         }
@@ -714,10 +943,12 @@ export default function FabricEditorCanvas() {
                 element.y,
 
               width:
-                element.width,
+                element.width ||
+                150,
 
               height:
-                element.height,
+                element.height ||
+                120,
 
               scaleX:
                 element.scaleX ??
@@ -744,25 +975,11 @@ export default function FabricEditorCanvas() {
 
               originY:
                 "top",
-
-              selectable:
-                true,
-
-              evented:
-                true,
-
-              transparentCorners:
-                false,
-
-              cornerColor:
-                "#111827",
-
-              cornerStyle:
-                "circle",
-
-              borderColor:
-                "#111827",
             });
+
+          applyControls(
+            triangle
+          );
 
           const meta =
             triangle as typeof triangle &
@@ -772,10 +989,194 @@ export default function FabricEditorCanvas() {
             element.id;
 
           meta.elementType =
-            element.type;
+            "triangle";
 
           canvas.add(
             triangle
+          );
+
+          continue;
+        }
+
+        /*
+         * POLYGON FAMILY
+         */
+        if (
+          element.type ===
+            "polygon" ||
+          element.type ===
+            "pentagon" ||
+          element.type ===
+            "hexagon" ||
+          element.type ===
+            "heptagon" ||
+          element.type ===
+            "octagon"
+        ) {
+          const sides =
+            element.shapeSides ??
+            (
+              element.type ===
+              "pentagon"
+                ? 5
+                : element.type ===
+                    "hexagon"
+                  ? 6
+                  : element.type ===
+                      "heptagon"
+                    ? 7
+                    : element.type ===
+                        "octagon"
+                      ? 8
+                      : 6
+            );
+
+          const radius =
+            Math.max(
+              30,
+              Math.max(
+                element.width ||
+                  140,
+                element.height ||
+                  140
+              ) / 2
+            );
+
+          const polygon =
+            new Polygon(
+              getPolygonPoints(
+                sides,
+                radius
+              ),
+              {
+                left:
+                  element.x,
+
+                top:
+                  element.y,
+
+                scaleX:
+                  element.scaleX ??
+                  1,
+
+                scaleY:
+                  element.scaleY ??
+                  1,
+
+                angle:
+                  element.angle ??
+                  0,
+
+                opacity:
+                  element.opacity ??
+                  1,
+
+                fill:
+                  element.backgroundColor ??
+                  "#2563eb",
+
+                originX:
+                  "left",
+
+                originY:
+                  "top",
+              }
+            );
+
+          applyControls(
+            polygon
+          );
+
+          const meta =
+            polygon as typeof polygon &
+              FabricObjectWithMeta;
+
+          meta.elementId =
+            element.id;
+
+          meta.elementType =
+            element.type;
+
+          meta.shapeSides =
+            sides;
+
+          canvas.add(
+            polygon
+          );
+
+          continue;
+        }
+
+        /*
+         * LINES
+         */
+        if (
+          element.type ===
+            "line" ||
+          element.type ===
+            "arrow" ||
+          element.type ===
+            "double-arrow" ||
+          element.type ===
+            "dashed-line" ||
+          element.type ===
+            "dotted-line"
+        ) {
+          const line =
+            createLineObject({
+              type:
+                element.type,
+
+              x:
+                element.x,
+
+              y:
+                element.y,
+
+              width:
+                element.width,
+
+              height:
+                element.height,
+
+              scaleX:
+                element.scaleX,
+
+              scaleY:
+                element.scaleY,
+
+              angle:
+                element.angle,
+
+              opacity:
+                element.opacity,
+
+              strokeColor:
+                element.strokeColor,
+
+              strokeWidth:
+                element.strokeWidth,
+
+              lineDash:
+                element.lineDash,
+            });
+
+          applyControls(
+            line
+          );
+
+          const meta =
+            line as typeof line &
+              FabricObjectWithMeta;
+
+          meta.elementId =
+            element.id;
+
+          meta.elementType =
+            element.type;
+
+          canvas.add(
+            line
           );
 
           continue;
@@ -813,13 +1214,17 @@ export default function FabricEditorCanvas() {
 
               scaleX:
                 element.scaleX ??
-                element.width /
-                  originalWidth,
+                (
+                  element.width /
+                  originalWidth
+                ),
 
               scaleY:
                 element.scaleY ??
-                element.height /
-                  originalHeight,
+                (
+                  element.height /
+                  originalHeight
+                ),
 
               angle:
                 element.angle ??
@@ -867,7 +1272,9 @@ export default function FabricEditorCanvas() {
             meta.imageSrc =
               element.src;
 
-            canvas.add(image);
+            canvas.add(
+              image
+            );
           } catch (error) {
             console.error(
               "Could not restore image:",
