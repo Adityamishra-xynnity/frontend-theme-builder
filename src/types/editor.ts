@@ -10,6 +10,7 @@ export type ElementType =
 
 export interface EditorElement {
   id: string;
+  backendId?: number;
 
   type: ElementType;
 
