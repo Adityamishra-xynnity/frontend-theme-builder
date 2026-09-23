@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import type { EditorElement } from "../types/editor";
+import { createElement } from "../api/elementApi";
 
 export interface SavedDesign {
   id: string;
@@ -141,10 +142,27 @@ export function EditorProvider({
     setFuture([]);
   };
 
-  const addElement = (
-    element: EditorElement
-  ) => {
-    addHistory();
+  const addElement = async (
+  element: EditorElement
+) => {
+  addHistory();
+
+  try {
+    const savedElement = await createElement(element);
+
+    const elementWithBackendId: EditorElement = {
+      ...element,
+      backendId: savedElement.id as unknown as number,
+    };
+
+    setElements((previous) => [
+      ...previous,
+      elementWithBackendId,
+    ]);
+
+    setSelectedId(element.id);
+  } catch (error) {
+    console.error("Failed to save element:", error);
 
     setElements((previous) => [
       ...previous,
@@ -152,7 +170,8 @@ export function EditorProvider({
     ]);
 
     setSelectedId(element.id);
-  };
+  }
+};
 
   const selectElement = (
     id: string | null

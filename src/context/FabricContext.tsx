@@ -18,6 +18,7 @@ import {
 import jsPDF from "jspdf";
 
 import { useEditor } from "./EditorContext";
+import { createElement } from "../api/elementApi";
 
 import type {
   ElementType,
@@ -138,10 +139,10 @@ export function FabricProvider({
 
   const selectedFontSize =
     selectedObject &&
-    (
-      selectedObject.type === "i-text" ||
-      selectedObject.type === "textbox"
-    )
+      (
+        selectedObject.type === "i-text" ||
+        selectedObject.type === "textbox"
+      )
       ? selectedObject.fontSize ?? 18
       : null;
 
@@ -152,8 +153,7 @@ export function FabricProvider({
 
     const json = JSON.stringify(
       canvas.toJSON()
-
-      );
+    );
 
     setHistory((previous) => [
       ...previous,
@@ -168,12 +168,10 @@ export function FabricProvider({
 
     if (!canvas) return [];
 
-    return canvas
-      .getObjects()
-      .map((object) => {
-        const fabricObject =
-          object as typeof object &
-            FabricObjectWithMeta;
+    return canvas.getObjects().map((object) => {
+      const fabricObject =
+        object as typeof object &
+        FabricObjectWithMeta;
 
         let elementType =
           fabricObject.elementType;
@@ -350,7 +348,7 @@ export function FabricProvider({
         (item) =>
           (
             item as typeof item &
-              FabricObjectWithMeta
+            FabricObjectWithMeta
           ).elementId === id
       );
 
@@ -489,7 +487,7 @@ export function FabricProvider({
 
     const meta =
       textObject as typeof textObject &
-        FabricObjectWithMeta;
+      FabricObjectWithMeta;
 
     meta.elementId =
       crypto.randomUUID();
@@ -587,7 +585,7 @@ export function FabricProvider({
 
     const meta =
       object as typeof object &
-        FabricObjectWithMeta;
+      FabricObjectWithMeta;
 
     meta.elementId =
       crypto.randomUUID();
@@ -624,8 +622,11 @@ export function FabricProvider({
           dataUrl
         );
 
-      const maxWidth =
-        350;
+      const currentCanvas = canvasRef.current;
+
+      if (!currentCanvas) return;
+
+      const maxWidth = 350;
 
       const originalWidth =
         image.width || 1;
@@ -672,7 +673,7 @@ export function FabricProvider({
 
       const meta =
         image as typeof image &
-          FabricObjectWithMeta;
+        FabricObjectWithMeta;
 
       meta.elementId =
         crypto.randomUUID();
@@ -756,11 +757,11 @@ export function FabricProvider({
 
         const originalMeta =
           selectedObject as
-            FabricObjectWithMeta;
+          FabricObjectWithMeta;
 
         const clonedMeta =
           cloned as
-            FabricObjectWithMeta;
+          FabricObjectWithMeta;
 
         clonedMeta.elementId =
           crypto.randomUUID();
@@ -785,25 +786,19 @@ export function FabricProvider({
       });
   }
 
-  function isTextObject(
-    object: any
-  ) {
-    return (
-      object &&
-      (
-        object.type ===
-          "i-text" ||
-        object.type ===
-          "textbox"
-      )
-    );
-  }
+  
+
+  
 
   function increaseFontSize() {
+    if (!selectedObject)
+      return;
+
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -828,9 +823,10 @@ export function FabricProvider({
 
   function decreaseFontSize() {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -860,9 +856,10 @@ export function FabricProvider({
     size: number
   ) {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -884,9 +881,10 @@ export function FabricProvider({
     color: string
   ) {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -908,11 +906,11 @@ export function FabricProvider({
 
     if (
       selectedObject.type !==
-        "rect" &&
+      "rect" &&
       selectedObject.type !==
-        "circle" &&
+      "circle" &&
       selectedObject.type !==
-        "triangle"
+      "triangle"
     ) {
       return;
     }
@@ -930,9 +928,10 @@ export function FabricProvider({
     fontFamily: string
   ) {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -952,9 +951,10 @@ export function FabricProvider({
 
   function toggleBold() {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -964,7 +964,7 @@ export function FabricProvider({
     selectedObject.set({
       fontWeight:
         selectedObject.fontWeight ===
-        "bold"
+          "bold"
           ? "normal"
           : "bold",
     });
@@ -978,9 +978,10 @@ export function FabricProvider({
 
   function toggleItalic() {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -990,7 +991,7 @@ export function FabricProvider({
     selectedObject.set({
       fontStyle:
         selectedObject.fontStyle ===
-        "italic"
+          "italic"
           ? "normal"
           : "italic",
     });
@@ -1010,9 +1011,10 @@ export function FabricProvider({
     value: number
   ) {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -1058,9 +1060,10 @@ export function FabricProvider({
     value: number
   ) {
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -1132,9 +1135,10 @@ export function FabricProvider({
     }
 
     if (
-      !isTextObject(
-        selectedObject
-      )
+      selectedObject.type !==
+      "i-text" &&
+      selectedObject.type !==
+      "textbox"
     ) {
       return;
     }
@@ -1340,7 +1344,7 @@ export function FabricProvider({
           (item) =>
             (
               item as typeof item &
-                FabricObjectWithMeta
+              FabricObjectWithMeta
             ).elementId ===
             selectedId
         );
@@ -1380,22 +1384,21 @@ export function FabricProvider({
 
     const activeMeta =
       activeObject as
-        | (typeof activeObject &
-            FabricObjectWithMeta)
-        | null;
+      | (typeof activeObject &
+        FabricObjectWithMeta)
+      | null;
 
     const selectedId =
       activeMeta?.elementId;
 
     const previousState =
       history[
-        history.length - 1
+      history.length - 1
       ];
 
     const currentState =
       JSON.stringify(
         canvas.toJSON()
-         
       );
 
     setFuture((previous) => [
@@ -1436,21 +1439,25 @@ export function FabricProvider({
 
     const activeMeta =
       activeObject as
-        | (typeof activeObject &
-            FabricObjectWithMeta)
-        | null;
+      | (typeof activeObject &
+        FabricObjectWithMeta)
+      | null;
 
     const selectedId =
       activeMeta?.elementId;
 
     const nextState =
       future[
-        future.length - 1
+      future.length - 1
       ];
 
     const currentState =
       JSON.stringify(
-        canvas.toJSON()
+        (canvas as any).toJSON([
+          "elementId",
+          "elementType",
+          "imageSrc",
+        ])
       );
 
     setHistory((previous) => [
@@ -1481,9 +1488,18 @@ export function FabricProvider({
     const elements =
       convertCanvasToElements();
 
-    if (
-      elements.length === 0
-    ) {
+    elements.forEach(async (element) => {
+      try {
+        await createElement(element);
+      } catch (error) {
+        console.error(
+          "Failed to save element to backend:",
+          error
+        );
+      }
+    });
+
+    if (elements.length === 0) {
       return;
     }
 
@@ -1522,7 +1538,7 @@ export function FabricProvider({
   function getDownloadName() {
     const name =
       currentDesignName &&
-      currentDesignName.trim()
+        currentDesignName.trim()
         ? currentDesignName.trim()
         : "certificate";
 

@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { getElements } from "./api/elementApi";
+
 import { Routes, Route } from "react-router-dom";
 
 import Navbar from "./components/navbar/Navbar";
@@ -13,6 +16,16 @@ import { EditorProvider } from "./context/EditorContext";
 import { FabricProvider } from "./context/FabricContext";
 
 export default function App() {
+
+  useEffect(() => {
+    getElements()
+      .then((data) => {
+        console.log("Elements from backend:", data);
+      })
+      .catch((error) => {
+        console.error("Backend connection failed:", error);
+      });
+  }, []);
   return (
     <EditorProvider>
       <FabricProvider>
