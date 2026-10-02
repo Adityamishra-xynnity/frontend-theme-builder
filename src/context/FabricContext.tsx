@@ -21,7 +21,7 @@ import {
 import jsPDF from "jspdf";
 
 import { useEditor } from "./EditorContext";
-import { createElement } from "../api/elementApi";
+
 
 import type {
   ElementType,
@@ -1267,55 +1267,36 @@ export function FabricProvider({
       selectedObject as
         FabricObjectWithMeta;
 
-    const lineTypes: ElementType[] =
-      [
-        "line",
-        "arrow",
-        "double-arrow",
-        "dashed-line",
-        "dotted-line",
-      ];
+    const lineTypes: ElementType[] = [
+  "line",
+  "arrow",
+  "double-arrow",
+  "dashed-line",
+  "dotted-line",
+];
 
-    const shapeTypes: ElementType[] =
-      [
-        "rectangle",
-        "square",
-        "circle",
-        "triangle",
-        "polygon",
-        "pentagon",
-        "hexagon",
-        "heptagon",
-        "octagon",
-      ];
+if (
+  selectedObject.type !== "rect" &&
+  selectedObject.type !== "circle" &&
+  selectedObject.type !== "triangle"
+) {
+  return;
+}
 
-    if (
-      selectedObject.type !==
-      "rect" &&
-      selectedObject.type !==
-      "circle" &&
-      selectedObject.type !==
-      "triangle"
-    ) {
-      return;
-    }
+saveCanvasState();
 
-    saveCanvasState();
-
-    if (
-      lineTypes.includes(
-        meta.elementType
-      )
-    ) {
-      selectedObject.set({
-        stroke: color,
-      });
-    } else {
-      selectedObject.set({
-        fill: color,
-      });
-    }
-
+if (
+  meta.elementType &&
+  lineTypes.includes(meta.elementType)
+) {
+  selectedObject.set({
+    stroke: color,
+  });
+} else {
+  selectedObject.set({
+    fill: color,
+  });
+}
     canvasRef.current?.renderAll();
   }
 
@@ -1855,22 +1836,12 @@ export function FabricProvider({
       });
   }
 
-  function saveCurrentDesign(
+  async function saveCurrentDesign(
     name: string
   ) {
     const elements =
       convertCanvasToElements();
 
-    elements.forEach(async (element) => {
-      try {
-        await createElement(element);
-      } catch (error) {
-        console.error(
-          "Failed to save element to backend:",
-          error
-        );
-      }
-    });
 
     if (elements.length === 0) {
       return;
@@ -1895,7 +1866,7 @@ export function FabricProvider({
      * Ab save ke baad canvas clear
      * nahi hoga.
      */
-    saveDesign(
+    await saveDesign(
       trimmedName,
       elements
     );

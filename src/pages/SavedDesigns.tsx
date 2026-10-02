@@ -24,12 +24,14 @@ export default function SavedDesigns() {
   const [designs, setDesigns] =
     useState<SavedDesign[]>([]);
 
-  useEffect(() => {
-    const saved =
-      getSavedDesigns();
-
+ useEffect(() => {
+  const loadDesigns = async () => {
+    const saved = await getSavedDesigns();
     setDesigns(saved);
-  }, []);
+  };
+
+  loadDesigns();
+}, []);
 
   const handleEdit = (
     design: SavedDesign
@@ -41,27 +43,26 @@ export default function SavedDesigns() {
     });
   };
 
-  const handleDelete = (
-    id: string
-  ) => {
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this design?"
-      );
+  const handleDelete = async (id: number) => {
+  if (!confirm("Are you sure you want to delete this design?")) {
+    return;
+  }
 
-    if (!confirmed) {
-      return;
-    }
-
-    deleteSavedDesign(id);
+  try {
+    await deleteSavedDesign(id);
 
     setDesigns((previous) =>
       previous.filter(
-        (design) =>
-          design.id !== id
+        (design) => design.id !== id
       )
     );
-  };
+  } catch (error) {
+    console.error(
+      "Failed to delete design:",
+      error
+    );
+  }
+};
 
   const formatDate = (
     date: string

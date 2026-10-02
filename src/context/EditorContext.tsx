@@ -6,10 +6,17 @@ import {
 } from "react";
 
 import type { EditorElement } from "../types/editor";
-import { createElement } from "../api/elementApi";
+
+import {
+  getDesigns,
+  createDesign,
+  updateDesign,
+  deleteDesign,
+  type Design,
+} from "../api/designApi";
 
 export interface SavedDesign {
-  id: string;
+  id: number;
   name: string;
   elements: EditorElement[];
   backgroundColor: string;
@@ -24,7 +31,7 @@ interface EditorContextType {
 
   backgroundColor: string;
 
-  currentDesignId: string | null;
+  currentDesignId: number | null;
 
   currentDesignName: string;
 
@@ -64,13 +71,13 @@ interface EditorContextType {
     name?: string,
     elementsOverride?: EditorElement[],
     backgroundOverride?: string
-  ) => void;
+  ) => Promise<void>;
 
   loadSavedDesign: (design: SavedDesign) => void;
 
-  getSavedDesigns: () => SavedDesign[];
+  getSavedDesigns: () => Promise<SavedDesign[]>;
 
-  deleteSavedDesign: (id: string) => void;
+  deleteSavedDesign: (id: number) => Promise<void>;
 
   syncElementsFromCanvas: (
     elements: EditorElement[]
@@ -79,9 +86,6 @@ interface EditorContextType {
 
 const EditorContext =
   createContext<EditorContextType | null>(null);
-
-const STORAGE_KEY =
-  "theme-builder-saved-designs";
 
 const DEFAULT_BACKGROUND = "#ffffff";
 
@@ -111,7 +115,7 @@ export function EditorProvider({
   const [
     currentDesignId,
     setCurrentDesignId,
-  ] = useState<string | null>(null);
+  ] = useState<number | null>(null);
 
   const [
     currentDesignName,
@@ -142,27 +146,19 @@ export function EditorProvider({
     setFuture([]);
   };
 
-  const addElement = async (
-  element: EditorElement
-) => {
-  addHistory();
-
-  try {
-    const savedElement = await createElement(element);
-
-    const elementWithBackendId: EditorElement = {
-      ...element,
-      backendId: savedElement.id as unknown as number,
-    };
-
-    setElements((previous) => [
-      ...previous,
-      elementWithBackendId,
-    ]);
-
-    setSelectedId(element.id);
-  } catch (error) {
-    console.error("Failed to save element:", error);
+  /*
+   * Add element only to React state.
+   *
+   * We do NOT immediately create it in the
+   * backend.
+   *
+   * The complete design will be saved when
+   * the user clicks Save.
+   */
+  const addElement = (
+    element: EditorElement
+  ) => {
+    addHistory();
 
     setElements((previous) => [
       ...previous,
@@ -170,8 +166,7 @@ export function EditorProvider({
     ]);
 
     setSelectedId(element.id);
-  }
-};
+  };
 
   const selectElement = (
     id: string | null
@@ -230,8 +225,21 @@ export function EditorProvider({
 
     const duplicate: EditorElement = {
       ...element,
+
       id: createId(),
+
+      /*
+       * Very important:
+       *
+       * The duplicate is a NEW frontend element.
+       *
+       * It must not reuse the backend ID of
+       * the original element.
+       */
+      backendId: undefined,
+
       x: element.x + 30,
+
       y: element.y + 30,
     };
 
@@ -261,9 +269,17 @@ export function EditorProvider({
       template.elements.map(
         (element) => ({
           ...element,
+
           id:
             element.id ||
             createId(),
+
+          /*
+           * Template elements are not
+           * backend elements yet.
+           */
+          backendId:
+            undefined,
         })
       )
     );
@@ -363,95 +379,55 @@ export function EditorProvider({
   };
 
   /*
-   * Old ya corrupted localStorage data
-   * ko safely read karta hai.
+   * Convert backend Design into the
+   * frontend SavedDesign format.
+   */
+  const convertDesign = (
+    design: Design
+  ): SavedDesign => {
+    return {
+      id: design.id,
+
+      name:
+        design.name ||
+        "My Certificate",
+
+      elements:
+        Array.isArray(design.elements)
+          ? design.elements
+          : [],
+
+      backgroundColor:
+        design.backgroundColor ||
+        DEFAULT_BACKGROUND,
+
+      createdAt:
+        design.createdAt ||
+        new Date().toISOString(),
+
+      updatedAt:
+        design.updatedAt ||
+        new Date().toISOString(),
+    };
+  };
+
+  /*
+   * Get designs from BACKEND.
+   *
+   * No localStorage.
    */
   const getSavedDesigns =
-    (): SavedDesign[] => {
+    async (): Promise<SavedDesign[]> => {
       try {
-        const raw =
-          localStorage.getItem(
-            STORAGE_KEY
-          );
+        const designs =
+          await getDesigns();
 
-        if (!raw) {
-          return [];
-        }
-
-        const parsed =
-          JSON.parse(raw);
-
-        if (!Array.isArray(parsed)) {
-          return [];
-        }
-
-        const validDesigns =
-          parsed
-            .filter(
-              (design) =>
-                design &&
-                typeof design ===
-                  "object"
-            )
-            .map((design) => {
-              const safeName =
-                typeof design.name ===
-                "string"
-                  ? design.name
-                  : "My Certificate";
-
-              const safeElements =
-                Array.isArray(
-                  design.elements
-                )
-                  ? design.elements
-                  : [];
-
-              return {
-                id:
-                  typeof design.id ===
-                  "string"
-                    ? design.id
-                    : createId(),
-
-                name: safeName,
-
-                elements:
-                  safeElements,
-
-                backgroundColor:
-                  typeof design.backgroundColor ===
-                  "string"
-                    ? design.backgroundColor
-                    : DEFAULT_BACKGROUND,
-
-                createdAt:
-                  typeof design.createdAt ===
-                  "string"
-                    ? design.createdAt
-                    : new Date().toISOString(),
-
-                updatedAt:
-                  typeof design.updatedAt ===
-                  "string"
-                    ? design.updatedAt
-                    : new Date().toISOString(),
-              };
-            });
-
-        /*
-         * Corrupted names ko fix karke
-         * localStorage mein dobara save karta hai.
-         */
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(validDesigns)
+        return designs.map(
+          convertDesign
         );
-
-        return validDesigns;
       } catch (error) {
         console.error(
-          "Failed to read saved designs:",
+          "Failed to load designs:",
           error
         );
 
@@ -459,20 +435,24 @@ export function EditorProvider({
       }
     };
 
-  const saveDesign = (
+  /*
+   * Save the complete design to backend.
+   *
+   * If currentDesignId exists:
+   *     PUT -> update existing design
+   *
+   * Otherwise:
+   *     POST -> create new design
+   */
+  const saveDesign = async (
     name?: string,
     elementsOverride?: EditorElement[],
     backgroundOverride?: string
   ) => {
-    /*
-     * Important:
-     * Agar galti se array/object name ke
-     * andar aa gaya ho to use ignore karo.
-     */
     const safeName =
       typeof name === "string" &&
       name.trim().length > 0
-        ? name
+        ? name.trim()
         : currentDesignName ||
           "My Certificate";
 
@@ -489,78 +469,78 @@ export function EditorProvider({
         ? backgroundOverride
         : backgroundColor;
 
-    const designs =
-      getSavedDesigns();
+    /*
+     * Backend DesignElement uses a Long ID.
+     *
+     * Our frontend uses a string ID.
+     *
+     * Therefore we must NOT send the
+     * frontend string ID as the database ID.
+     *
+     * backendId is used only when it exists.
+     */
+    const backendElements =
+  finalElements.map(
+    (element) => ({
+      ...element,
+      backendId: undefined,
+    })
+  );
 
-    const now =
-      new Date().toISOString();
+    const designData = {
+      name: safeName,
 
-    if (currentDesignId) {
-      const updated =
-        designs.map(
-          (design) =>
-            design.id ===
-            currentDesignId
-              ? {
-                  ...design,
+      backgroundColor:
+        finalBackground,
 
-                  name: safeName,
+      elements:
+        backendElements,
+    };
 
-                  elements:
-                    finalElements,
+    try {
+      let savedDesign: Design;
 
-                  backgroundColor:
-                    finalBackground,
+      if (currentDesignId !== null) {
+        savedDesign =
+          await updateDesign(
+            currentDesignId,
+            designData
+          );
+      } else {
+        savedDesign =
+          await createDesign(
+            designData
+          );
+      }
 
-                  updatedAt: now,
-                }
-              : design
+      const converted =
+        convertDesign(
+          savedDesign
         );
 
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
-      );
-    } else {
-      const newDesign: SavedDesign =
-        {
-          id: createId(),
-
-          name: safeName,
-
-          elements:
-            finalElements,
-
-          backgroundColor:
-            finalBackground,
-
-          createdAt: now,
-
-          updatedAt: now,
-        };
-
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify([
-          ...designs,
-          newDesign,
-        ])
-      );
-
       setCurrentDesignId(
-        newDesign.id
+        converted.id
       );
 
       setCurrentDesignName(
-        newDesign.name
+        converted.name
       );
+
+      setElements(
+        converted.elements
+      );
+
+      setBackgroundColorState(
+        converted.backgroundColor
+      );
+    } catch (error) {
+      console.error(
+        "Failed to save design:",
+        error
+      );
+
+      throw error;
     }
-
-    setElements(finalElements);
-
-    setBackgroundColorState(
-      finalBackground
-    );
   };
 
   const loadSavedDesign = (
@@ -587,7 +567,7 @@ export function EditorProvider({
 
     setCurrentDesignName(
       typeof design.name ===
-        "string"
+      "string"
         ? design.name
         : "My Certificate"
     );
@@ -595,28 +575,32 @@ export function EditorProvider({
     setSelectedId(null);
   };
 
-  const deleteSavedDesign = (
-    id: string
-  ) => {
-    const designs =
-      getSavedDesigns();
+  /*
+   * Delete design from BACKEND.
+   *
+   * No localStorage.
+   */
+  const deleteSavedDesign =
+    async (id: number) => {
+      try {
+        await deleteDesign(id);
 
-    const updated =
-      designs.filter(
-        (design) =>
-          design.id !== id
-      );
+        if (
+          currentDesignId === id
+        ) {
+          setCurrentDesignId(null);
 
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(updated)
-    );
+          setCurrentDesignName("");
+        }
+      } catch (error) {
+        console.error(
+          "Failed to delete design:",
+          error
+        );
 
-    if (currentDesignId === id) {
-      setCurrentDesignId(null);
-      setCurrentDesignName("");
-    }
-  };
+        throw error;
+      }
+    };
 
   const syncElementsFromCanvas = (
     canvasElements: EditorElement[]
