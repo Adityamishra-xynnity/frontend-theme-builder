@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   useLocation,
@@ -5,15 +6,14 @@ import {
 } from "react-router-dom";
 
 import Toolbar from "../components/editor/Toolbar";
-import ElementsPanel from "../components/editor/ElementsPanel";
 import FabricEditorCanvas from "../components/editor/fabric/FabricCanvas";
-
 
 import { templates } from "../data/templates";
 import {
   useEditor,
   type SavedDesign,
 } from "../context/EditorContext";
+
 import EditorSidebar from "../components/editor/EditorSidebar";
 import EditorPanel from "../components/editor/EditorPanel";
 
@@ -23,10 +23,10 @@ interface EditorLocationState {
 
 export default function Editor() {
   const { id } = useParams();
-
   const location = useLocation();
 
-  const [activePanel, setActivePanel] = useState("elements")
+  // Initially Elements panel open rahega
+  const [activePanel, setActivePanel] = useState("elements");
 
   const {
     loadTemplate,
@@ -37,17 +37,15 @@ export default function Editor() {
   const locationState =
     location.state as EditorLocationState | null;
 
-  const savedDesign =
-    locationState?.savedDesign;
+  const savedDesign = locationState?.savedDesign;
 
+  // Template ya saved certificate load karna
   useEffect(() => {
-    // Saved Design open karna
     if (savedDesign) {
       loadSavedDesign(savedDesign);
       return;
     }
 
-    // Template open karna
     if (id) {
       const template = templates.find(
         (item) => item.id === id
@@ -59,15 +57,22 @@ export default function Editor() {
       }
     }
 
-    // Blank editor
     if (!id) {
       clearCanvas();
     }
   }, [id]);
 
+  // Selected template find karna
   const selectedTemplate = templates.find(
     (template) => template.id === id
   );
+
+  // Sidebar panel ko open/close karna
+  const handlePanelChange = (panel: string) => {
+    setActivePanel((currentPanel) =>
+      currentPanel === panel ? "" : panel
+    );
+  };
 
   return (
     <div className="w-full px-1 py-6">
@@ -93,19 +98,23 @@ export default function Editor() {
           <Toolbar />
         </div>
 
-        {/* Sidebar + Canvas */}
+        {/* Sidebar + Panel + Canvas */}
         <div className="flex h-[700px]">
-
-          <EditorSidebar 
-          onPanelChange={setActivePanel}
-          activePanel={activePanel}
+          <EditorSidebar
+            onPanelChange={handlePanelChange}
+            activePanel={activePanel}
           />
-            
-           <EditorPanel activePanel={activePanel}/>
 
+          {/* Panel sirf tab render hoga jab koi section open ho */}
+          {activePanel !== "" && (
+            <EditorPanel activePanel={activePanel} />
+          )}
+
+          {/* Existing certificate canvas */}
           <FabricEditorCanvas />
         </div>
       </div>
     </div>
   );
 }
+
