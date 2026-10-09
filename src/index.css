@@ -1,7 +1,14 @@
+
 @import "tailwindcss";
+
+
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -9,16 +16,15 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
+  width: 100%;
 }
 
 body {
-  font-family:
-    Inter,
-    Arial,
-    Helvetica,
-    sans-serif;
-
-  background: #f3f4f6;
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  background: #f8fafc;
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -32,44 +38,50 @@ button {
   cursor: pointer;
 }
 
-/* Fabric canvas */
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  text-decoration: none;
+}
+
+
 
 canvas {
   display: block;
 }
 
-/* Toolbar */
+
 
 .toolbar-button {
   min-width: 38px;
   height: 38px;
-
   padding: 0 10px;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   border: 1px solid transparent;
   border-radius: 8px;
-
   background: white;
   color: #374151;
-
   font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
-
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .toolbar-button:hover {
   background: #f3f4f6;
   border-color: #e5e7eb;
+}
+
+.toolbar-button:active {
+  transform: scale(0.97);
 }
 
 .toolbar-text-button {
@@ -79,71 +91,62 @@ canvas {
 .toolbar-divider {
   width: 1px;
   height: 26px;
-
   background: #e5e7eb;
-
   margin: 0 5px;
-
   flex-shrink: 0;
 }
 
 .toolbar-select {
   height: 38px;
-
   padding: 0 12px;
-
   border: 1px solid #d1d5db;
   border-radius: 8px;
-
   background: white;
   color: #374151;
-
   font-size: 14px;
-
   outline: none;
-
   cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .toolbar-select:focus {
-  border-color: #111827;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 12%);
 }
 
 .toolbar-color {
   width: 38px;
   height: 38px;
-
   padding: 3px;
-
   border: 1px solid #d1d5db;
   border-radius: 8px;
-
   background: white;
-
   cursor: pointer;
 }
 
 .toolbar-action-button {
   height: 38px;
-
   padding: 0 15px;
-
   border: none;
   border-radius: 8px;
-
   background: #111827;
   color: white;
-
   font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
-
-  transition: background 0.15s ease;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
 }
 
 .toolbar-action-button:hover {
   background: #374151;
+}
+
+.toolbar-action-button:active {
+  transform: scale(0.98);
 }
 
 .delete-button {
@@ -158,3 +161,59 @@ canvas {
 .italic {
   font-style: italic;
 }
+
+
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 3px;
+}
+
+
+::selection {
+  background: #c7d2fe;
+  color: #1e1b4b;
+}
+
+
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 20px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

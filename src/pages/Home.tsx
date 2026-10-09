@@ -1,500 +1,444 @@
+
 import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  Award,
+  Check,
+  Download,
+  FileText,
+  FolderOpen,
+  LayoutTemplate,
+  MousePointer2,
+  Palette,
+  Shapes,
+  Sparkles,
+  Type,
+} from "lucide-react";
+
+const features = [
+  {
+    icon: Type,
+    title: "Powerful text editor",
+    description:
+      "Add headings, subheadings and custom text. Personalize fonts, colors and text styles.",
+    color: "bg-blue-50 text-blue-600",
+  },
+  {
+    icon: Shapes,
+    title: "Creative elements",
+    description:
+      "Build your design with shapes and visual elements to match your certificate style.",
+    color: "bg-violet-50 text-violet-600",
+  },
+  {
+    icon: Palette,
+    title: "Customize everything",
+    description:
+      "Make every design your own with flexible colors, typography and layout controls.",
+    color: "bg-pink-50 text-pink-600",
+  },
+  {
+    icon: LayoutTemplate,
+    title: "Ready-made templates",
+    description:
+      "Start with a certificate template and customize it instead of designing from scratch.",
+    color: "bg-amber-50 text-amber-600",
+  },
+  {
+    icon: FolderOpen,
+    title: "Save your designs",
+    description:
+      "Keep your certificates organized and return to your saved work when you need it.",
+    color: "bg-emerald-50 text-emerald-600",
+  },
+  {
+    icon: Download,
+    title: "Export your certificate",
+    description:
+      "Download your finished design in supported formats from the certificate editor.",
+    color: "bg-cyan-50 text-cyan-600",
+  },
+];
+
+const steps = [
+  {
+    number: "01",
+    title: "Choose a template",
+    description:
+      "Explore the available designs and pick a certificate that fits your purpose.",
+    icon: LayoutTemplate,
+  },
+  {
+    number: "02",
+    title: "Make it yours",
+    description:
+      "Edit text, experiment with styles and arrange the elements the way you want.",
+    icon: MousePointer2,
+  },
+  {
+    number: "03",
+    title: "Save and export",
+    description:
+      "Save your work and download your finished certificate using the available options.",
+    icon: Download,
+  },
+];
 
 export default function Home() {
   return (
-    <div className="bg-white">
+    <main className="overflow-hidden bg-white text-slate-900">
+      {/* Hero Section */}
+      <section className="relative isolate overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-violet-50">
+        <div className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-violet-200/30 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-blue-200/40 blur-3xl" />
 
-      {/* ================= HERO ================= */}
-
-      <section className="relative overflow-hidden">
-
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50" />
-
-        <div className="relative max-w-7xl mx-auto px-6 py-24 lg:py-32">
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 items-center">
-
-            {/* Hero Content */}
-            <div>
-
-              <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm font-medium text-gray-700 shadow-sm mb-6">
-
-                <span className="w-2 h-2 bg-green-500 rounded-full" />
-
-                Create certificates visually
-
-              </div>
-
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-gray-950 leading-[1.05]">
-
-                Design certificates
-                <span className="block text-indigo-600">
-                  your way.
-                </span>
-
-              </h1>
-
-              <p className="mt-6 text-lg md:text-xl text-gray-600 leading-8 max-w-xl">
-
-                Choose a beautiful certificate template,
-                customize every element, and create a
-                professional certificate without complicated
-                design tools.
-
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-4 mt-9">
-
-                <Link
-                  to="/editor"
-                  className="group inline-flex items-center justify-center gap-3 bg-gray-950 text-white px-7 py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 hover:-translate-y-1 transition-all shadow-lg"
-                >
-                  Start Designing
-
-                  <span className="group-hover:translate-x-1 transition-transform">
-                    →
-                  </span>
-
-                </Link>
-
-                <Link
-                  to="/templates"
-                  className="inline-flex items-center justify-center gap-2 border border-gray-300 bg-white text-gray-800 px-7 py-4 rounded-xl font-semibold text-lg hover:border-gray-500 hover:bg-gray-50 transition"
-                >
-                  Explore Templates
-                </Link>
-
-              </div>
-
-              <div className="flex flex-wrap gap-6 mt-8 text-sm text-gray-500">
-
-                <span>✓ Easy to customize</span>
-                <span>✓ Drag & edit</span>
-                <span>✓ Professional templates</span>
-
-              </div>
-
+        <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-2 lg:gap-12 lg:px-10 lg:py-24">
+          <div className="max-w-2xl">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/80 px-4 py-2 text-sm font-medium text-indigo-700 shadow-sm">
+              <Sparkles size={16} />
+              <span>Your ideas, beautifully designed</span>
             </div>
 
-            {/* Hero Preview */}
-            <div className="relative">
+            <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+              Design certificates
+              <span className="mt-2 block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                your way.
+              </span>
+            </h1>
 
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-200 rounded-full blur-3xl opacity-60" />
-
-              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-200 rounded-full blur-3xl opacity-60" />
-
-              <div className="relative bg-white rounded-3xl shadow-2xl border border-gray-200 p-4 rotate-1 hover:rotate-0 transition-transform duration-500">
-
-                <div className="bg-gray-100 rounded-2xl p-6">
-
-                  <div className="bg-white aspect-[1.414/1] rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
-
-                    <div className="absolute top-0 left-0 right-0 h-2 bg-indigo-600" />
-
-                    <div className="w-16 h-16 rounded-full border-4 border-indigo-500 flex items-center justify-center text-2xl mb-5">
-                      🏆
-                    </div>
-
-                    <p className="text-xs tracking-[0.3em] text-gray-500 uppercase">
-                      Certificate
-                    </p>
-
-                    <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mt-3">
-                      Certificate of
-                    </h2>
-
-                    <h3 className="text-2xl font-bold text-indigo-600 mt-1">
-                      Excellence
-                    </h3>
-
-                    <div className="w-24 h-px bg-gray-300 my-5" />
-
-                    <p className="text-gray-500 text-sm">
-                      Presented to
-                    </p>
-
-                    <p className="text-xl font-bold text-gray-900 mt-2">
-                      Your Name
-                    </p>
-
-                    <p className="text-xs text-gray-400 mt-5">
-                      For outstanding achievement
-                    </p>
-
-                    <div className="flex justify-between w-full mt-8 text-xs text-gray-400">
-                      <span>Signature</span>
-                      <span>2026</span>
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* Floating Badge */}
-              <div className="absolute -left-5 top-16 bg-white rounded-xl shadow-xl border border-gray-200 px-4 py-3 hidden md:flex items-center gap-3 animate-pulse">
-
-                <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center">
-                  ✓
-                </div>
-
-                <div>
-                  <p className="text-xs text-gray-500">
-                    Design ready
-                  </p>
-
-                  <p className="font-semibold text-gray-900 text-sm">
-                    Fully customizable
-                  </p>
-                </div>
-
-              </div>
-
-              <div className="absolute -right-5 bottom-10 bg-gray-950 text-white rounded-xl shadow-xl px-4 py-3 hidden md:block">
-
-                <p className="text-xs text-gray-400">
-                  Your canvas
-                </p>
-
-                <p className="font-semibold">
-                  Edit anything ✨
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= STATS ================= */}
-
-      <section className="border-y border-gray-100 bg-white">
-
-        <div className="max-w-7xl mx-auto px-6 py-10">
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-
-            <div>
-              <p className="text-3xl font-bold text-gray-950">
-                100+
-              </p>
-              <p className="text-gray-500 mt-1">
-                Design possibilities
-              </p>
-            </div>
-
-            <div>
-              <p className="text-3xl font-bold text-gray-950">
-                20+
-              </p>
-              <p className="text-gray-500 mt-1">
-                Template styles
-              </p>
-            </div>
-
-            <div>
-              <p className="text-3xl font-bold text-gray-950">
-                100%
-              </p>
-              <p className="text-gray-500 mt-1">
-                Customizable
-              </p>
-            </div>
-
-            <div>
-              <p className="text-3xl font-bold text-gray-950">
-                1
-              </p>
-              <p className="text-gray-500 mt-1">
-                Simple editor
-              </p>
-            </div>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= FEATURES ================= */}
-
-      <section
-        id="features"
-        className="max-w-7xl mx-auto px-6 py-24"
-      >
-
-        <div className="text-center max-w-2xl mx-auto">
-
-          <p className="text-indigo-600 font-semibold uppercase tracking-wider text-sm">
-            Powerful editor
-          </p>
-
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-950 mt-3">
-            Everything you need to design
-          </h2>
-
-          <p className="text-gray-500 text-lg mt-5 leading-8">
-            Build your certificate exactly the way you
-            imagine it using simple visual controls.
-          </p>
-
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-14">
-
-          {/* Feature 1 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              📝
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Text Editor
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Add headings, subheadings and custom text.
-              Change font size, color and styling.
+            <p className="mt-6 max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
+              Create beautiful, personalized certificates with an easy-to-use
+              editor. Start with a template, customize every detail, and bring
+              your design to life.
             </p>
 
-          </div>
-
-          {/* Feature 2 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              🔷
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Shapes
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Add rectangles, circles, triangles and other
-              visual elements to your certificate.
-            </p>
-
-          </div>
-
-          {/* Feature 3 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              🎨
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Full Customization
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Customize colors, sizes, positions and
-              styles to make your certificate unique.
-            </p>
-
-          </div>
-
-          {/* Feature 4 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              📋
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Ready Templates
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Start quickly with professionally designed
-              certificate templates.
-            </p>
-
-          </div>
-
-          {/* Feature 5 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              💾
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Save Your Designs
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Save your certificate designs and continue
-              editing them whenever you want.
-            </p>
-
-          </div>
-
-          {/* Feature 6 */}
-          <div className="group border border-gray-200 rounded-2xl p-7 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-
-            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-2xl group-hover:scale-110 transition">
-              ⚡
-            </div>
-
-            <h3 className="text-xl font-bold mt-6">
-              Simple Workflow
-            </h3>
-
-            <p className="text-gray-500 mt-3 leading-7">
-              Choose a template, customize it, save your
-              design and create your certificate.
-            </p>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= HOW IT WORKS ================= */}
-
-      <section
-        id="how-it-works"
-        className="bg-gray-50 border-y border-gray-100"
-      >
-
-        <div className="max-w-7xl mx-auto px-6 py-24">
-
-          <div className="text-center">
-
-            <p className="text-indigo-600 font-semibold uppercase tracking-wider text-sm">
-              Simple process
-            </p>
-
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-950 mt-3">
-              Create in three simple steps
-            </h2>
-
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-14">
-
-            <div className="text-center">
-
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-gray-950 text-white flex items-center justify-center text-2xl font-bold">
-                1
-              </div>
-
-              <h3 className="text-xl font-bold mt-6">
-                Choose a template
-              </h3>
-
-              <p className="text-gray-500 mt-3 leading-7">
-                Select a certificate template that matches
-                your purpose and style.
-              </p>
-
-            </div>
-
-            <div className="text-center">
-
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl font-bold">
-                2
-              </div>
-
-              <h3 className="text-xl font-bold mt-6">
-                Customize it
-              </h3>
-
-              <p className="text-gray-500 mt-3 leading-7">
-                Edit text, colors, shapes, font sizes and
-                other elements using the editor.
-              </p>
-
-            </div>
-
-            <div className="text-center">
-
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-600 text-white flex items-center justify-center text-2xl font-bold">
-                3
-              </div>
-
-              <h3 className="text-xl font-bold mt-6">
-                Save your design
-              </h3>
-
-              <p className="text-gray-500 mt-3 leading-7">
-                Save your finished certificate and continue
-                editing it whenever you need.
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= CTA ================= */}
-
-      <section
-        id="templates"
-        className="max-w-7xl mx-auto px-6 py-24"
-      >
-
-        <div className="relative overflow-hidden rounded-3xl bg-gray-950 px-8 py-16 md:px-16 text-center">
-
-          <div className="absolute -top-20 -left-20 w-60 h-60 bg-indigo-500 rounded-full blur-3xl opacity-30" />
-
-          <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-purple-500 rounded-full blur-3xl opacity-30" />
-
-          <div className="relative">
-
-            <p className="text-indigo-300 font-semibold">
-              Ready to create?
-            </p>
-
-            <h2 className="text-4xl md:text-5xl font-bold text-white mt-3">
-              Turn your idea into a certificate.
-            </h2>
-
-            <p className="text-gray-400 max-w-2xl mx-auto mt-5 text-lg">
-              Start with a blank canvas or choose a template
-              and make it completely yours.
-            </p>
-
-            <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
-
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
                 to="/editor"
-                className="bg-white text-gray-950 px-7 py-4 rounded-xl font-bold hover:bg-gray-200 transition"
+                className="group inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-xl"
               >
-                Start from Scratch
+                Start designing
+                <ArrowRight
+                  size={19}
+                  className="transition-transform group-hover:translate-x-1"
+                />
               </Link>
 
               <Link
                 to="/templates"
-                className="border border-gray-700 text-white px-7 py-4 rounded-xl font-bold hover:bg-gray-800 transition"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3.5 font-semibold text-slate-700 transition-all duration-200 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
               >
-                Browse Templates
+                <LayoutTemplate size={19} />
+                Explore templates
               </Link>
-
             </div>
 
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-slate-600">
+              <span className="inline-flex items-center gap-2">
+                <Check size={17} className="text-emerald-600" />
+                Easy customization
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Check size={17} className="text-emerald-600" />
+                Creative freedom
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Check size={17} className="text-emerald-600" />
+                Simple workflow
+              </span>
+            </div>
           </div>
 
-        </div>
+          {/* Certificate Preview */}
+          <div className="relative mx-auto w-full max-w-xl">
+            <div className="absolute -left-5 top-10 hidden rounded-2xl border border-white/80 bg-white p-4 shadow-xl shadow-slate-200/70 sm:block">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <Type size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Text styling
+                  </p>
+                  <p className="text-xs text-slate-500">Make it personal</p>
+                </div>
+              </div>
+            </div>
 
+            <div className="absolute -right-3 bottom-12 z-10 hidden rounded-2xl border border-white/80 bg-white p-4 shadow-xl shadow-slate-200/70 sm:block">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <Award size={21} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Your design
+                  </p>
+                  <p className="text-xs text-slate-500">Ready to personalize</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/80 bg-white/70 p-3 shadow-2xl shadow-indigo-200/40 backdrop-blur-sm sm:p-5">
+              <div className="mb-3 flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+                    <FileText size={17} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Certificate Preview
+                    </p>
+                    <p className="text-xs text-slate-500">Design workspace</p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                  Preview
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-slate-100 p-3 sm:p-5">
+                <div className="relative flex aspect-[1.414/1] flex-col items-center justify-center overflow-hidden border-[7px] border-double border-amber-500 bg-[#fffdf6] px-3 text-center sm:border-[10px] sm:px-8">
+                  <div className="absolute inset-2 border border-amber-200 sm:inset-3" />
+
+                  <div className="relative mb-3 flex h-11 w-11 items-center justify-center rounded-full border-2 border-amber-500 text-amber-600 sm:mb-4 sm:h-14 sm:w-14">
+                    <Award size={29} strokeWidth={1.5} />
+                  </div>
+
+                  <p className="relative text-[8px] font-semibold uppercase tracking-[0.28em] text-amber-700 sm:text-xs sm:tracking-[0.4em]">
+                    Certificate of
+                  </p>
+
+                  <h2 className="relative mt-1 font-serif text-xl font-bold tracking-wide text-slate-800 sm:mt-2 sm:text-3xl">
+                    Achievement
+                  </h2>
+
+                  <div className="relative mt-2 h-px w-20 bg-amber-400 sm:mt-3 sm:w-28" />
+
+                  <p className="relative mt-3 text-[8px] text-slate-500 sm:mt-5 sm:text-sm">
+                    This certificate is proudly presented to
+                  </p>
+
+                  <p className="relative mt-1 font-serif text-lg italic text-indigo-800 sm:mt-2 sm:text-2xl">
+                    Your Name Here
+                  </p>
+
+                  <p className="relative mt-2 max-w-xs text-[7px] leading-relaxed text-slate-600 sm:mt-3 sm:text-xs">
+                    In recognition of dedication, effort and outstanding
+                    achievement.
+                  </p>
+
+                  <div className="relative mt-4 flex w-full max-w-xs items-end justify-between gap-4 sm:mt-7">
+                    <div className="w-20 border-t border-slate-400 pt-1 sm:w-28 sm:pt-2">
+                      <p className="text-[7px] text-slate-500 sm:text-[10px]">
+                        Date
+                      </p>
+                    </div>
+                    <div className="w-20 border-t border-slate-400 pt-1 sm:w-28 sm:pt-2">
+                      <p className="text-[7px] text-slate-500 sm:text-[10px]">
+                        Signature
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between px-1 pb-1">
+                <p className="text-xs text-slate-500">
+                  A little creativity goes a long way.
+                </p>
+                <div className="flex gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute -bottom-5 left-1/3 -z-10 h-24 w-48 rounded-full bg-violet-300/40 blur-3xl" />
+          </div>
+        </div>
       </section>
 
-    </div>
+      {/* Quick Benefits */}
+      <section className="border-y border-slate-100 bg-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-5 py-8 sm:px-8 md:grid-cols-4 lg:px-10">
+          {[
+            { title: "Easy to use", subtitle: "Simple editing tools" },
+            { title: "Your style", subtitle: "Personalized designs" },
+            { title: "Flexible", subtitle: "Make changes anytime" },
+            { title: "All in one place", subtitle: "Design and manage" },
+          ].map((item) => (
+            <div key={item.title} className="text-center">
+              <p className="text-sm font-bold text-slate-800 sm:text-base">
+                {item.title}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                {item.subtitle}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="scroll-mt-24 bg-slate-50/80">
+        <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20 lg:px-10 lg:py-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700">
+              <Sparkles size={16} />
+              Made for your creativity
+            </span>
+
+            <h2 className="mt-5 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Everything you need to
+              <span className="text-indigo-600"> design better</span>
+            </h2>
+
+            <p className="mt-4 leading-7 text-slate-600">
+              From your first template to the finishing touches, create a
+              certificate that feels uniquely yours.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+
+              return (
+                <div
+                  key={feature.title}
+                  className="group rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-100/50 sm:p-7"
+                >
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl ${feature.color} transition-transform duration-300 group-hover:scale-110`}
+                  >
+                    <Icon size={23} />
+                  </div>
+
+                  <h3 className="mt-5 text-lg font-bold text-slate-900">
+                    {feature.title}
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {feature.description}
+                  </p>
+
+                  <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">
+                    <span>Explore your options</span>
+                    <ArrowRight
+                      size={16}
+                      className="transition-transform group-hover:translate-x-1"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section
+        id="how-it-works"
+        className="scroll-mt-24 bg-white"
+      >
+        <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20 lg:px-10 lg:py-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-600">
+              Simple process
+            </p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              From idea to certificate
+            </h2>
+            <p className="mt-4 leading-7 text-slate-600">
+              A straightforward workflow that helps you focus on creating a
+              great design.
+            </p>
+          </div>
+
+          <div className="relative mt-14 grid gap-10 md:grid-cols-3 md:gap-8">
+            <div className="absolute left-[17%] right-[17%] top-8 hidden border-t-2 border-dashed border-indigo-100 md:block" />
+
+            {steps.map((step) => {
+              const Icon = step.icon;
+
+              return (
+                <div key={step.number} className="relative text-center">
+                  <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-600 shadow-sm">
+                    <Icon size={27} />
+                    <span className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-indigo-600 text-xs font-bold text-white">
+                      {step.number.slice(1)}
+                    </span>
+                  </div>
+
+                  <p className="mt-6 text-xs font-bold tracking-[0.2em] text-indigo-600">
+                    STEP {step.number}
+                  </p>
+
+                  <h3 className="mt-2 text-xl font-bold text-slate-900">
+                    {step.title}
+                  </h3>
+
+                  <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-slate-600">
+                    {step.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Call to Action */}
+      <section
+        id="templates"
+        className="scroll-mt-24 px-5 pb-16 sm:px-8 sm:pb-20 lg:px-10 lg:pb-24"
+      >
+        <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-700 via-indigo-600 to-violet-600 px-6 py-12 shadow-xl shadow-indigo-200/50 sm:px-12 sm:py-16 lg:px-16">
+          <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full border-[40px] border-white/10" />
+          <div className="pointer-events-none absolute -bottom-32 right-1/3 h-64 w-64 rounded-full bg-violet-400/20 blur-3xl" />
+
+          <div className="relative flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-center">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium text-indigo-50">
+                <Sparkles size={16} />
+                Your next design starts here
+              </div>
+
+              <h2 className="mt-5 text-3xl font-extrabold leading-tight text-white sm:text-4xl">
+                Ready to create something special?
+              </h2>
+
+              <p className="mt-4 max-w-xl leading-7 text-indigo-100">
+                Open the editor, choose your starting point and turn your
+                certificate idea into a design you can call your own.
+              </p>
+            </div>
+
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <Link
+                to="/editor"
+                className="group inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 font-bold text-indigo-700 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-50"
+              >
+                Open editor
+                <ArrowRight
+                  size={18}
+                  className="transition-transform group-hover:translate-x-1"
+                />
+              </Link>
+
+              <Link
+                to="/templates"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-6 py-3.5 font-semibold text-white transition-colors hover:bg-white/20"
+              >
+                <LayoutTemplate size={18} />
+                Browse templates
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
