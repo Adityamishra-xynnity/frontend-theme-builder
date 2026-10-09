@@ -25,16 +25,12 @@ import { useFabric } from "../../context/FabricContext";
 
 export default function ElementsPanel() {
   const {
-    addText,
     addShape,
-    addImage,
     convertCanvasToElements,
     selectObjectById,
     selectedObject,
   } = useFabric();
 
-  const fileInputRef =
-    useRef<HTMLInputElement | null>(null);
 
   const [
     showElements,
@@ -51,35 +47,7 @@ export default function ElementsPanel() {
     setShowLines,
   ] = useState(false);
 
-  function handleImageUpload(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      return;
-    }
-
-    const reader =
-      new FileReader();
-
-    reader.onload = () => {
-      if (
-        typeof reader.result === "string"
-      ) {
-        addImage(reader.result);
-      }
-    };
-
-    reader.readAsDataURL(file);
-
-    event.target.value = "";
-  }
+  
 
   const elements =
     convertCanvasToElements();
@@ -280,94 +248,7 @@ export default function ElementsPanel() {
 
       {showElements && (
         <>
-          {/* TEXT */}
-          <div className="px-4 pt-5">
-
-            <p className="px-1 mb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-              Text
-            </p>
-
-            <div className="space-y-2">
-
-              <button
-                type="button"
-                onClick={() =>
-                  addText("heading")
-                }
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition text-left"
-              >
-                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <Heading
-                    size={20}
-                    className="text-gray-800"
-                  />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    Heading
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Large title
-                  </p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  addText(
-                    "subheading"
-                  )
-                }
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition text-left"
-              >
-                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <AlignLeft
-                    size={19}
-                    className="text-gray-800"
-                  />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    Subheading
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Supporting text
-                  </p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  addText("text")
-                }
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition text-left"
-              >
-                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <Type
-                    size={19}
-                    className="text-gray-800"
-                  />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    Body Text
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Normal text
-                  </p>
-                </div>
-              </button>
-
-            </div>
-          </div>
+        
 
           {/* SHAPES */}
           <div className="px-4 pt-6">
@@ -728,52 +609,6 @@ export default function ElementsPanel() {
 
               </div>
             )}
-
-          </div>
-
-          {/* MEDIA */}
-          <div className="px-4 pt-6">
-
-            <p className="px-1 mb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-              Media
-            </p>
-
-            <button
-              type="button"
-              onClick={() =>
-                fileInputRef.current?.click()
-              }
-              className="w-full h-24 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-500 hover:bg-gray-50 transition flex flex-col items-center justify-center gap-2"
-            >
-              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                <ImagePlus
-                  size={20}
-                  className="text-gray-700"
-                />
-              </div>
-
-              <div className="text-center">
-
-                <p className="text-sm font-semibold text-gray-800">
-                  Upload Image
-                </p>
-
-                <p className="text-xs text-gray-500 mt-0.5">
-                  PNG, JPG, WEBP
-                </p>
-
-              </div>
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={
-                handleImageUpload
-              }
-              className="hidden"
-            />
 
           </div>
         </>

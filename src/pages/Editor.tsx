@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   useLocation,
   useParams,
@@ -8,11 +8,14 @@ import Toolbar from "../components/editor/Toolbar";
 import ElementsPanel from "../components/editor/ElementsPanel";
 import FabricEditorCanvas from "../components/editor/fabric/FabricCanvas";
 
+
 import { templates } from "../data/templates";
 import {
   useEditor,
   type SavedDesign,
 } from "../context/EditorContext";
+import EditorSidebar from "../components/editor/EditorSidebar";
+import EditorPanel from "../components/editor/EditorPanel";
 
 interface EditorLocationState {
   savedDesign?: SavedDesign;
@@ -22,6 +25,8 @@ export default function Editor() {
   const { id } = useParams();
 
   const location = useLocation();
+
+  const [activePanel, setActivePanel] = useState("elements")
 
   const {
     loadTemplate,
@@ -65,7 +70,7 @@ export default function Editor() {
   );
 
   return (
-    <div className="w-full px-6 py-6">
+    <div className="w-full px-1 py-6">
       {/* Editor Header */}
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">
@@ -90,7 +95,13 @@ export default function Editor() {
 
         {/* Sidebar + Canvas */}
         <div className="flex h-[700px]">
-          <ElementsPanel />
+
+          <EditorSidebar 
+          onPanelChange={setActivePanel}
+          activePanel={activePanel}
+          />
+            
+           <EditorPanel activePanel={activePanel}/>
 
           <FabricEditorCanvas />
         </div>
