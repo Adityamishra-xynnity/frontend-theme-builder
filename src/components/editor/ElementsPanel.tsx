@@ -19,7 +19,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { useFabric } from "../../context/FabricContext";
 

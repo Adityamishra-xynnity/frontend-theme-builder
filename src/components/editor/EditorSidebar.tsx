@@ -1,5 +1,5 @@
 import { LayoutTemplate, Shapes, Type, Upload, Wrench } from "lucide-react";
-import { act } from "react";
+
 
 export default function EditorSidebar({
   onPanelChange,
