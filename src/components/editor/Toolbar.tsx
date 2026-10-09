@@ -1,3 +1,4 @@
+
 import {
   ArrowDown,
   ArrowDownToLine,
@@ -35,6 +36,8 @@ import {
   useState,
 } from "react";
 
+import type { ChangeEvent, MouseEvent as ReactMouseEvent } from "react";
+
 import { useFabric } from "../../context/FabricContext";
 import { useEditor } from "../../context/EditorContext";
 
@@ -42,43 +45,29 @@ export default function Toolbar() {
   const {
     selectedObject,
     selectedFontSize,
-
     deleteSelected,
     duplicateSelected,
-
     undo,
     redo,
-
     increaseFontSize,
     decreaseFontSize,
-
     setFontSize,
-
     setTextColor,
     setShapeColor,
-
     setFontFamily,
-
     toggleBold,
     toggleItalic,
-
     setLineSpacing,
     setLetterSpacing,
-
     alignObject,
-
     rotateSelected,
-
     bringForward,
     sendBackward,
     bringToFront,
     sendToBack,
-
     canUndo,
     canRedo,
-
     saveCurrentDesign,
-
     downloadPNG,
     downloadPDF,
   } = useFabric();
@@ -89,40 +78,28 @@ export default function Toolbar() {
     currentDesignName,
   } = useEditor();
 
-  const [fontSize, setFontSizeState] =
-    useState(selectedFontSize ?? 18);
+  const [fontSize, setFontSizeState] = useState(
+    selectedFontSize ?? 18
+  );
 
-  const [lineSpacing, setLineSpacingState] =
-    useState(
-      selectedObject?.lineHeight ?? 1.16
-    );
+  const [lineSpacing, setLineSpacingState] = useState(
+    selectedObject?.lineHeight ?? 1.16
+  );
 
-  const [letterSpacing, setLetterSpacingState] =
-    useState(
-      selectedObject?.charSpacing
-        ? selectedObject.charSpacing / 10
-        : 0
-    );
+  const [letterSpacing, setLetterSpacingState] = useState(
+    selectedObject?.charSpacing
+      ? selectedObject.charSpacing / 10
+      : 0
+  );
 
-  const [showSaveModal, setShowSaveModal] =
-    useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [designName, setDesignName] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
-  const [designName, setDesignName] =
-    useState("");
+  const downloadButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const [saveError, setSaveError] =
-    useState("");
-
-  const [showDownloadMenu, setShowDownloadMenu] =
-    useState(false);
-
-  const downloadButtonRef =
-    useRef<HTMLButtonElement | null>(null);
-
-  const [
-    downloadMenuPosition,
-    setDownloadMenuPosition,
-  ] = useState({
+  const [downloadMenuPosition, setDownloadMenuPosition] = useState({
     top: 0,
     right: 16,
   });
@@ -138,9 +115,7 @@ export default function Toolbar() {
       selectedObject?.type === "i-text" ||
       selectedObject?.type === "textbox"
     ) {
-      setLineSpacingState(
-        selectedObject.lineHeight ?? 1.16
-      );
+      setLineSpacingState(selectedObject.lineHeight ?? 1.16);
 
       setLetterSpacingState(
         (selectedObject.charSpacing ?? 0) / 10
@@ -151,40 +126,10 @@ export default function Toolbar() {
     }
   }, [selectedObject]);
 
-  /*
-   * TEXT OBJECT
-   */
   const isText =
     selectedObject?.type === "i-text" ||
     selectedObject?.type === "textbox";
 
-  /*
-   * SHAPE OBJECT
-   *
-   * Old shapes:
-   * rectangle
-   * circle
-   * triangle
-   *
-   * New shapes:
-   * square
-   * polygon
-   * pentagon
-   * hexagon
-   * heptagon
-   * octagon
-   *
-   * Lines:
-   * line
-   * dashed-line
-   * dotted-line
-   * arrow
-   * double-arrow
-   *
-   * Fabric mein:
-   * square/polygon = rect/polygon
-   * lines/arrows = line/path
-   */
   const isShape =
     selectedObject?.type === "rect" ||
     selectedObject?.type === "circle" ||
@@ -193,166 +138,105 @@ export default function Toolbar() {
     selectedObject?.type === "line" ||
     selectedObject?.type === "path";
 
-  const isImage =
-    selectedObject?.type === "image";
+  const isImage = selectedObject?.type === "image";
 
-  /*
-   * CURRENT TEXT STATES
-   */
   const isBold =
-    isText &&
-    selectedObject?.fontWeight === "bold";
+    isText && selectedObject?.fontWeight === "bold";
 
   const isItalic =
-    isText &&
-    selectedObject?.fontStyle === "italic";
+    isText && selectedObject?.fontStyle === "italic";
 
-  const currentTextAlign =
-    isText
-      ? selectedObject?.textAlign ?? "left"
-      : "left";
+  const currentTextAlign = isText
+    ? selectedObject?.textAlign ?? "left"
+    : "left";
+
+  const textColor =
+    typeof selectedObject?.fill === "string"
+      ? selectedObject.fill
+      : "#111827";
+
+  const shapeColor =
+    typeof selectedObject?.stroke === "string"
+      ? selectedObject.stroke
+      : typeof selectedObject?.fill === "string"
+        ? selectedObject.fill
+        : "#2563eb";
 
   function handleFontSizeChange(
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) {
-    const value =
-      Number(event.target.value);
+    const value = Number(event.target.value);
 
     setFontSizeState(value);
 
-    if (
-      value >= 8 &&
-      value <= 200
-    ) {
+    if (value >= 8 && value <= 200) {
       setFontSize(value);
     }
   }
 
   function handleLineSpacingChange(
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) {
-    const value =
-      Number(event.target.value);
+    const value = Number(event.target.value);
+    const safeValue = Math.min(3, Math.max(1, value));
 
-    const safeValue =
-      Math.min(
-        3,
-        Math.max(1, value)
-      );
-
-    setLineSpacingState(
-      safeValue
-    );
-
-    setLineSpacing(
-      safeValue
-    );
+    setLineSpacingState(safeValue);
+    setLineSpacing(safeValue);
   }
 
   function decreaseLineSpacing() {
-    const nextValue =
-      Math.max(
-        1,
-        Number(
-          (
-            lineSpacing - 0.05
-          ).toFixed(2)
-        )
-      );
-
-    setLineSpacingState(
-      nextValue
+    const nextValue = Math.max(
+      1,
+      Number((lineSpacing - 0.05).toFixed(2))
     );
 
-    setLineSpacing(
-      nextValue
-    );
+    setLineSpacingState(nextValue);
+    setLineSpacing(nextValue);
   }
 
   function increaseLineSpacing() {
-    const nextValue =
-      Math.min(
-        3,
-        Number(
-          (
-            lineSpacing + 0.05
-          ).toFixed(2)
-        )
-      );
-
-    setLineSpacingState(
-      nextValue
+    const nextValue = Math.min(
+      3,
+      Number((lineSpacing + 0.05).toFixed(2))
     );
 
-    setLineSpacing(
-      nextValue
-    );
+    setLineSpacingState(nextValue);
+    setLineSpacing(nextValue);
   }
 
   function handleLetterSpacingChange(
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) {
-    const value =
-      Number(event.target.value);
+    const value = Number(event.target.value);
+    const safeValue = Math.min(200, Math.max(0, value));
 
-    const safeValue =
-      Math.min(
-        200,
-        Math.max(0, value)
-      );
-
-    setLetterSpacingState(
-      safeValue
-    );
-
-    setLetterSpacing(
-      safeValue
-    );
+    setLetterSpacingState(safeValue);
+    setLetterSpacing(safeValue);
   }
 
   function decreaseLetterSpacing() {
-    const nextValue =
-      Math.max(
-        0,
-        letterSpacing - 5
-      );
+    const nextValue = Math.max(0, letterSpacing - 5);
 
-    setLetterSpacingState(
-      nextValue
-    );
-
-    setLetterSpacing(
-      nextValue
-    );
+    setLetterSpacingState(nextValue);
+    setLetterSpacing(nextValue);
   }
 
   function increaseLetterSpacing() {
-    const nextValue =
-      Math.min(
-        200,
-        letterSpacing + 5
-      );
+    const nextValue = Math.min(200, letterSpacing + 5);
 
-    setLetterSpacingState(
-      nextValue
-    );
-
-    setLetterSpacing(
-      nextValue
-    );
+    setLetterSpacingState(nextValue);
+    setLetterSpacing(nextValue);
   }
 
   function openSaveModal() {
     setDesignName(
       currentDesignName &&
-        currentDesignName !==
-          "My Certificate"
+        currentDesignName !== "My Certificate"
         ? currentDesignName
         : ""
     );
 
     setSaveError("");
-
     setShowSaveModal(true);
   }
 
@@ -362,63 +246,38 @@ export default function Toolbar() {
   }
 
   function handleSave() {
-    const trimmedName =
-      designName.trim();
+    const trimmedName = designName.trim();
 
     if (!trimmedName) {
-      setSaveError(
-        "Please enter a certificate name."
-      );
-
+      setSaveError("Please enter a certificate name.");
       return;
     }
 
-    saveCurrentDesign(
-      trimmedName
-    );
+    saveCurrentDesign(trimmedName);
 
     setShowSaveModal(false);
     setDesignName("");
     setSaveError("");
   }
 
-  function openDownloadMenu() {
-    const button =
-      downloadButtonRef.current;
+  function updateDownloadMenuPosition() {
+    const button = downloadButtonRef.current;
 
-    if (!button) {
-      setShowDownloadMenu(
-        (previous) =>
-          !previous
-      );
+    if (!button) return;
 
-      return;
-    }
-
-    const rect =
-      button.getBoundingClientRect();
-
+    const rect = button.getBoundingClientRect();
     const menuWidth = 240;
     const menuHeight = 190;
 
-    const right =
-      Math.max(
-        12,
-        window.innerWidth -
-          rect.right
-      );
+    const right = Math.max(
+      12,
+      window.innerWidth - rect.right
+    );
 
-    let top =
-      rect.bottom + 8;
+    let top = rect.bottom + 8;
 
-    if (
-      top + menuHeight >
-      window.innerHeight - 12
-    ) {
-      top =
-        rect.top -
-        menuHeight -
-        8;
+    if (top + menuHeight > window.innerHeight - 12) {
+      top = rect.top - menuHeight - 8;
     }
 
     if (top < 12) {
@@ -429,145 +288,47 @@ export default function Toolbar() {
       top,
       right: Math.min(
         right,
-        window.innerWidth -
-          menuWidth -
-          12
+        window.innerWidth - menuWidth - 12
       ),
     });
+  }
 
-    setShowDownloadMenu(
-      (previous) =>
-        !previous
-    );
+  function openDownloadMenu() {
+    if (!showDownloadMenu) {
+      updateDownloadMenuPosition();
+    }
+
+    setShowDownloadMenu((previous) => !previous);
   }
 
   useEffect(() => {
-    if (!showDownloadMenu) {
-      return;
-    }
+    if (!showDownloadMenu) return;
 
-    function updateDownloadMenuPosition() {
-      const button =
-        downloadButtonRef.current;
-
-      if (!button) {
-        return;
-      }
-
-      const rect =
-        button.getBoundingClientRect();
-
-      const menuWidth = 240;
-      const menuHeight = 190;
-
-      const right =
-        Math.max(
-          12,
-          window.innerWidth -
-            rect.right
-        );
-
-      let top =
-        rect.bottom + 8;
-
-      if (
-        top + menuHeight >
-        window.innerHeight - 12
-      ) {
-        top =
-          rect.top -
-          menuHeight -
-          8;
-      }
-
-      if (top < 12) {
-        top = 12;
-      }
-
-      setDownloadMenuPosition({
-        top,
-        right: Math.min(
-          right,
-          window.innerWidth -
-            menuWidth -
-            12
-        ),
-      });
-    }
-
-    window.addEventListener(
-      "resize",
-      updateDownloadMenuPosition
-    );
-
-    window.addEventListener(
-      "scroll",
-      updateDownloadMenuPosition,
-      true
-    );
-
-    updateDownloadMenuPosition();
-
-    return () => {
-      window.removeEventListener(
-        "resize",
-        updateDownloadMenuPosition
-      );
-
-      window.removeEventListener(
-        "scroll",
-        updateDownloadMenuPosition,
-        true
-      );
-    };
-  }, [showDownloadMenu]);
-
-  useEffect(() => {
-    if (!showDownloadMenu) {
-      return;
+    function handlePositionUpdate() {
+      updateDownloadMenuPosition();
     }
 
     function handleOutsideClick(
-      event: MouseEvent
+      event: globalThis.MouseEvent
     ) {
-      const target =
-        event.target as Node;
+      const target = event.target as Node;
+      const button = downloadButtonRef.current;
+      const menu = document.getElementById("download-menu");
 
-      const button =
-        downloadButtonRef.current;
-
-      if (
-        button &&
-        button.contains(target)
-      ) {
-        return;
-      }
-
-      const menu =
-        document.getElementById(
-          "download-menu"
-        );
-
-      if (
-        menu &&
-        menu.contains(target)
-      ) {
-        return;
-      }
+      if (button?.contains(target)) return;
+      if (menu?.contains(target)) return;
 
       setShowDownloadMenu(false);
     }
 
-    document.addEventListener(
-      "mousedown",
-      handleOutsideClick
-    );
+    window.addEventListener("resize", handlePositionUpdate);
+    window.addEventListener("scroll", handlePositionUpdate, true);
+    document.addEventListener("mousedown", handleOutsideClick);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleOutsideClick
-      );
+      window.removeEventListener("resize", handlePositionUpdate);
+      window.removeEventListener("scroll", handlePositionUpdate, true);
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [showDownloadMenu]);
 
@@ -582,30 +343,30 @@ export default function Toolbar() {
   }
 
   const iconButton =
-    "w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition disabled:opacity-30 disabled:cursor-not-allowed";
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-30";
 
   const activeIconButton =
-    "w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 hover:text-black transition";
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-violet-50 hover:text-violet-700";
+
+  const inputClass =
+    "h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none transition hover:border-slate-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-100";
+
+  const sectionClass =
+    "flex shrink-0 items-center gap-1.5 border-r border-slate-200 pr-3";
 
   return (
     <>
-      <div className="relative z-40 bg-white border-b border-gray-200 shadow-sm">
-
-        {/* HORIZONTAL SCROLLABLE TOOLBAR */}
-
-        <div className="overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-
-          <div className="min-w-max min-h-[58px] px-4 flex items-center gap-2">
-
+      <div className="relative z-40 border-b border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto overflow-y-hidden">
+          <div className="flex min-h-[64px] min-w-max items-center gap-3 px-4 py-2">
             {/* UNDO / REDO */}
-
-            <div className="flex-shrink-0 flex items-center gap-1 pr-2 border-r border-gray-200">
-
+            <div className={sectionClass}>
               <button
                 onClick={undo}
                 disabled={!canUndo}
                 className={iconButton}
                 title="Undo"
+                aria-label="Undo"
               >
                 <Undo2 size={18} />
               </button>
@@ -615,140 +376,95 @@ export default function Toolbar() {
                 disabled={!canRedo}
                 className={iconButton}
                 title="Redo"
+                aria-label="Redo"
               >
                 <Redo2 size={18} />
               </button>
-
             </div>
-
-            {/* SELECTED OBJECT CONTROLS */}
 
             {selectedObject && (
               <>
-
                 {/* LAYER CONTROLS */}
-
-                <div className="flex-shrink-0 flex items-center gap-1 px-2 border-r border-gray-200">
-
-                  <div className="hidden lg:flex items-center gap-1 mr-1">
-
-                    <Layers
-                      size={16}
-                      className="text-gray-400"
-                    />
-
-                    <span className="text-xs font-semibold text-gray-500">
+                <div className={sectionClass}>
+                  <div className="hidden items-center gap-1.5 pr-1 lg:flex">
+                    <Layers size={16} className="text-violet-600" />
+                    <span className="text-xs font-semibold text-slate-500">
                       Layers
                     </span>
-
                   </div>
 
                   <button
                     onClick={bringToFront}
                     className={activeIconButton}
                     title="Bring to front"
+                    aria-label="Bring to front"
                   >
-                    <ArrowUpToLine
-                      size={17}
-                    />
+                    <ArrowUpToLine size={17} />
                   </button>
 
                   <button
                     onClick={bringForward}
                     className={activeIconButton}
                     title="Bring forward"
+                    aria-label="Bring forward"
                   >
-                    <ArrowUp
-                      size={17}
-                    />
+                    <ArrowUp size={17} />
                   </button>
 
                   <button
                     onClick={sendBackward}
                     className={activeIconButton}
                     title="Send backward"
+                    aria-label="Send backward"
                   >
-                    <ArrowDown
-                      size={17}
-                    />
+                    <ArrowDown size={17} />
                   </button>
 
                   <button
                     onClick={sendToBack}
                     className={activeIconButton}
                     title="Send to back"
+                    aria-label="Send to back"
                   >
-                    <ArrowDownToLine
-                      size={17}
-                    />
+                    <ArrowDownToLine size={17} />
                   </button>
-
                 </div>
 
                 {/* TEXT CONTROLS */}
-
                 {isText && (
-                  <div className="flex-shrink-0 flex items-center gap-2 px-2 border-r border-gray-200">
-
-                    {/* FONT FAMILY */}
-
-                    <div className="flex-shrink-0 flex items-center gap-1">
-
-                      <Type
-                        size={16}
-                        className="text-gray-400 hidden xl:block"
-                      />
+                  <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-200 pr-3">
+                    <div className="flex items-center gap-1.5">
+                      <Type size={16} className="hidden text-slate-400 xl:block" />
 
                       <select
-                        value={
-                          selectedObject?.fontFamily ??
-                          "Arial"
-                        }
+                        value={selectedObject?.fontFamily ?? "Arial"}
                         onChange={(event) =>
-                          setFontFamily(
-                            event.target.value
-                          )
+                          setFontFamily(event.target.value)
                         }
-                        className="h-9 w-32 lg:w-36 px-2 border border-gray-200 rounded-lg bg-white text-sm text-gray-700 outline-none hover:border-gray-300 focus:border-gray-400"
+                        className={`${inputClass} w-32 lg:w-36`}
                         title="Font family"
+                        aria-label="Font family"
                       >
-                        <option value="Arial">
-                          Arial
-                        </option>
-
-                        <option value="Helvetica">
-                          Helvetica
-                        </option>
-
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
                         <option value="Times New Roman">
                           Times New Roman
                         </option>
-
-                        <option value="Georgia">
-                          Georgia
-                        </option>
-
-                        <option value="Verdana">
-                          Verdana
-                        </option>
-
-                        <option value="Courier New">
-                          Courier New
-                        </option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Courier New">Courier New</option>
                       </select>
-
                     </div>
 
                     {/* FONT SIZE */}
-
-                    <div className="flex-shrink-0 flex items-center h-9 border border-gray-200 rounded-lg overflow-hidden bg-white">
-
+                    <div className="flex h-9 shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
                         onClick={decreaseFontSize}
-                        className="w-8 h-full text-gray-600 hover:bg-gray-100 text-lg transition"
+                        className="flex h-full w-8 items-center justify-center text-slate-600 transition hover:bg-slate-100"
                         title="Decrease font size"
+                        aria-label="Decrease font size"
                       >
-                        −
+                        <Minus size={15} />
                       </button>
 
                       <input
@@ -756,215 +472,174 @@ export default function Toolbar() {
                         min="8"
                         max="200"
                         value={fontSize}
-                        onChange={
-                          handleFontSizeChange
-                        }
-                        className="w-12 h-full text-center text-sm text-gray-700 border-x border-gray-200 outline-none"
+                        onChange={handleFontSizeChange}
+                        className="h-full w-12 border-x border-slate-200 text-center text-sm outline-none"
                         title="Font size"
+                        aria-label="Font size"
                       />
 
                       <button
                         onClick={increaseFontSize}
-                        className="w-8 h-full text-gray-600 hover:bg-gray-100 text-lg transition"
+                        className="flex h-full w-8 items-center justify-center text-slate-600 transition hover:bg-slate-100"
                         title="Increase font size"
+                        aria-label="Increase font size"
                       >
-                        +
+                        <Plus size={15} />
                       </button>
-
                     </div>
 
                     {/* TEXT COLOR */}
-
                     <label
-                      className="relative flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-100 cursor-pointer overflow-hidden"
+                      className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 transition hover:border-violet-300 hover:bg-violet-50"
                       title="Text color"
                     >
-
-                      <span className="text-sm font-bold text-gray-800">
+                      <span className="text-base font-bold text-slate-800">
                         A
                       </span>
 
                       <span
                         className="absolute bottom-1 left-2 right-2 h-1 rounded-full"
-                        style={{
-                          backgroundColor:
-                            typeof selectedObject?.fill ===
-                            "string"
-                              ? selectedObject.fill
-                              : "#111827",
-                        }}
+                        style={{ backgroundColor: textColor }}
                       />
 
                       <input
                         type="color"
-                        value={
-                          typeof selectedObject?.fill ===
-                          "string"
-                            ? selectedObject.fill
-                            : "#111827"
-                        }
+                        value={textColor}
                         onChange={(event) =>
-                          setTextColor(
-                            event.target.value
-                          )
+                          setTextColor(event.target.value)
                         }
-                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                        aria-label="Text color"
                       />
-
                     </label>
 
                     {/* BOLD */}
-
                     <button
                       onClick={toggleBold}
-                      className={`w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg transition ${
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                         isBold
-                          ? "bg-black text-white"
-                          : "text-gray-700 hover:bg-gray-100"
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-slate-700 hover:bg-slate-100"
                       }`}
                       title="Bold"
+                      aria-label="Bold"
+                      aria-pressed={Boolean(isBold)}
                     >
                       <Bold size={18} />
                     </button>
 
                     {/* ITALIC */}
-
                     <button
                       onClick={toggleItalic}
-                      className={`w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg transition ${
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                         isItalic
-                          ? "bg-black text-white"
-                          : "text-gray-700 hover:bg-gray-100"
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-slate-700 hover:bg-slate-100"
                       }`}
                       title="Italic"
+                      aria-label="Italic"
+                      aria-pressed={Boolean(isItalic)}
                     >
                       <Italic size={18} />
                     </button>
 
-                    {/* ALIGNMENT */}
-
-                    <div className="flex-shrink-0 flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5">
-
+                    {/* TEXT ALIGNMENT */}
+                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
                       <button
-                        onClick={() =>
-                          alignObject("left")
-                        }
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition ${
-                          currentTextAlign ===
-                          "left"
-                            ? "bg-black text-white"
-                            : "text-gray-700 hover:bg-gray-100"
+                        onClick={() => alignObject("left")}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                          currentTextAlign === "left"
+                            ? "bg-violet-600 text-white shadow-sm"
+                            : "text-slate-600 hover:bg-white"
                         }`}
                         title="Align left"
+                        aria-label="Align left"
+                        aria-pressed={currentTextAlign === "left"}
                       >
                         <AlignLeft size={16} />
                       </button>
 
                       <button
-                        onClick={() =>
-                          alignObject("center")
-                        }
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition ${
-                          currentTextAlign ===
-                          "center"
-                            ? "bg-black text-white"
-                            : "text-gray-700 hover:bg-gray-100"
+                        onClick={() => alignObject("center")}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                          currentTextAlign === "center"
+                            ? "bg-violet-600 text-white shadow-sm"
+                            : "text-slate-600 hover:bg-white"
                         }`}
                         title="Align center"
+                        aria-label="Align center"
+                        aria-pressed={currentTextAlign === "center"}
                       >
-                        <AlignCenter
-                          size={16}
-                        />
+                        <AlignCenter size={16} />
                       </button>
 
                       <button
-                        onClick={() =>
-                          alignObject("right")
-                        }
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition ${
-                          currentTextAlign ===
-                          "right"
-                            ? "bg-black text-white"
-                            : "text-gray-700 hover:bg-gray-100"
+                        onClick={() => alignObject("right")}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                          currentTextAlign === "right"
+                            ? "bg-violet-600 text-white shadow-sm"
+                            : "text-slate-600 hover:bg-white"
                         }`}
                         title="Align right"
+                        aria-label="Align right"
+                        aria-pressed={currentTextAlign === "right"}
                       >
-                        <AlignRight
-                          size={16}
-                        />
+                        <AlignRight size={16} />
                       </button>
-
                     </div>
 
                     {/* LINE SPACING */}
-
-                    <div className="flex-shrink-0 flex items-center gap-1 h-9 border border-gray-200 rounded-lg overflow-hidden bg-white">
-
+                    <div className="flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
-                        onClick={
-                          decreaseLineSpacing
-                        }
-                        className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
+                        onClick={decreaseLineSpacing}
+                        className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Decrease line spacing"
+                        aria-label="Decrease line spacing"
                       >
-                        <Minus size={14} />
+                        <Minus size={13} />
                       </button>
 
-                      <div className="flex items-center gap-1 px-1">
-
-                        <MoveVertical
-                          size={14}
-                          className="text-gray-400"
-                        />
+                      <div className="flex items-center gap-1">
+                        <MoveVertical size={14} className="text-slate-400" />
 
                         <input
                           type="number"
                           min="1"
                           max="3"
                           step="0.05"
-                          value={
-                            lineSpacing
-                          }
-                          onChange={
-                            handleLineSpacingChange
-                          }
-                          className="w-12 text-center text-xs text-gray-700 outline-none"
+                          value={lineSpacing}
+                          onChange={handleLineSpacingChange}
+                          className="w-11 text-center text-xs outline-none"
                           title="Line spacing"
+                          aria-label="Line spacing"
                         />
-
                       </div>
 
                       <button
-                        onClick={
-                          increaseLineSpacing
-                        }
-                        className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
+                        onClick={increaseLineSpacing}
+                        className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Increase line spacing"
+                        aria-label="Increase line spacing"
                       >
-                        <Plus size={14} />
+                        <Plus size={13} />
                       </button>
-
                     </div>
 
                     {/* LETTER SPACING */}
-
-                    <div className="flex-shrink-0 flex items-center gap-1 h-9 border border-gray-200 rounded-lg overflow-hidden bg-white">
-
+                    <div className="flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
-                        onClick={
-                          decreaseLetterSpacing
-                        }
-                        className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
+                        onClick={decreaseLetterSpacing}
+                        className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Decrease letter spacing"
+                        aria-label="Decrease letter spacing"
                       >
-                        <Minus size={14} />
+                        <Minus size={13} />
                       </button>
 
-                      <div className="flex items-center gap-1 px-1">
-
+                      <div className="flex items-center gap-1">
                         <MoveHorizontal
                           size={14}
-                          className="text-gray-400"
+                          className="text-slate-400"
                         />
 
                         <input
@@ -972,487 +647,337 @@ export default function Toolbar() {
                           min="0"
                           max="200"
                           step="5"
-                          value={
-                            letterSpacing
-                          }
-                          onChange={
-                            handleLetterSpacingChange
-                          }
-                          className="w-12 text-center text-xs text-gray-700 outline-none"
+                          value={letterSpacing}
+                          onChange={handleLetterSpacingChange}
+                          className="w-11 text-center text-xs outline-none"
                           title="Letter spacing"
+                          aria-label="Letter spacing"
                         />
-
                       </div>
 
                       <button
-                        onClick={
-                          increaseLetterSpacing
-                        }
-                        className="w-7 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 transition"
+                        onClick={increaseLetterSpacing}
+                        className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Increase letter spacing"
+                        aria-label="Increase letter spacing"
                       >
-                        <Plus size={14} />
+                        <Plus size={13} />
                       </button>
-
                     </div>
-
                   </div>
                 )}
 
-                {/* SHAPE + LINE CONTROLS */}
-
+                {/* SHAPE AND LINE COLOR */}
                 {isShape && (
-                  <div className="flex-shrink-0 flex items-center gap-2 px-2 border-r border-gray-200">
-
-                    <div className="flex items-center gap-1">
-
-                      <Palette
-                        size={16}
-                        className="text-gray-400"
-                      />
-
-                      <span className="text-xs font-semibold text-gray-500">
+                  <div className={sectionClass}>
+                    <div className="flex items-center gap-1.5">
+                      <Palette size={16} className="text-violet-600" />
+                      <span className="text-xs font-semibold text-slate-500">
                         Color
                       </span>
-
                     </div>
 
                     <label
-                      className="relative w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-100 cursor-pointer overflow-hidden"
+                      className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 transition hover:border-violet-300 hover:bg-violet-50"
                       title={
-                        selectedObject?.type ===
-                          "line" ||
-                        selectedObject?.type ===
-                          "path"
+                        selectedObject?.type === "line" ||
+                        selectedObject?.type === "path"
                           ? "Line color"
                           : "Shape color"
                       }
                     >
-
                       <span
-                        className="w-5 h-5 rounded-md border border-gray-300"
-                        style={{
-                          backgroundColor:
-                            typeof selectedObject?.stroke ===
-                            "string"
-                              ? selectedObject.stroke
-                              : typeof selectedObject?.fill ===
-                                "string"
-                                ? selectedObject.fill
-                                : "#2563eb",
-                        }}
+                        className="h-5 w-5 rounded-md border border-slate-200"
+                        style={{ backgroundColor: shapeColor }}
                       />
 
                       <input
                         type="color"
-                        value={
-                          typeof selectedObject?.stroke ===
-                          "string"
-                            ? selectedObject.stroke
-                            : typeof selectedObject?.fill ===
-                              "string"
-                              ? selectedObject.fill
-                              : "#2563eb"
-                        }
+                        value={shapeColor}
                         onChange={(event) =>
-                          setShapeColor(
-                            event.target.value
-                          )
+                          setShapeColor(event.target.value)
                         }
-                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                        aria-label="Shape color"
                       />
-
                     </label>
-
                   </div>
                 )}
 
-                {/* IMAGE CONTROLS */}
-
+                {/* IMAGE ROTATION */}
                 {isImage && (
-                  <div className="flex-shrink-0 flex items-center gap-2 px-2 border-r border-gray-200">
-
-                    <span className="text-xs font-semibold text-gray-500">
+                  <div className={sectionClass}>
+                    <span className="text-xs font-semibold text-slate-500">
                       Rotate
                     </span>
 
                     <button
-                      onClick={() =>
-                        rotateSelected(-15)
-                      }
-                      className="flex-shrink-0 flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-sm text-gray-700 transition"
+                      onClick={() => rotateSelected(-15)}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                       title="Rotate left"
                     >
-                      <RotateCcw
-                        size={15}
-                      />
-
-                      <span>
-                        15°
-                      </span>
+                      <RotateCcw size={15} />
+                      15°
                     </button>
 
                     <button
-                      onClick={() =>
-                        rotateSelected(15)
-                      }
-                      className="flex-shrink-0 flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-sm text-gray-700 transition"
+                      onClick={() => rotateSelected(15)}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                       title="Rotate right"
                     >
-                      <RotateCw
-                        size={15}
-                      />
-
-                      <span>
-                        15°
-                      </span>
+                      <RotateCw size={15} />
+                      15°
                     </button>
-
                   </div>
                 )}
 
                 {/* DUPLICATE */}
-
                 <button
-                  onClick={
-                    duplicateSelected
-                  }
-                  className="flex-shrink-0 flex items-center gap-2 h-9 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-sm text-gray-700 transition"
-                  title="Duplicate"
+                  onClick={duplicateSelected}
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                  title="Duplicate selected object"
                 >
                   <Copy size={15} />
-
-                  <span>
-                    Duplicate
-                  </span>
+                  <span>Duplicate</span>
                 </button>
 
                 {/* DELETE */}
-
                 <button
-                  onClick={
-                    deleteSelected
-                  }
-                  className="flex-shrink-0 flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm transition"
-                  title="Delete"
+                  onClick={deleteSelected}
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                  title="Delete selected object"
                 >
                   <Trash2 size={15} />
-
-                  <span>
-                    Delete
-                  </span>
+                  <span>Delete</span>
                 </button>
-
               </>
             )}
 
-            {/* RIGHT CONTROLS */}
-
-            <div className="flex-shrink-0 flex items-center gap-2 ml-4 pl-3 border-l border-gray-200">
-
-              {/* BACKGROUND */}
-
+            {/* RIGHT-SIDE CONTROLS */}
+            <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3">
+              {/* CANVAS BACKGROUND */}
               <label
-                className="relative flex-shrink-0 flex items-center gap-2 h-9 px-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 cursor-pointer text-sm text-gray-600 transition"
+                className="relative flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-600 transition hover:border-violet-200 hover:bg-violet-50"
                 title="Canvas background"
               >
-
-                <span>
-                  Background
-                </span>
+                <span className="hidden sm:inline">Background</span>
 
                 <span
-                  className="w-5 h-5 rounded-md border border-gray-300"
-                  style={{
-                    backgroundColor:
-                      backgroundColor,
-                  }}
+                  className="h-5 w-5 rounded-md border border-slate-200"
+                  style={{ backgroundColor }}
                 />
 
                 <input
                   type="color"
-                  value={
-                    backgroundColor
-                  }
+                  value={backgroundColor}
                   onChange={(event) =>
-                    setCanvasBackground(
-                      event.target.value
-                    )
+                    setCanvasBackground(event.target.value)
                   }
-                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="Canvas background color"
                 />
-
               </label>
 
               {/* SAVE */}
-
               <button
-                onClick={
-                  openSaveModal
-                }
-                className="flex-shrink-0 flex items-center gap-2 h-9 px-4 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium transition"
+                onClick={openSaveModal}
+                className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-[0.98]"
               >
                 <Save size={15} />
-
-                <span>
-                  Save
-                </span>
+                <span>Save</span>
               </button>
 
               {/* DOWNLOAD */}
+              <button
+                ref={downloadButtonRef}
+                onClick={openDownloadMenu}
+                className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                aria-expanded={showDownloadMenu}
+                aria-haspopup="menu"
+              >
+                <Download size={15} />
+                <span>Download</span>
 
-              <div className="relative flex-shrink-0">
-
-                <button
-                  ref={
-                    downloadButtonRef
-                  }
-                  onClick={
-                    openDownloadMenu
-                  }
-                  className="flex-shrink-0 flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-sm font-medium text-gray-700 transition"
-                >
-                  <Download
-                    size={15}
-                  />
-
-                  <span>
-                    Download
-                  </span>
-
-                  <ChevronDown
-                    size={14}
-                    className={
-                      showDownloadMenu
-                        ? "rotate-180 transition"
-                        : "transition"
-                    }
-                  />
-                </button>
-
-              </div>
-
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${
+                    showDownloadMenu ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
             </div>
-
           </div>
         </div>
 
-        {/* CURRENT DESIGN */}
-
+        {/* CURRENT DESIGN NAME */}
         {currentDesignName && (
-          <div className="px-5 pb-2">
-
-            <p className="text-[11px] text-gray-400">
-
+          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-1.5">
+            <p className="text-[11px] text-slate-400">
               Editing:{" "}
-
-              <span className="font-medium text-gray-500">
+              <span className="font-semibold text-slate-600">
                 {currentDesignName}
               </span>
-
             </p>
-
           </div>
         )}
-
       </div>
 
-      {/* FIXED DOWNLOAD MENU */}
-
+      {/* DOWNLOAD MENU */}
       {showDownloadMenu && (
         <div
           id="download-menu"
-          className="fixed w-60 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden z-[9999]"
+          role="menu"
+          className="fixed z-[9999] w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
           style={{
-            top:
-              `${downloadMenuPosition.top}px`,
-            right:
-              `${downloadMenuPosition.right}px`,
+            top: `${downloadMenuPosition.top}px`,
+            right: `${downloadMenuPosition.right}px`,
           }}
         >
-
-          <div className="px-4 py-3 border-b border-gray-100">
-
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              Export
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-600">
+              Export options
             </p>
 
-            <p className="text-sm font-semibold text-gray-900 mt-1">
+            <p className="mt-1 text-sm font-semibold text-slate-900">
               Download certificate
             </p>
-
           </div>
 
-          {/* PNG */}
-
           <button
-            onClick={
-              handleDownloadPNG
-            }
-            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition"
+            onClick={handleDownloadPNG}
+            role="menuitem"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50"
           >
-
-            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <ImageDown
-                size={18}
-              />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+              <ImageDown size={19} />
             </div>
 
             <div>
-
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-semibold text-slate-800">
                 Download PNG
               </p>
-
-              <p className="text-xs text-gray-500 mt-0.5">
-                High quality image
+              <p className="mt-0.5 text-xs text-slate-500">
+                Export as an image
               </p>
-
             </div>
-
           </button>
 
-          {/* PDF */}
-
           <button
-            onClick={
-              handleDownloadPDF
-            }
-            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-t border-gray-100 transition"
+            onClick={handleDownloadPDF}
+            role="menuitem"
+            className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left transition hover:bg-violet-50"
           >
-
-            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <FileDown
-                size={18}
-              />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700">
+              <FileDown size={19} />
             </div>
 
             <div>
-
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-semibold text-slate-800">
                 Download PDF
               </p>
-
-              <p className="text-xs text-gray-500 mt-0.5">
-                Printable certificate
+              <p className="mt-0.5 text-xs text-slate-500">
+                Ready for printing
               </p>
-
             </div>
-
           </button>
-
         </div>
       )}
 
       {/* SAVE CERTIFICATE MODAL */}
-
       {showSaveModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          onMouseDown={(event: ReactMouseEvent<HTMLDivElement>) => {
+            if (event.target === event.currentTarget) {
+              closeSaveModal();
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
             {/* MODAL HEADER */}
-
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <div>
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                  <Save size={19} />
+                </div>
 
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-bold text-slate-900">
                   Save Certificate
                 </h2>
 
-                <p className="text-sm text-gray-500 mt-1">
-                  Give your certificate a name.
+                <p className="mt-1 text-sm text-slate-500">
+                  Give your design a name so you can find it later.
                 </p>
-
               </div>
 
               <button
-                onClick={
-                  closeSaveModal
-                }
-                className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition"
+                onClick={closeSaveModal}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                 title="Close"
+                aria-label="Close save dialog"
               >
                 <X size={18} />
               </button>
-
             </div>
 
             {/* MODAL BODY */}
-
             <div className="p-6">
-
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Certificate Name
+              <label
+                htmlFor="certificate-name"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Certificate name
               </label>
 
               <input
+                id="certificate-name"
                 autoFocus
                 type="text"
-                value={
-                  designName
-                }
+                value={designName}
                 onChange={(event) => {
-                  setDesignName(
-                    event.target.value
-                  );
-
+                  setDesignName(event.target.value);
                   setSaveError("");
                 }}
                 onKeyDown={(event) => {
-                  if (
-                    event.key ===
-                    "Enter"
-                  ) {
+                  if (event.key === "Enter") {
                     handleSave();
                   }
 
-                  if (
-                    event.key ===
-                    "Escape"
-                  ) {
+                  if (event.key === "Escape") {
                     closeSaveModal();
                   }
                 }}
                 placeholder="Example: Web Development Certificate"
-                className="w-full h-11 px-3.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-black focus:border-black transition"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
               />
 
               {saveError && (
-                <p className="text-sm text-red-600 mt-2">
+                <p className="mt-2 text-sm text-rose-600">
                   {saveError}
                 </p>
               )}
 
-              <div className="flex justify-end gap-3 mt-6">
-
+              <div className="mt-6 flex justify-end gap-3">
                 <button
-                  onClick={
-                    closeSaveModal
-                  }
-                  className="h-10 px-4 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm font-medium text-gray-700 transition"
+                  onClick={closeSaveModal}
+                  className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
                   Cancel
                 </button>
 
                 <button
-                  onClick={
-                    handleSave
-                  }
-                  className="h-10 px-5 rounded-lg bg-black text-white hover:bg-gray-800 text-sm font-medium transition"
+                  onClick={handleSave}
+                  className="flex h-10 items-center gap-2 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
                 >
+                  <Save size={15} />
                   Save Certificate
                 </button>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
       )}
     </>
   );
 }
+
