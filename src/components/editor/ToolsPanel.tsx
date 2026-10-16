@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   MousePointer2,
@@ -14,9 +13,19 @@ import {
   Settings2,
 } from "lucide-react";
 
+import { useFabric } from "../../context/FabricContext";
+
 type DrawMode = "pen" | "marker" | "highlighter" | "eraser";
 
 export default function ToolsPanel() {
+  const {
+    setToolMode,
+    setDrawingSettings,
+    addStickyNote,
+    addSignature,
+    addTable,
+  } = useFabric();
+
   const [activeTool, setActiveTool] = useState("select");
   const [drawMode, setDrawMode] = useState<DrawMode>("pen");
   const [showDraw, setShowDraw] = useState(false);
@@ -28,38 +37,87 @@ export default function ToolsPanel() {
   const rowClass = (selected: boolean) =>
     `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
       selected
-        ? "bg-violet-50 text-violet-800 font-semibold"
+        ? "bg-violet-50 font-semibold text-violet-800"
         : "text-gray-700 hover:bg-gray-100"
     }`;
 
+  function activateSelect() {
+    setActiveTool("select");
+    setToolMode("select");
+  }
+
+  function activateDrawingTool(mode: DrawMode) {
+    setDrawMode(mode);
+    setActiveTool("draw");
+
+    setToolMode(mode);
+    setDrawingSettings({
+      color: drawColor,
+      width: weight,
+      opacity: transparency / 100,
+    });
+  }
+
+  function updateColor(color: string) {
+    setDrawColor(color);
+
+    setDrawingSettings({
+      color,
+      width: weight,
+      opacity: transparency / 100,
+    });
+  }
+
+  function updateWeight(value: number) {
+    setWeight(value);
+
+    setDrawingSettings({
+      color: drawColor,
+      width: value,
+      opacity: transparency / 100,
+    });
+  }
+
+  function updateTransparency(value: number) {
+    setTransparency(value);
+
+    setDrawingSettings({
+      color: drawColor,
+      width: weight,
+      opacity: value / 100,
+    });
+  }
+
   return (
     <aside className="h-full w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
-      {/* Panel heading */}
       <div className="border-b border-gray-100 px-5 py-5">
-        <h2 className="text-lg font-semibold text-gray-900">Tools</h2>
+        <h2 className="text-lg font-semibold text-gray-900">
+          Tools
+        </h2>
         <p className="mt-1 text-xs text-gray-500">
           Create something amazing
         </p>
       </div>
 
       <div className="space-y-5 p-3">
-        {/* Select */}
         <button
           type="button"
-          onClick={() => setActiveTool("select")}
+          onClick={activateSelect}
           className={rowClass(activeTool === "select")}
         >
           <MousePointer2 size={20} strokeWidth={1.8} />
           <span className="flex-1">Select</span>
         </button>
 
-        {/* Draw */}
         <section>
           <button
             type="button"
             onClick={() => {
-              setActiveTool("draw");
               setShowDraw((value) => !value);
+
+              if (activeTool !== "draw") {
+                activateDrawingTool(drawMode);
+              }
             }}
             className={rowClass(activeTool === "draw")}
           >
@@ -77,19 +135,29 @@ export default function ToolsPanel() {
               <div className="space-y-1">
                 {[
                   { id: "pen" as const, label: "Pen", Icon: Pen },
-                  { id: "marker" as const, label: "Marker", Icon: Pencil },
+                  {
+                    id: "marker" as const,
+                    label: "Marker",
+                    Icon: Pencil,
+                  },
                   {
                     id: "highlighter" as const,
                     label: "Highlighter",
                     Icon: Highlighter,
                   },
-                  { id: "eraser" as const, label: "Eraser", Icon: Eraser },
+                  {
+                    id: "eraser" as const,
+                    label: "Eraser",
+                    Icon: Eraser,
+                  },
                 ].map(({ id, label, Icon }) => (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setDrawMode(id)}
-                    className={rowClass(drawMode === id)}
+                    onClick={() => activateDrawingTool(id)}
+                    className={rowClass(
+                      activeTool === "draw" && drawMode === id
+                    )}
                   >
                     <Icon size={18} strokeWidth={1.8} />
                     <span>{label}</span>
@@ -105,14 +173,18 @@ export default function ToolsPanel() {
                   >
                     Color
                   </label>
+
                   <div className="flex items-center gap-2 rounded-lg border border-gray-200 p-2">
                     <input
                       id="tool-color"
                       type="color"
                       value={drawColor}
-                      onChange={(event) => setDrawColor(event.target.value)}
+                      onChange={(event) =>
+                        updateColor(event.target.value)
+                      }
                       className="h-8 w-10 cursor-pointer border-0 bg-transparent"
                     />
+
                     <span className="text-xs uppercase text-gray-600">
                       {drawColor}
                     </span>
@@ -122,11 +194,16 @@ export default function ToolsPanel() {
 
               <button
                 type="button"
-                onClick={() => setShowSettings((value) => !value)}
+                onClick={() =>
+                  setShowSettings((value) => !value)
+                }
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-gray-700 hover:bg-gray-100"
               >
                 <Settings2 size={17} />
-                <span className="flex-1 text-left">Settings</span>
+                <span className="flex-1 text-left">
+                  Settings
+                </span>
+
                 {showSettings ? (
                   <ChevronDown size={15} />
                 ) : (
@@ -138,9 +215,12 @@ export default function ToolsPanel() {
                 <div className="space-y-4 px-1 pb-2">
                   <div>
                     <div className="mb-2 flex justify-between text-xs">
-                      <label htmlFor="tool-weight">Weight</label>
+                      <label htmlFor="tool-weight">
+                        Weight
+                      </label>
                       <span>{weight}px</span>
                     </div>
+
                     <input
                       id="tool-weight"
                       type="range"
@@ -148,7 +228,7 @@ export default function ToolsPanel() {
                       max="50"
                       value={weight}
                       onChange={(event) =>
-                        setWeight(Number(event.target.value))
+                        updateWeight(Number(event.target.value))
                       }
                       className="w-full accent-violet-600"
                     />
@@ -161,6 +241,7 @@ export default function ToolsPanel() {
                       </label>
                       <span>{transparency}%</span>
                     </div>
+
                     <input
                       id="tool-transparency"
                       type="range"
@@ -168,7 +249,9 @@ export default function ToolsPanel() {
                       max="100"
                       value={transparency}
                       onChange={(event) =>
-                        setTransparency(Number(event.target.value))
+                        updateTransparency(
+                          Number(event.target.value)
+                        )
                       }
                       className="w-full accent-violet-600"
                     />
@@ -186,7 +269,10 @@ export default function ToolsPanel() {
 
           <button
             type="button"
-            onClick={() => setActiveTool("sticky")}
+            onClick={() => {
+              addStickyNote();
+              setActiveTool("sticky");
+            }}
             className={rowClass(activeTool === "sticky")}
           >
             <StickyNote size={20} strokeWidth={1.8} />
@@ -195,7 +281,10 @@ export default function ToolsPanel() {
 
           <button
             type="button"
-            onClick={() => setActiveTool("signature")}
+            onClick={() => {
+              addSignature();
+              setActiveTool("signature");
+            }}
             className={rowClass(activeTool === "signature")}
           >
             <PenTool size={20} strokeWidth={1.8} />
@@ -204,7 +293,10 @@ export default function ToolsPanel() {
 
           <button
             type="button"
-            onClick={() => setActiveTool("table")}
+            onClick={() => {
+              addTable();
+              setActiveTool("table");
+            }}
             className={rowClass(activeTool === "table")}
           >
             <Table2 size={20} strokeWidth={1.8} />
@@ -214,4 +306,4 @@ export default function ToolsPanel() {
       </div>
     </aside>
   );
-  }
+}

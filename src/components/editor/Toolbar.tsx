@@ -36,7 +36,10 @@ import {
   useState,
 } from "react";
 
-import type { ChangeEvent, MouseEvent as ReactMouseEvent } from "react";
+import type {
+  ChangeEvent,
+  MouseEvent as ReactMouseEvent,
+} from "react";
 
 import { useFabric } from "../../context/FabricContext";
 import { useEditor } from "../../context/EditorContext";
@@ -87,9 +90,7 @@ export default function Toolbar() {
   );
 
   const [letterSpacing, setLetterSpacingState] = useState(
-    selectedObject?.charSpacing
-      ? selectedObject.charSpacing / 10
-      : 0
+    (selectedObject?.charSpacing ?? 0) / 10
   );
 
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -104,22 +105,25 @@ export default function Toolbar() {
     right: 16,
   });
 
+  // Keep toolbar inputs synchronized with the selected canvas object.
   useEffect(() => {
-    if (selectedFontSize !== null) {
+    if (selectedFontSize !== null && selectedFontSize !== undefined) {
       setFontSizeState(selectedFontSize);
     }
   }, [selectedFontSize]);
 
   useEffect(() => {
-    if (
+    const isSelectedText =
       selectedObject?.type === "i-text" ||
-      selectedObject?.type === "textbox"
-    ) {
-      setLineSpacingState(selectedObject.lineHeight ?? 1.16);
+      selectedObject?.type === "textbox";
 
+    if (isSelectedText) {
+      setLineSpacingState(selectedObject.lineHeight ?? 1.16);
       setLetterSpacingState(
         (selectedObject.charSpacing ?? 0) / 10
       );
+
+      setFontSizeState(selectedObject.fontSize ?? 18);
     } else {
       setLineSpacingState(1.16);
       setLetterSpacingState(0);
@@ -156,11 +160,21 @@ export default function Toolbar() {
       : "#111827";
 
   const shapeColor =
-    typeof selectedObject?.stroke === "string"
+    typeof selectedObject?.stroke === "string" &&
+    (selectedObject?.type === "line" ||
+      selectedObject?.type === "path")
       ? selectedObject.stroke
       : typeof selectedObject?.fill === "string"
         ? selectedObject.fill
         : "#2563eb";
+
+  // Prevent toolbar clicks from taking focus away from Fabric's canvas.
+  // This is applied only to buttons, not inputs or dropdowns.
+  function preserveCanvasSelection(
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) {
+    event.preventDefault();
+  }
 
   function handleFontSizeChange(
     event: ChangeEvent<HTMLInputElement>
@@ -308,9 +322,7 @@ export default function Toolbar() {
       updateDownloadMenuPosition();
     }
 
-    function handleOutsideClick(
-      event: globalThis.MouseEvent
-    ) {
+    function handleOutsideClick(event: globalThis.MouseEvent) {
       const target = event.target as Node;
       const button = downloadButtonRef.current;
       const menu = document.getElementById("download-menu");
@@ -362,6 +374,8 @@ export default function Toolbar() {
             {/* UNDO / REDO */}
             <div className={sectionClass}>
               <button
+                type="button"
+                onMouseDown={preserveCanvasSelection}
                 onClick={undo}
                 disabled={!canUndo}
                 className={iconButton}
@@ -372,6 +386,8 @@ export default function Toolbar() {
               </button>
 
               <button
+                type="button"
+                onMouseDown={preserveCanvasSelection}
                 onClick={redo}
                 disabled={!canRedo}
                 className={iconButton}
@@ -394,6 +410,8 @@ export default function Toolbar() {
                   </div>
 
                   <button
+                    type="button"
+                    onMouseDown={preserveCanvasSelection}
                     onClick={bringToFront}
                     className={activeIconButton}
                     title="Bring to front"
@@ -403,6 +421,8 @@ export default function Toolbar() {
                   </button>
 
                   <button
+                    type="button"
+                    onMouseDown={preserveCanvasSelection}
                     onClick={bringForward}
                     className={activeIconButton}
                     title="Bring forward"
@@ -412,6 +432,8 @@ export default function Toolbar() {
                   </button>
 
                   <button
+                    type="button"
+                    onMouseDown={preserveCanvasSelection}
                     onClick={sendBackward}
                     className={activeIconButton}
                     title="Send backward"
@@ -421,6 +443,8 @@ export default function Toolbar() {
                   </button>
 
                   <button
+                    type="button"
+                    onMouseDown={preserveCanvasSelection}
                     onClick={sendToBack}
                     className={activeIconButton}
                     title="Send to back"
@@ -434,7 +458,10 @@ export default function Toolbar() {
                 {isText && (
                   <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-200 pr-3">
                     <div className="flex items-center gap-1.5">
-                      <Type size={16} className="hidden text-slate-400 xl:block" />
+                      <Type
+                        size={16}
+                        className="hidden text-slate-400 xl:block"
+                      />
 
                       <select
                         value={selectedObject?.fontFamily ?? "Arial"}
@@ -459,6 +486,8 @@ export default function Toolbar() {
                     {/* FONT SIZE */}
                     <div className="flex h-9 shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={decreaseFontSize}
                         className="flex h-full w-8 items-center justify-center text-slate-600 transition hover:bg-slate-100"
                         title="Decrease font size"
@@ -479,6 +508,8 @@ export default function Toolbar() {
                       />
 
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={increaseFontSize}
                         className="flex h-full w-8 items-center justify-center text-slate-600 transition hover:bg-slate-100"
                         title="Increase font size"
@@ -515,6 +546,8 @@ export default function Toolbar() {
 
                     {/* BOLD */}
                     <button
+                      type="button"
+                      onMouseDown={preserveCanvasSelection}
                       onClick={toggleBold}
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                         isBold
@@ -530,6 +563,8 @@ export default function Toolbar() {
 
                     {/* ITALIC */}
                     <button
+                      type="button"
+                      onMouseDown={preserveCanvasSelection}
                       onClick={toggleItalic}
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                         isItalic
@@ -546,6 +581,8 @@ export default function Toolbar() {
                     {/* TEXT ALIGNMENT */}
                     <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("left")}
                         className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
                           currentTextAlign === "left"
@@ -560,6 +597,8 @@ export default function Toolbar() {
                       </button>
 
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("center")}
                         className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
                           currentTextAlign === "center"
@@ -574,6 +613,8 @@ export default function Toolbar() {
                       </button>
 
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("right")}
                         className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
                           currentTextAlign === "right"
@@ -591,6 +632,8 @@ export default function Toolbar() {
                     {/* LINE SPACING */}
                     <div className="flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={decreaseLineSpacing}
                         className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Decrease line spacing"
@@ -600,7 +643,10 @@ export default function Toolbar() {
                       </button>
 
                       <div className="flex items-center gap-1">
-                        <MoveVertical size={14} className="text-slate-400" />
+                        <MoveVertical
+                          size={14}
+                          className="text-slate-400"
+                        />
 
                         <input
                           type="number"
@@ -616,6 +662,8 @@ export default function Toolbar() {
                       </div>
 
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={increaseLineSpacing}
                         className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Increase line spacing"
@@ -628,6 +676,8 @@ export default function Toolbar() {
                     {/* LETTER SPACING */}
                     <div className="flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={decreaseLetterSpacing}
                         className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Decrease letter spacing"
@@ -656,6 +706,8 @@ export default function Toolbar() {
                       </div>
 
                       <button
+                        type="button"
+                        onMouseDown={preserveCanvasSelection}
                         onClick={increaseLetterSpacing}
                         className="flex h-full w-7 items-center justify-center text-slate-500 transition hover:bg-slate-100"
                         title="Increase letter spacing"
@@ -712,6 +764,8 @@ export default function Toolbar() {
                     </span>
 
                     <button
+                      type="button"
+                      onMouseDown={preserveCanvasSelection}
                       onClick={() => rotateSelected(-15)}
                       className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                       title="Rotate left"
@@ -721,6 +775,8 @@ export default function Toolbar() {
                     </button>
 
                     <button
+                      type="button"
+                      onMouseDown={preserveCanvasSelection}
                       onClick={() => rotateSelected(15)}
                       className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                       title="Rotate right"
@@ -733,6 +789,8 @@ export default function Toolbar() {
 
                 {/* DUPLICATE */}
                 <button
+                  type="button"
+                  onMouseDown={preserveCanvasSelection}
                   onClick={duplicateSelected}
                   className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                   title="Duplicate selected object"
@@ -743,6 +801,8 @@ export default function Toolbar() {
 
                 {/* DELETE */}
                 <button
+                  type="button"
+                  onMouseDown={preserveCanvasSelection}
                   onClick={deleteSelected}
                   className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
                   title="Delete selected object"
@@ -780,6 +840,8 @@ export default function Toolbar() {
 
               {/* SAVE */}
               <button
+                type="button"
+                onMouseDown={preserveCanvasSelection}
                 onClick={openSaveModal}
                 className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-[0.98]"
               >
@@ -789,7 +851,9 @@ export default function Toolbar() {
 
               {/* DOWNLOAD */}
               <button
+                type="button"
                 ref={downloadButtonRef}
+                onMouseDown={preserveCanvasSelection}
                 onClick={openDownloadMenu}
                 className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                 aria-expanded={showDownloadMenu}
@@ -844,6 +908,8 @@ export default function Toolbar() {
           </div>
 
           <button
+            type="button"
+            onMouseDown={preserveCanvasSelection}
             onClick={handleDownloadPNG}
             role="menuitem"
             className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50"
@@ -863,6 +929,8 @@ export default function Toolbar() {
           </button>
 
           <button
+            type="button"
+            onMouseDown={preserveCanvasSelection}
             onClick={handleDownloadPDF}
             role="menuitem"
             className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left transition hover:bg-violet-50"
@@ -894,7 +962,6 @@ export default function Toolbar() {
           }}
         >
           <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
-            {/* MODAL HEADER */}
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <div>
                 <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
@@ -911,6 +978,7 @@ export default function Toolbar() {
               </div>
 
               <button
+                type="button"
                 onClick={closeSaveModal}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                 title="Close"
@@ -920,7 +988,6 @@ export default function Toolbar() {
               </button>
             </div>
 
-            {/* MODAL BODY */}
             <div className="p-6">
               <label
                 htmlFor="certificate-name"
@@ -959,6 +1026,7 @@ export default function Toolbar() {
 
               <div className="mt-6 flex justify-end gap-3">
                 <button
+                  type="button"
                   onClick={closeSaveModal}
                   className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
@@ -966,6 +1034,7 @@ export default function Toolbar() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleSave}
                   className="flex h-10 items-center gap-2 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
                 >
@@ -980,4 +1049,3 @@ export default function Toolbar() {
     </>
   );
 }
-

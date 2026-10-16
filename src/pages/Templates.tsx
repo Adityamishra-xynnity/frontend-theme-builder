@@ -2,7 +2,6 @@
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Award,
   Check,
   Eye,
   LayoutTemplate,
@@ -16,7 +15,6 @@ import { templates } from "../data/templates";
 export default function Templates() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Page Header */}
       <section className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50">
         <div className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-indigo-200/30 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-violet-200/40 blur-3xl" />
@@ -45,10 +43,12 @@ export default function Templates() {
                 <Check size={17} className="text-emerald-600" />
                 Editable designs
               </span>
+
               <span className="inline-flex items-center gap-2">
                 <Check size={17} className="text-emerald-600" />
                 Personalized colors
               </span>
+
               <span className="inline-flex items-center gap-2">
                 <Check size={17} className="text-emerald-600" />
                 Easy to customize
@@ -58,7 +58,6 @@ export default function Templates() {
         </div>
       </section>
 
-      {/* Collection Toolbar */}
       <section className="mx-auto max-w-7xl px-5 pt-10 sm:px-8 lg:px-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -77,12 +76,12 @@ export default function Templates() {
 
           <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm">
             <LayoutTemplate size={17} className="text-indigo-600" />
-            {templates.length} {templates.length === 1 ? "Template" : "Templates"}
+            {templates.length}{" "}
+            {templates.length === 1 ? "Template" : "Templates"}
           </div>
         </div>
       </section>
 
-      {/* Template Cards */}
       <section className="mx-auto max-w-7xl px-5 pb-16 pt-7 sm:px-8 lg:px-10">
         {templates.length > 0 ? (
           <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:gap-9">
@@ -101,7 +100,6 @@ export default function Templates() {
                   key={template.id}
                   className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-100/40"
                 >
-                  {/* Preview Area */}
                   <div className="relative overflow-hidden bg-slate-100 p-4 sm:p-7">
                     <div
                       className="relative aspect-[900/650] w-full overflow-hidden rounded-lg shadow-lg"
@@ -109,7 +107,6 @@ export default function Templates() {
                         backgroundColor: template.backgroundColor,
                       }}
                     >
-                      {/* Certificate Borders */}
                       <div
                         className="pointer-events-none absolute inset-[3%] border-2"
                         style={{
@@ -124,7 +121,6 @@ export default function Templates() {
                         }}
                       />
 
-                      {/* Actual Template Elements */}
                       {template.elements.map((element) => {
                         const left = (element.x / 900) * 100;
                         const top = (element.y / 650) * 100;
@@ -197,7 +193,9 @@ export default function Templates() {
                               ...baseStyle,
                               fontSize: `${Math.max(
                                 6,
-                                ((element.fontSize ?? 18) / 900) * 900 * 0.55
+                                ((element.fontSize ?? 18) / 900) *
+                                  900 *
+                                  0.55
                               )}px`,
                               fontFamily: element.fontFamily,
                               color: element.color,
@@ -222,7 +220,6 @@ export default function Templates() {
                         );
                       })}
 
-                      {/* Hover Action */}
                       <div className="absolute inset-0 flex items-center justify-center bg-slate-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100">
                         <Link
                           to={`/editor/${template.id}`}
@@ -234,14 +231,12 @@ export default function Templates() {
                         </Link>
                       </div>
 
-                      {/* Preview Label */}
                       <div className="absolute left-3 top-3 rounded-lg border border-white/70 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
                         Certificate Preview
                       </div>
                     </div>
                   </div>
 
-                  {/* Template Details */}
                   <div className="p-5 sm:p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
@@ -308,7 +303,6 @@ export default function Templates() {
         )}
       </section>
 
-      {/* Bottom CTA */}
       <section className="mx-auto max-w-7xl px-5 pb-16 sm:px-8 sm:pb-20 lg:px-10">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-900 px-6 py-10 sm:px-10 sm:py-12 lg:px-14">
           <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[35px] border-white/5" />

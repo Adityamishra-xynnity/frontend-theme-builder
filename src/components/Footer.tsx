@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Heart,
   LayoutTemplate,
-  FolderHeart,
   House,
   Sparkles,
   Mail,
@@ -20,13 +19,8 @@ export default function Footer() {
 
   return (
     <footer className="mt-12 border-t border-blue-100 bg-gradient-to-b from-sky-50 via-white to-blue-50">
-
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-
-        {/* Main Footer */}
         <div className="grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4 lg:gap-12 lg:py-14">
-
-          {/* Brand Section */}
           <div>
             <Link
               to="/"
@@ -58,7 +52,6 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Product Links */}
           <div>
             <h3 className="mb-5 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900">
               <LayoutTemplate size={17} className="text-blue-600" />
@@ -88,7 +81,6 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Quick Navigation */}
           <div>
             <h3 className="mb-5 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900">
               <House size={17} className="text-blue-600" />
@@ -115,7 +107,6 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Blue CTA Card */}
           <div>
             <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-100">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -141,12 +132,9 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Blue Highlight Strip */}
         <div className="h-px bg-gradient-to-r from-transparent via-blue-200 to-transparent" />
 
-        {/* Bottom Bar */}
         <div className="flex flex-col items-center justify-between gap-4 py-6 sm:flex-row">
-
           <p className="text-center text-xs leading-6 text-slate-500 sm:text-left sm:text-sm">
             © {currentYear} Theme Builder. All rights reserved.
           </p>
@@ -178,4 +166,3 @@ export default function Footer() {
     </footer>
   );
 }
-

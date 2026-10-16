@@ -42,9 +42,8 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 shadow-sm backdrop-blur-md">
+    <nav className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-200/80 bg-white/95 shadow-sm backdrop-blur-md">
       <div className="mx-auto flex h-[72px] max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
-
         {/* Logo */}
         <Link
           to="/"
@@ -59,6 +58,7 @@ export default function Navbar() {
             <span className="block text-lg font-extrabold tracking-tight text-gray-900">
               Theme Builder
             </span>
+
             <span className="block text-[11px] font-medium tracking-wide text-gray-500">
               DESIGN YOUR IDEAS
             </span>
@@ -83,7 +83,7 @@ export default function Navbar() {
           </NavLink>
         </div>
 
-        {/* Desktop Create Button */}
+        {/* Desktop Create Menu */}
         <div className="relative hidden md:block">
           <button
             type="button"
@@ -94,6 +94,7 @@ export default function Navbar() {
           >
             <Plus size={18} strokeWidth={2.5} />
             Create Design
+
             <ChevronDown
               size={16}
               className={`transition-transform duration-200 ${
@@ -129,6 +130,7 @@ export default function Navbar() {
                     <span className="block text-sm font-bold text-gray-900">
                       Blank Certificate
                     </span>
+
                     <span className="mt-1 block text-xs text-gray-500">
                       Start with a fresh design
                     </span>
@@ -149,6 +151,7 @@ export default function Navbar() {
                     <span className="block text-sm font-bold text-gray-900">
                       Use a Template
                     </span>
+
                     <span className="mt-1 block text-xs text-gray-500">
                       Choose a ready-made design
                     </span>
@@ -162,7 +165,11 @@ export default function Navbar() {
         {/* Mobile Menu Toggle */}
         <button
           type="button"
-          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-label={
+            mobileMenuOpen
+              ? "Close navigation menu"
+              : "Open navigation menu"
+          }
           aria-expanded={mobileMenuOpen}
           onClick={() => setMobileMenuOpen((open) => !open)}
           className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 text-gray-700 transition-colors hover:bg-gray-100 md:hidden"
@@ -226,4 +233,3 @@ export default function Navbar() {
     </nav>
   );
 }
-

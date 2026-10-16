@@ -1,187 +1,295 @@
+import { useEffect, useRef } from "react";
 
 import {
-  useEffect,
-  useRef,
-} from "react";
-
-import {
-  Canvas as FabricCanvas,
-  Textbox,
+  Canvas as FabricCanvasInstance,
+  FabricImage,
   IText,
+  Textbox,
   Rect,
   Circle,
   Triangle,
   Polygon,
   Line,
   Path,
-  FabricImage,
+  type FabricObject,
 } from "fabric";
 
 import { useEditor } from "../../../context/EditorContext";
 import { useFabric } from "../../../context/FabricContext";
 
-import type { ElementType } from "../../../types/editor";
+import type {
+  EditorElement,
+  ElementType,
+} from "../../../types/editor";
 
-type FabricObjectWithMeta = {
+type FabricObjectWithMeta = FabricObject & {
   elementId?: string;
   elementType?: ElementType;
   imageSrc?: string;
   shapeSides?: number;
 };
 
-function getPolygonPoints(
-  sides: number,
-  radius: number
-) {
-  const points = [];
+const CANVAS_WIDTH = 900;
+const CANVAS_HEIGHT = 650;
 
-  for (
-    let index = 0;
-    index < sides;
-    index++
-  ) {
-    const angle =
-      -Math.PI / 2 +
-      (index * 2 * Math.PI) / sides;
-
-    points.push({
-      x:
-        radius +
-        radius * Math.cos(angle),
-      y:
-        radius +
-        radius * Math.sin(angle),
-    });
-  }
-
-  return points;
+function getObjectMeta(
+  object: FabricObject,
+): FabricObjectWithMeta {
+  return object as FabricObjectWithMeta;
 }
 
-function applyControls(object: any) {
-  object.set({
-    selectable: true,
-    evented: true,
-    transparentCorners: false,
-    cornerColor: "#2563eb",
-    cornerStyle: "circle",
-    borderColor: "#2563eb",
-    originX: "left",
-    originY: "top",
-  });
-}
-
-function createLineObject(
-  element: {
-    type:
-      | "line"
-      | "arrow"
-      | "double-arrow"
-      | "dashed-line"
-      | "dotted-line";
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    scaleX?: number;
-    scaleY?: number;
-    angle?: number;
-    opacity?: number;
-    strokeColor?: string;
-    strokeWidth?: number;
-    lineDash?: number[];
-  }
-) {
-  const width = Math.max(
-    40,
-    element.width || 220
+function getElementSignature(
+  elements: EditorElement[],
+): string {
+  return JSON.stringify(
+    elements.map((element) => ({
+      id: element.id,
+      type: element.type,
+      x: Math.round(element.x * 100) / 100,
+      y: Math.round(element.y * 100) / 100,
+      width: Math.round(element.width * 100) / 100,
+      height: Math.round(element.height * 100) / 100,
+      scaleX: element.scaleX ?? 1,
+      scaleY: element.scaleY ?? 1,
+      angle: element.angle ?? 0,
+      opacity: element.opacity ?? 1,
+      text: element.text ?? "",
+      fontSize: element.fontSize ?? 32,
+      fontFamily: element.fontFamily ?? "Arial",
+      color: element.color ?? "#000000",
+      backgroundColor: element.backgroundColor ?? "",
+      fontWeight: element.fontWeight ?? "normal",
+      fontStyle: element.fontStyle ?? "normal",
+      textAlign: element.textAlign ?? "left",
+      lineHeight: element.lineHeight ?? 1.16,
+      charSpacing: element.charSpacing ?? 0,
+      strokeColor: element.strokeColor ?? "",
+      strokeWidth: element.strokeWidth ?? 0,
+      lineDash: element.lineDash ?? [],
+      shapeSides: element.shapeSides ?? 0,
+      src: element.src ?? "",
+    })),
   );
+}
 
-  const stroke =
-    element.strokeColor ?? "#111827";
+function applyElementMetadata(
+  object: FabricObject,
+  element: EditorElement,
+): void {
+  const meta = getObjectMeta(object);
 
-  const strokeWidth =
-    element.strokeWidth ?? 4;
+  meta.elementId = element.id;
+  meta.elementType = element.type;
 
-  const commonOptions = {
+  if (element.type === "image" && element.src) {
+    meta.imageSrc = element.src;
+  }
+
+  if (element.shapeSides !== undefined) {
+    meta.shapeSides = element.shapeSides;
+  }
+}
+
+function applyCommonProperties(
+  object: FabricObject,
+  element: EditorElement,
+): void {
+  object.set({
     left: element.x,
     top: element.y,
     scaleX: element.scaleX ?? 1,
     scaleY: element.scaleY ?? 1,
     angle: element.angle ?? 0,
     opacity: element.opacity ?? 1,
-    fill: "",
-    stroke,
-    strokeWidth,
-    strokeLineCap: "round" as const,
-    strokeLineJoin: "round" as const,
-    originX: "left" as const,
-    originY: "top" as const,
     selectable: true,
     evented: true,
-    transparentCorners: false,
-    cornerColor: "#2563eb",
-    cornerStyle: "circle" as const,
-    borderColor: "#2563eb",
-  };
+    objectCaching: false,
+  });
+
+  applyElementMetadata(object, element);
+}
+
+function createPolygonPoints(
+  sides: number,
+  width: number,
+  height: number,
+): { x: number; y: number }[] {
+  const safeSides = Math.max(3, Math.min(12, sides));
+  const radiusX = width / 2;
+  const radiusY = height / 2;
+
+  return Array.from({ length: safeSides }, (_, index) => {
+    const angle =
+      (Math.PI * 2 * index) / safeSides - Math.PI / 2;
+
+    return {
+      x: radiusX + Math.cos(angle) * radiusX,
+      y: radiusY + Math.sin(angle) * radiusY,
+    };
+  });
+}
+
+function createElementObject(
+  element: EditorElement,
+): FabricObject | null {
+  const width = Math.max(1, element.width || 1);
+  const height = Math.max(1, element.height || 1);
+  const color = element.color || "#000000";
+  const strokeColor = element.strokeColor || color;
+  const strokeWidth = element.strokeWidth ?? 0;
+
+  let object: FabricObject | null = null;
 
   if (
+    element.type === "heading" ||
+    element.type === "subheading" ||
+    element.type === "text"
+  ) {
+    const textOptions = {
+      left: element.x,
+      top: element.y,
+      width,
+      fontSize: element.fontSize ?? 32,
+      fontFamily: element.fontFamily || "Arial",
+      fill: color,
+      fontWeight: element.fontWeight ?? "normal",
+      fontStyle: element.fontStyle ?? "normal",
+      textAlign: element.textAlign ?? "left",
+      lineHeight: element.lineHeight ?? 1.16,
+      charSpacing: element.charSpacing ?? 0,
+      angle: element.angle ?? 0,
+      opacity: element.opacity ?? 1,
+      editable: true,
+      splitByGrapheme: false,
+      objectCaching: false,
+    };
+
+    object =
+      element.type === "text"
+        ? new Textbox(element.text || "Text", textOptions)
+        : new IText(
+            element.text ||
+              (element.type === "heading"
+                ? "Certificate Heading"
+                : "Certificate Subheading"),
+            textOptions,
+          );
+  } else if (
+    element.type === "rectangle" ||
+    element.type === "square"
+  ) {
+    object = new Rect({
+      width,
+      height,
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+      rx: 0,
+      ry: 0,
+    });
+  } else if (element.type === "circle") {
+    object = new Circle({
+      radius: Math.max(width, height) / 2,
+      scaleX: width / Math.max(width, height),
+      scaleY: height / Math.max(width, height),
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+    });
+  } else if (element.type === "triangle") {
+    object = new Triangle({
+      width,
+      height,
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+    });
+  } else if (
+    element.type === "polygon" ||
+    element.type === "pentagon" ||
+    element.type === "hexagon" ||
+    element.type === "heptagon" ||
+    element.type === "octagon"
+  ) {
+    const sides =
+      element.shapeSides ??
+      (element.type === "pentagon"
+        ? 5
+        : element.type === "hexagon"
+          ? 6
+          : element.type === "heptagon"
+            ? 7
+            : element.type === "octagon"
+              ? 8
+              : 6);
+
+    object = new Polygon(
+      createPolygonPoints(sides, width, height),
+      {
+        fill: element.backgroundColor || color,
+        stroke: strokeColor,
+        strokeWidth,
+      },
+    );
+  } else if (
     element.type === "line" ||
+    element.type === "arrow" ||
+    element.type === "double-arrow" ||
     element.type === "dashed-line" ||
     element.type === "dotted-line"
   ) {
-    return new Line(
-      [0, 0, width, 0],
-      {
-        ...commonOptions,
-        strokeDashArray:
-          element.lineDash ??
-          (
-            element.type === "dashed-line"
-              ? [18, 10]
-              : element.type === "dotted-line"
-                ? [2, 10]
-                : undefined
-          ),
-      }
-    );
+    const isArrow =
+      element.type === "arrow" ||
+      element.type === "double-arrow";
+
+    const dash =
+      element.lineDash ??
+      (element.type === "dashed-line"
+        ? [10, 6]
+        : element.type === "dotted-line"
+          ? [2, 5]
+          : undefined);
+
+    object = new Line([0, 0, width, 0], {
+      stroke: strokeColor,
+      strokeWidth: strokeWidth || 2,
+      strokeDashArray: dash,
+      fill: "",
+      originX: "left",
+      originY: "top",
+    });
+
+    if (isArrow) {
+      const arrowHead = 12;
+
+      const arrowPath =
+        element.type === "double-arrow"
+          ? `M 0 0 L ${width} 0 M ${arrowHead} -${arrowHead / 2} L 0 0 L ${arrowHead} ${arrowHead / 2} M ${width - arrowHead} -${arrowHead / 2} L ${width} 0 L ${width - arrowHead} ${arrowHead / 2}`
+          : `M 0 0 L ${width} 0 M ${width - arrowHead} -${arrowHead / 2} L ${width} 0 L ${width - arrowHead} ${arrowHead / 2}`;
+
+      object = new Path(arrowPath, {
+        fill: "",
+        stroke: strokeColor,
+        strokeWidth: strokeWidth || 2,
+        strokeDashArray: dash,
+      });
+    }
   }
 
-  if (element.type === "arrow") {
-    return new Path(
-      `
-      M 0 0
-      L ${width} 0
-      M ${width} 0
-      L ${width - 18} -12
-      M ${width} 0
-      L ${width - 18} 12
-      `,
-      commonOptions
-    );
+  if (object) {
+    applyCommonProperties(object, element);
   }
 
-  return new Path(
-    `
-    M 0 0
-    L ${width} 0
-    M 0 0
-    L 18 -12
-    M 0 0
-    L 18 12
-    M ${width} 0
-    L ${width - 18} -12
-    M ${width} 0
-    L ${width - 18} 12
-    `,
-    commonOptions
-  );
+  return object;
 }
 
 export default function FabricEditorCanvas() {
-  const canvasElementRef =
-    useRef<HTMLCanvasElement | null>(null);
-
+  const htmlCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const internalChangeRef = useRef(false);
+  const mountedRef = useRef(false);
+  const rebuildingCanvasRef = useRef(false);
+  const imageLoadTokenRef = useRef(0);
+  const lastSyncedSignatureRef = useRef("");
 
   const {
     elements,
@@ -191,62 +299,50 @@ export default function FabricEditorCanvas() {
 
   const {
     canvasRef,
+    selectedObject,
     setSelectedObject,
     convertCanvasToElements,
   } = useFabric();
 
-  useEffect(() => {
-    if (!canvasElementRef.current) {
+  function syncCanvasToEditor() {
+    const canvas = canvasRef.current;
+
+    if (!canvas || rebuildingCanvasRef.current) {
       return;
     }
 
-    const canvas = new FabricCanvas(
-      canvasElementRef.current,
-      {
-        width: 900,
-        height: 650,
-        backgroundColor,
-        selection: true,
-        preserveObjectStacking: true,
-      }
-    );
+    const converted = convertCanvasToElements();
+    const signature = getElementSignature(converted);
+
+    lastSyncedSignatureRef.current = signature;
+    internalChangeRef.current = true;
+
+    syncElementsFromCanvas(converted);
+  }
+
+  useEffect(() => {
+    const htmlCanvas = htmlCanvasRef.current;
+
+    if (!htmlCanvas || mountedRef.current) {
+      return;
+    }
+
+    mountedRef.current = true;
+
+    const canvas = new FabricCanvasInstance(htmlCanvas, {
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
+      backgroundColor: backgroundColor || "#ffffff",
+      preserveObjectStacking: true,
+      selection: true,
+      stopContextMenu: true,
+      fireRightClick: true,
+    });
 
     canvasRef.current = canvas;
 
-    const updateEditorFromCanvas = () => {
-      const latestElements =
-        convertCanvasToElements();
-
-      internalChangeRef.current = true;
-
-      syncElementsFromCanvas(
-        latestElements
-      );
-
-      const object =
-        canvas.getActiveObject();
-
-      setSelectedObject(object ?? null);
-    };
-
-    const handleSelectionCreated = (
-      event: any
-    ) => {
-      const object =
-        event.selected?.[0] ?? null;
-
-      setSelectedObject(object);
-    };
-
-    const handleSelectionUpdated = (
-      event: any
-    ) => {
-      const object =
-        event.selected?.[0] ??
-        canvas.getActiveObject() ??
-        null;
-
-      setSelectedObject(object);
+    const handleSelection = () => {
+      setSelectedObject(canvas.getActiveObject() ?? null);
     };
 
     const handleSelectionCleared = () => {
@@ -254,566 +350,284 @@ export default function FabricEditorCanvas() {
     };
 
     const handleObjectModified = () => {
-      updateEditorFromCanvas();
+      syncCanvasToEditor();
     };
 
     const handleTextChanged = () => {
-      updateEditorFromCanvas();
+      syncCanvasToEditor();
     };
 
-    const handleMouseDown = (
-      event: any
-    ) => {
-      const object = event.target;
+    const handleObjectAdded = () => {
+      if (
+        internalChangeRef.current ||
+        rebuildingCanvasRef.current
+      ) {
+        return;
+      }
 
-      if (!object) return;
-
-      setSelectedObject(object);
+      syncCanvasToEditor();
     };
 
-    const handleDoubleClick = (
-      event: any
-    ) => {
-      const object = event.target;
+    const handleMouseDown = () => {
+      setSelectedObject(canvas.getActiveObject() ?? null);
+    };
 
-      if (!object) return;
-
-      setSelectedObject(object);
+    const handleDoubleClick = (event: {
+      target?: FabricObject;
+    }) => {
+      const target = event.target;
 
       if (
-        object.type === "i-text" ||
-        object.type === "textbox"
+        target instanceof IText ||
+        target instanceof Textbox
       ) {
-        const textObject =
-          object as IText;
-
-        canvas.setActiveObject(textObject);
-        textObject.enterEditing();
-        textObject.selectAll();
-
-        canvas.renderAll();
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        target.enterEditing();
+        target.selectAll();
+        canvas.requestRenderAll();
       }
     };
 
-    canvas.on(
-      "selection:created",
-      handleSelectionCreated
-    );
-
-    canvas.on(
-      "selection:updated",
-      handleSelectionUpdated
-    );
-
-    canvas.on(
-      "selection:cleared",
-      handleSelectionCleared
-    );
-
-    canvas.on(
-      "object:modified",
-      handleObjectModified
-    );
-
-    canvas.on(
-      "text:changed",
-      handleTextChanged
-    );
-
-    canvas.on(
-      "mouse:down",
-      handleMouseDown
-    );
-
-    canvas.on(
-      "mouse:dblclick",
-      handleDoubleClick
-    );
+    canvas.on("selection:created", handleSelection);
+    canvas.on("selection:updated", handleSelection);
+    canvas.on("selection:cleared", handleSelectionCleared);
+    canvas.on("object:modified", handleObjectModified);
+    canvas.on("text:changed", handleTextChanged);
+    canvas.on("object:added", handleObjectAdded);
+    canvas.on("mouse:down", handleMouseDown);
+    canvas.on("mouse:dblclick", handleDoubleClick);
 
     return () => {
-      canvas.off(
-        "selection:created",
-        handleSelectionCreated
-      );
+      imageLoadTokenRef.current += 1;
 
-      canvas.off(
-        "selection:updated",
-        handleSelectionUpdated
-      );
-
-      canvas.off(
-        "selection:cleared",
-        handleSelectionCleared
-      );
-
-      canvas.off(
-        "object:modified",
-        handleObjectModified
-      );
-
-      canvas.off(
-        "text:changed",
-        handleTextChanged
-      );
-
-      canvas.off(
-        "mouse:down",
-        handleMouseDown
-      );
-
-      canvas.off(
-        "mouse:dblclick",
-        handleDoubleClick
-      );
+      canvas.off("selection:created", handleSelection);
+      canvas.off("selection:updated", handleSelection);
+      canvas.off("selection:cleared", handleSelectionCleared);
+      canvas.off("object:modified", handleObjectModified);
+      canvas.off("text:changed", handleTextChanged);
+      canvas.off("object:added", handleObjectAdded);
+      canvas.off("mouse:down", handleMouseDown);
+      canvas.off("mouse:dblclick", handleDoubleClick);
 
       canvas.dispose();
-      canvasRef.current = null;
-      setSelectedObject(null);
+
+      if (canvasRef.current === canvas) {
+        canvasRef.current = null;
+      }
+
+      rebuildingCanvasRef.current = false;
+      mountedRef.current = false;
     };
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
 
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
-    canvas.backgroundColor = backgroundColor;
+    canvas.backgroundColor = backgroundColor || "#ffffff";
     canvas.requestRenderAll();
   }, [backgroundColor]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
 
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
+    const incomingSignature = getElementSignature(elements);
+
+    // Canvas se sync hui state ko dobara rebuild nahi karna.
     if (internalChangeRef.current) {
       internalChangeRef.current = false;
+      lastSyncedSignatureRef.current = "";
+      return;
+    }
+
+    const currentSignature = getElementSignature(
+      convertCanvasToElements(),
+    );
+
+    // Dono taraf data same hai, isliye rebuild ki zaroorat nahi.
+    if (
+      incomingSignature === currentSignature ||
+      incomingSignature === lastSyncedSignatureRef.current
+    ) {
+      lastSyncedSignatureRef.current = "";
       return;
     }
 
     let cancelled = false;
+    const loadToken = ++imageLoadTokenRef.current;
 
-    async function renderElements() {
-      if (!canvas) return;
+    const rebuildCanvas = async () => {
+      rebuildingCanvasRef.current = true;
 
-      canvas.clear();
-      canvas.backgroundColor = backgroundColor;
+      try {
+        const activeObject = canvas.getActiveObject();
 
-      for (const element of elements) {
-        if (cancelled) return;
+        const activeId = activeObject
+          ? getObjectMeta(activeObject).elementId
+          : undefined;
 
-        /*
-         * TEXT
-         */
-        if (
-          element.type === "heading" ||
-          element.type === "subheading" ||
-          element.type === "text"
-        ) {
-          const textObject = new Textbox(
-            element.text ?? "",
-            {
-              left: element.x,
-              top: element.y,
-              width: Math.max(
-                80,
-                element.width ||
-                  (
-                    element.type === "heading"
-                      ? 500
-                      : element.type === "subheading"
-                        ? 450
-                        : 400
-                  )
-              ),
-              fontSize: element.fontSize ?? 18,
-              fontFamily:
-                element.fontFamily ?? "Arial",
-              fill: element.color ?? "#111827",
-              fontWeight:
-                element.fontWeight ?? "normal",
-              fontStyle:
-                element.fontStyle ?? "normal",
-              lineHeight:
-                element.lineHeight ?? 1.16,
-              charSpacing:
-                element.charSpacing ?? 0,
-              textAlign:
-                element.textAlign ?? "left",
-              originX: "left",
-              originY: "top",
-              scaleX: element.scaleX ?? 1,
-              scaleY: element.scaleY ?? 1,
-              angle: element.angle ?? 0,
-              opacity: element.opacity ?? 1,
-              editable: true,
-              selectable: true,
-              evented: true,
-              padding: 4,
-              transparentCorners: false,
-              cornerColor: "#2563eb",
-              cornerStyle: "circle",
-              borderColor: "#2563eb",
-              splitByGrapheme: false,
+        canvas.discardActiveObject();
+        canvas.clear();
+        canvas.backgroundColor = backgroundColor || "#ffffff";
+
+        for (const element of elements) {
+          if (cancelled) {
+            return;
+          }
+
+          if (element.type === "image") {
+            if (!element.src) {
+              continue;
             }
-          );
 
-          textObject.set({
-            lineHeight: element.lineHeight ?? 1.16,
-            charSpacing: element.charSpacing ?? 0,
-            textAlign: element.textAlign ?? "left",
-          });
+            try {
+              const image = await FabricImage.fromURL(
+                element.src,
+                { crossOrigin: "anonymous" },
+              );
 
-          textObject.initDimensions();
-          textObject.setCoords();
+              if (
+                cancelled ||
+                imageLoadTokenRef.current !== loadToken
+              ) {
+                return;
+              }
 
-          const meta =
-            textObject as typeof textObject &
-              FabricObjectWithMeta;
+              const imageWidth =
+                image.width || element.width || 1;
 
-          meta.elementId = element.id;
-          meta.elementType = element.type;
+              const imageHeight =
+                image.height || element.height || 1;
 
-          canvas.add(textObject);
-          continue;
-        }
+              image.set({
+                left: element.x,
+                top: element.y,
+                scaleX:
+                  element.scaleX ??
+                  (element.width
+                    ? element.width / imageWidth
+                    : 1),
+                scaleY:
+                  element.scaleY ??
+                  (element.height
+                    ? element.height / imageHeight
+                    : 1),
+                angle: element.angle ?? 0,
+                opacity: element.opacity ?? 1,
+                selectable: true,
+                evented: true,
+                objectCaching: false,
+              });
 
-        /*
-         * RECTANGLE
-         */
-        if (element.type === "rectangle") {
-          const rectangle = new Rect({
-            left: element.x,
-            top: element.y,
-            width: element.width || 180,
-            height: element.height || 100,
-            scaleX: element.scaleX ?? 1,
-            scaleY: element.scaleY ?? 1,
-            angle: element.angle ?? 0,
-            opacity: element.opacity ?? 1,
-            fill: element.backgroundColor ?? "#2563eb",
-            originX: "left",
-            originY: "top",
-          });
-
-          applyControls(rectangle);
-
-          const meta =
-            rectangle as typeof rectangle &
-              FabricObjectWithMeta;
-
-          meta.elementId = element.id;
-          meta.elementType = element.type;
-
-          canvas.add(rectangle);
-          continue;
-        }
-
-        /*
-         * SQUARE
-         */
-        if (element.type === "square") {
-          const size = Math.max(
-            40,
-            element.width ||
-              element.height ||
-              140
-          );
-
-          const square = new Rect({
-            left: element.x,
-            top: element.y,
-            width: size,
-            height: size,
-            scaleX: element.scaleX ?? 1,
-            scaleY: element.scaleY ?? 1,
-            angle: element.angle ?? 0,
-            opacity: element.opacity ?? 1,
-            fill: element.backgroundColor ?? "#2563eb",
-            originX: "left",
-            originY: "top",
-          });
-
-          applyControls(square);
-
-          const meta =
-            square as typeof square &
-              FabricObjectWithMeta;
-
-          meta.elementId = element.id;
-          meta.elementType = "square";
-
-          canvas.add(square);
-          continue;
-        }
-
-        /*
-         * CIRCLE
-         */
-        if (element.type === "circle") {
-          const radius = 70;
-
-          const circle = new Circle({
-            left: element.x,
-            top: element.y,
-            radius,
-            scaleX:
-              element.scaleX ??
-              (
-                element.width
-                  ? element.width / (radius * 2)
-                  : 1
-              ),
-            scaleY:
-              element.scaleY ??
-              (
-                element.height
-                  ? element.height / (radius * 2)
-                  : 1
-              ),
-            angle: element.angle ?? 0,
-            opacity: element.opacity ?? 1,
-            fill: element.backgroundColor ?? "#2563eb",
-            originX: "left",
-            originY: "top",
-          });
-
-          applyControls(circle);
-
-          const meta =
-            circle as typeof circle &
-              FabricObjectWithMeta;
-
-          meta.elementId = element.id;
-          meta.elementType = "circle";
-
-          canvas.add(circle);
-          continue;
-        }
-
-        /*
-         * TRIANGLE
-         */
-        if (element.type === "triangle") {
-          const triangle = new Triangle({
-            left: element.x,
-            top: element.y,
-            width: element.width || 150,
-            height: element.height || 120,
-            scaleX: element.scaleX ?? 1,
-            scaleY: element.scaleY ?? 1,
-            angle: element.angle ?? 0,
-            opacity: element.opacity ?? 1,
-            fill: element.backgroundColor ?? "#2563eb",
-            originX: "left",
-            originY: "top",
-          });
-
-          applyControls(triangle);
-
-          const meta =
-            triangle as typeof triangle &
-              FabricObjectWithMeta;
-
-          meta.elementId = element.id;
-          meta.elementType = "triangle";
-
-          canvas.add(triangle);
-          continue;
-        }
-
-        /*
-         * POLYGON FAMILY
-         */
-        if (
-          element.type === "polygon" ||
-          element.type === "pentagon" ||
-          element.type === "hexagon" ||
-          element.type === "heptagon" ||
-          element.type === "octagon"
-        ) {
-          const sides =
-            element.shapeSides ??
-            (
-              element.type === "pentagon"
-                ? 5
-                : element.type === "hexagon"
-                  ? 6
-                  : element.type === "heptagon"
-                    ? 7
-                    : element.type === "octagon"
-                      ? 8
-                      : 6
-            );
-
-          const radius = Math.max(
-            30,
-            Math.max(
-              element.width || 140,
-              element.height || 140
-            ) / 2
-          );
-
-          const polygon = new Polygon(
-            getPolygonPoints(sides, radius),
-            {
-              left: element.x,
-              top: element.y,
-              scaleX: element.scaleX ?? 1,
-              scaleY: element.scaleY ?? 1,
-              angle: element.angle ?? 0,
-              opacity: element.opacity ?? 1,
-              fill: element.backgroundColor ?? "#2563eb",
-              originX: "left",
-              originY: "top",
+              applyElementMetadata(image, element);
+              canvas.add(image);
+            } catch (error) {
+              console.error(
+                "Unable to load canvas image:",
+                error,
+              );
             }
-          );
 
-          applyControls(polygon);
+            continue;
+          }
 
-          const meta =
-            polygon as typeof polygon &
-              FabricObjectWithMeta;
+          const object = createElementObject(element);
 
-          meta.elementId = element.id;
-          meta.elementType = element.type;
-          meta.shapeSides = sides;
-
-          canvas.add(polygon);
-          continue;
-        }
-
-        /*
-         * LINES
-         */
-        if (
-          element.type === "line" ||
-          element.type === "arrow" ||
-          element.type === "double-arrow" ||
-          element.type === "dashed-line" ||
-          element.type === "dotted-line"
-        ) {
-          const line = createLineObject({
-            type: element.type,
-            x: element.x,
-            y: element.y,
-            width: element.width,
-            height: element.height,
-            scaleX: element.scaleX,
-            scaleY: element.scaleY,
-            angle: element.angle,
-            opacity: element.opacity,
-            strokeColor: element.strokeColor,
-            strokeWidth: element.strokeWidth,
-            lineDash: element.lineDash,
-          });
-
-          applyControls(line);
-
-          const meta =
-            line as typeof line &
-              FabricObjectWithMeta;
-
-          meta.elementId = element.id;
-          meta.elementType = element.type;
-
-          canvas.add(line);
-          continue;
-        }
-
-        /*
-         * IMAGE
-         */
-        if (
-          element.type === "image" &&
-          element.src
-        ) {
-          try {
-            const image = await FabricImage.fromURL(
-              element.src
-            );
-
-            if (cancelled) return;
-
-            const originalWidth = image.width || 1;
-            const originalHeight = image.height || 1;
-
-            image.set({
-              left: element.x,
-              top: element.y,
-              scaleX:
-                element.scaleX ??
-                (element.width / originalWidth),
-              scaleY:
-                element.scaleY ??
-                (element.height / originalHeight),
-              angle: element.angle ?? 0,
-              opacity: element.opacity ?? 1,
-              selectable: true,
-              evented: true,
-              transparentCorners: false,
-              cornerColor: "#2563eb",
-              cornerStyle: "circle",
-              borderColor: "#2563eb",
-              originX: "left",
-              originY: "top",
-            });
-
-            const meta =
-              image as typeof image &
-                FabricObjectWithMeta;
-
-            meta.elementId = element.id;
-            meta.elementType = "image";
-            meta.imageSrc = element.src;
-
-            canvas.add(image);
-          } catch (error) {
-            console.error(
-              "Could not restore image:",
-              error
-            );
+          if (object) {
+            canvas.add(object);
           }
         }
+
+        if (cancelled) {
+          return;
+        }
+
+        const objectToRestore = activeId
+          ? canvas.getObjects().find(
+              (object) =>
+                getObjectMeta(object).elementId === activeId,
+            )
+          : undefined;
+
+        if (objectToRestore) {
+          canvas.setActiveObject(objectToRestore);
+          setSelectedObject(objectToRestore);
+        } else {
+          canvas.discardActiveObject();
+          setSelectedObject(null);
+        }
+
+        canvas.requestRenderAll();
+
+        lastSyncedSignatureRef.current =
+          getElementSignature(convertCanvasToElements());
+      } finally {
+        rebuildingCanvasRef.current = false;
       }
+    };
 
-      if (cancelled) return;
-
-      canvas.discardActiveObject();
-      setSelectedObject(null);
-      canvas.renderAll();
-    }
-
-    renderElements();
+    void rebuildCanvas();
 
     return () => {
       cancelled = true;
+      rebuildingCanvasRef.current = false;
     };
-  }, [elements]);
+  }, [elements, backgroundColor]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    if (!selectedObject) {
+      if (canvas.getActiveObject()) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+      }
+
+      return;
+    }
+
+    const meta = getObjectMeta(selectedObject);
+
+    if (!meta.elementId) {
+      return;
+    }
+
+    const matchingObject = canvas
+      .getObjects()
+      .find(
+        (object) =>
+          getObjectMeta(object).elementId === meta.elementId,
+      );
+
+    if (
+      matchingObject &&
+      canvas.getActiveObject() !== matchingObject
+    ) {
+      canvas.setActiveObject(matchingObject);
+      canvas.requestRenderAll();
+    }
+  }, [selectedObject]);
 
   return (
-    <div className="relative min-w-0 flex-1 overflow-auto bg-[#f1f3f8]">
-      <div className="flex min-h-full min-w-max items-center justify-center p-8 md:p-10">
-        <div
-          className="relative shrink-0 bg-white shadow-[0_12px_45px_rgba(15,23,42,0.13)] ring-1 ring-slate-200/80"
-          style={{
-            width: "900px",
-            height: "650px",
-          }}
-        >
-          <canvas
-            ref={canvasElementRef}
-            width={900}
-            height={650}
-            style={{
-              display: "block",
-              width: "900px",
-              height: "650px",
-            }}
-          />
-        </div>
+    <div className="flex h-full w-full items-center justify-center overflow-auto bg-gray-100 p-4">
+      <div className="relative shrink-0 rounded-md bg-white shadow-lg">
+        <canvas
+          ref={htmlCanvasRef}
+          aria-label="Certificate editor canvas"
+        />
       </div>
     </div>
   );
 }
-
