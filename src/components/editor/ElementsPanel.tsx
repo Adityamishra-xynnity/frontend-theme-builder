@@ -1,741 +1,825 @@
+import { useState } from "react";
+import type { ReactNode } from "react";
 import {
-  Type,
-  Heading,
-  AlignLeft,
+  Search,
+  ChevronRight,
+  ArrowLeft,
   Square,
   Circle,
   Triangle,
-  ImagePlus,
-  Sparkles,
-  Layers,
-  MousePointer2,
-  Hexagon,
-  Pentagon,
-  Octagon,
+  Star,
+  Cog,
+  Flower2,
+  Leaf,
+  Waves,
+  MessageCircle,
+  GitBranch,
   Minus,
-  ArrowRight,
-  ArrowLeftRight,
-  ChevronDown,
-  ChevronRight,
+  Pentagon,
+  Hexagon,
+  Octagon,
+  Shapes,
+  Sparkles,
 } from "lucide-react";
 
-import { useState } from "react";
-
 import { useFabric } from "../../context/FabricContext";
+import type { ElementType } from "../../types/editor";
+
+interface ShapeItem {
+  label: string;
+  type: ElementType;
+  icon?: ReactNode;
+}
+
+interface ShapeCategory {
+  title: string;
+  icon: ReactNode;
+  items: ShapeItem[];
+}
+
+type PanelView = "root" | "categories" | "items";
+
+const categories: ShapeCategory[] = [
+  {
+    title: "Basic Shapes",
+    icon: <Shapes size={17} />,
+    items: [
+      { label: "Rectangle", type: "rectangle", icon: <Square /> },
+      { label: "Square", type: "square", icon: <Square /> },
+      { label: "Circle", type: "circle", icon: <Circle /> },
+      { label: "Triangle", type: "triangle", icon: <Triangle /> },
+      { label: "Polygon", type: "polygon", icon: <Pentagon /> },
+      { label: "Pentagon", type: "pentagon", icon: <Pentagon /> },
+      { label: "Hexagon", type: "hexagon", icon: <Hexagon /> },
+      { label: "Heptagon", type: "heptagon", icon: <Hexagon /> },
+      { label: "Octagon", type: "octagon", icon: <Octagon /> },
+    ],
+  },
+  {
+    title: "Stars",
+    icon: <Star size={17} />,
+    items: [
+      { label: "Star", type: "star", icon: <Star /> },
+      { label: "Star Outline", type: "star-outline", icon: <Star /> },
+      { label: "4-Point Star", type: "star-4", icon: <Sparkles /> },
+      { label: "6-Point Star", type: "star-6", icon: <Star /> },
+      { label: "8-Point Star", type: "star-8", icon: <Sparkles /> },
+      { label: "12-Point Star", type: "star-12", icon: <Star /> },
+    ],
+  },
+  {
+    title: "Cogs",
+    icon: <Cog size={17} />,
+    items: [
+      { label: "4-Tooth Cog", type: "cog-4", icon: <Cog /> },
+      { label: "6-Tooth Cog", type: "cog-6", icon: <Cog /> },
+      { label: "8-Tooth Cog", type: "cog-8", icon: <Cog /> },
+      { label: "10-Tooth Cog", type: "cog-10", icon: <Cog /> },
+      { label: "12-Tooth Cog", type: "cog-12", icon: <Cog /> },
+      { label: "16-Tooth Cog", type: "cog-16", icon: <Cog /> },
+      { label: "20-Tooth Cog", type: "cog-20", icon: <Cog /> },
+      { label: "24-Tooth Cog", type: "cog-24", icon: <Cog /> },
+    ],
+  },
+  {
+    title: "Square Stars",
+    icon: <Sparkles size={17} />,
+    items: [
+      { label: "4-Point Square Star", type: "square-star-4", icon: <Sparkles /> },
+      { label: "8-Point Square Star", type: "square-star-8", icon: <Star /> },
+      { label: "12-Point Square Star", type: "square-star-12", icon: <Sparkles /> },
+      { label: "16-Point Square Star", type: "square-star-16", icon: <Star /> },
+      { label: "24-Point Square Star", type: "square-star-24", icon: <Sparkles /> },
+      { label: "32-Point Square Star", type: "square-star-32", icon: <Star /> },
+    ],
+  },
+  {
+    title: "Organic Shapes",
+    icon: <Waves size={17} />,
+    items: [
+      { label: "Organic Blob", type: "organic-blob", icon: <Circle /> },
+      { label: "Organic Blob 2", type: "organic-blob-2", icon: <Circle /> },
+      { label: "Organic Blob 3", type: "organic-blob-3", icon: <Circle /> },
+      { label: "Organic Wave", type: "organic-wave", icon: <Waves /> },
+      { label: "Organic Wave 2", type: "organic-wave-2", icon: <Waves /> },
+      { label: "Cloud", type: "organic-cloud", icon: <Waves /> },
+      { label: "Splash", type: "organic-splash", icon: <Sparkles /> },
+      { label: "Pebble", type: "organic-pebble", icon: <Circle /> },
+    ],
+  },
+  {
+    title: "Flowers",
+    icon: <Flower2 size={17} />,
+    items: [
+      { label: "Flower", type: "flower", icon: <Flower2 /> },
+      { label: "5-Petal Flower", type: "flower-5", icon: <Flower2 /> },
+      { label: "8-Petal Flower", type: "flower-8", icon: <Flower2 /> },
+      { label: "12-Petal Flower", type: "flower-12", icon: <Flower2 /> },
+    ],
+  },
+  {
+    title: "Leaves & Petals",
+    icon: <Leaf size={17} />,
+    items: [
+      { label: "Leaf", type: "leaf", icon: <Leaf /> },
+      { label: "Rounded Leaf", type: "leaf-rounded", icon: <Leaf /> },
+      { label: "Pointed Leaf", type: "leaf-pointed", icon: <Leaf /> },
+      { label: "Leaf Pair", type: "leaf-pair", icon: <Leaf /> },
+      { label: "Petal", type: "petal", icon: <Flower2 /> },
+      { label: "Rounded Petal", type: "petal-rounded", icon: <Flower2 /> },
+      { label: "Pointed Petal", type: "petal-pointed", icon: <Flower2 /> },
+      { label: "Vine", type: "vine", icon: <Leaf /> },
+    ],
+  },
+  {
+    title: "Flowchart",
+    icon: <GitBranch size={17} />,
+    items: [
+      { label: "Process", type: "flow-process", icon: <Square /> },
+      { label: "Decision", type: "flow-decision", icon: <Triangle /> },
+      { label: "Terminator", type: "flow-terminator", icon: <Circle /> },
+      { label: "Input / Output", type: "flow-io", icon: <Shapes /> },
+      { label: "Document", type: "flow-document", icon: <Square /> },
+      { label: "Connector", type: "flow-connector", icon: <Circle /> },
+      { label: "Preparation", type: "flow-preparation", icon: <Hexagon /> },
+      { label: "Manual Input", type: "flow-manual-input", icon: <Triangle /> },
+    ],
+  },
+  {
+    title: "Speech Bubbles",
+    icon: <MessageCircle size={17} />,
+    items: [
+      { label: "Speech Bubble", type: "speech-bubble", icon: <MessageCircle /> },
+      { label: "Chat Bubble", type: "chat-bubble", icon: <MessageCircle /> },
+      { label: "Thought Bubble", type: "thought-bubble", icon: <Circle /> },
+      { label: "Rounded Bubble", type: "rounded-bubble", icon: <MessageCircle /> },
+    ],
+  },
+  {
+    title: "Lines & Arrows",
+    icon: <Minus size={17} />,
+    items: [
+      { label: "Line", type: "line", icon: <Minus /> },
+      { label: "Arrow", type: "arrow", icon: <GitBranch /> },
+      { label: "Double Arrow", type: "double-arrow", icon: <GitBranch /> },
+      { label: "Dashed Line", type: "dashed-line", icon: <Minus /> },
+      { label: "Dotted Line", type: "dotted-line", icon: <Minus /> },
+    ],
+  },
+];
+
+const PREVIEW_COLOR = "#64748b";
+const PREVIEW_FILL = "#e2e8f0";
+const PREVIEW_SIZE = 64;
+
+function polygonPoints(points: number[][]): string {
+  return points.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
+function getRegularPolygonPoints(
+  sides: number,
+  radius = 23,
+  center = 32,
+): string {
+  return Array.from({ length: sides }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / sides;
+    return [
+      center + Math.cos(angle) * radius,
+      center + Math.sin(angle) * radius,
+    ];
+  })
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
+}
+
+function getStarPoints(
+  points: number,
+  outerRadius = 25,
+  innerRadius = 11,
+): string {
+  return Array.from({ length: points * 2 }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI) / points;
+    const radius = index % 2 === 0 ? outerRadius : innerRadius;
+
+    return [
+      32 + Math.cos(angle) * radius,
+      32 + Math.sin(angle) * radius,
+    ];
+  })
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
+}
+
+function getCogPoints(teeth: number): string {
+  const radius = 25;
+  const innerRadius = radius * 0.78;
+  const steps = teeth * 4;
+
+  return Array.from({ length: steps }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / steps;
+    const radiusForPoint =
+      index % 4 < 2 ? radius : innerRadius;
+
+    return [
+      32 + Math.cos(angle) * radiusForPoint,
+      32 + Math.sin(angle) * radiusForPoint,
+    ];
+  })
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
+}
+
+function getFlowerPoints(petals: number): string {
+  const steps = petals * 24;
+  const radius = 25;
+
+  return Array.from({ length: steps }, (_, index) => {
+    const angle = (index * Math.PI * 2) / steps;
+    const currentRadius =
+      radius * (0.68 + 0.32 * Math.cos(petals * angle));
+
+    return [
+      32 + Math.cos(angle) * currentRadius,
+      32 + Math.sin(angle) * currentRadius,
+    ];
+  })
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
+}
+
+function getOrganicPoints(variant: number): string {
+  const steps = 80;
+  const radius = 25;
+
+  return Array.from({ length: steps }, (_, index) => {
+    const angle = (index * Math.PI * 2) / steps;
+    const currentRadius =
+      radius *
+      (0.83 +
+        Math.sin(angle * (variant + 2)) * 0.09 +
+        Math.cos(angle * (variant + 3)) * 0.06);
+
+    return [
+      32 + Math.cos(angle) * currentRadius,
+      32 + Math.sin(angle) * currentRadius,
+    ];
+  })
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
+}
+
+function ShapePreview({ type }: { type: ElementType }) {
+  const common = {
+    fill: PREVIEW_FILL,
+    stroke: PREVIEW_COLOR,
+    strokeWidth: 1.8,
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+  };
+
+  const svg = (children: ReactNode) => (
+    <svg
+      viewBox={`0 0 ${PREVIEW_SIZE} ${PREVIEW_SIZE}`}
+      className="h-10 w-10 overflow-visible"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+
+  const regularPolygon = (sides: number) =>
+    svg(<polygon points={getRegularPolygonPoints(sides)} {...common} />);
+
+  if (type === "rectangle") {
+    return svg(
+      <rect x="8" y="13" width="48" height="38" rx="1" {...common} />,
+    );
+  }
+
+  if (type === "square") {
+    return svg(
+      <rect x="11" y="11" width="42" height="42" rx="1" {...common} />,
+    );
+  }
+
+  if (type === "circle") {
+    return svg(<circle cx="32" cy="32" r="23" {...common} />);
+  }
+
+  if (type === "triangle") {
+    return regularPolygon(3);
+  }
+
+  if (type === "polygon") {
+    return regularPolygon(5);
+  }
+
+  if (type === "pentagon") {
+    return regularPolygon(5);
+  }
+
+  if (type === "hexagon") {
+    return regularPolygon(6);
+  }
+
+  if (type === "heptagon") {
+    return regularPolygon(7);
+  }
+
+  if (type === "octagon") {
+    return regularPolygon(8);
+  }
+
+  if (type === "star" || type === "star-outline") {
+    return svg(
+      <polygon
+        points={getStarPoints(5)}
+        {...common}
+        fill={type === "star-outline" ? "white" : PREVIEW_FILL}
+      />,
+    );
+  }
+
+  if (type === "star-4") {
+    return svg(<polygon points={getStarPoints(4, 25, 7)} {...common} />);
+  }
+
+  if (type === "star-6") {
+    return svg(<polygon points={getStarPoints(6, 25, 13)} {...common} />);
+  }
+
+  if (type === "star-8") {
+    return svg(<polygon points={getStarPoints(8, 25, 15)} {...common} />);
+  }
+
+  if (type === "star-12") {
+    return svg(<polygon points={getStarPoints(12, 25, 19)} {...common} />);
+  }
+
+  const cogMatch = /^cog-(\d+)$/.exec(String(type));
+  if (cogMatch) {
+    const teeth = Number(cogMatch[1]);
+
+    return svg(
+      <>
+        <polygon points={getCogPoints(teeth)} {...common} />
+        <circle
+          cx="32"
+          cy="32"
+          r="7"
+          fill="white"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="1.8"
+        />
+      </>,
+    );
+  }
+
+  const squareStarMatch = /^square-star-(\d+)$/.exec(String(type));
+  if (squareStarMatch) {
+    const points = Number(squareStarMatch[1]);
+
+    return svg(
+      <polygon
+        points={getStarPoints(points, 25, points >= 24 ? 22 : 15)}
+        {...common}
+      />,
+    );
+  }
+
+  const flowerMatch = /^flower(?:-(\d+))?$/.exec(String(type));
+  if (flowerMatch) {
+    const petals = flowerMatch[1] ? Number(flowerMatch[1]) : 6;
+
+    return svg(
+      <>
+        <polygon points={getFlowerPoints(petals)} {...common} />
+        <circle
+          cx="32"
+          cy="32"
+          r="4"
+          fill="#f8fafc"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="1.5"
+        />
+      </>,
+    );
+  }
+
+  if (type === "organic-blob" || type === "organic-blob-2" || type === "organic-blob-3") {
+    const variant =
+      type === "organic-blob" ? 1 : type === "organic-blob-2" ? 2 : 3;
+
+    return svg(<polygon points={getOrganicPoints(variant)} {...common} />);
+  }
+
+  if (type === "leaf" || type === "leaf-rounded" || type === "leaf-pointed") {
+    const radius = type === "leaf-rounded" ? 13 : 17;
+    const d =
+      type === "leaf-pointed"
+        ? "M 32 7 Q 58 27 32 57 Q 6 34 32 7 Z"
+        : `M 32 7 Q ${32 + radius} 28 32 57 Q ${32 - radius} 30 32 7 Z`;
+
+    return svg(
+      <>
+        <path d={d} {...common} />
+        <path
+          d="M32 53 Q32 31 32 11"
+          fill="none"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="1.5"
+        />
+      </>,
+    );
+  }
+
+  if (type === "leaf-pair") {
+    return svg(
+      <>
+        <path d="M30 48 Q7 43 11 17 Q34 20 30 48 Z" {...common} />
+        <path d="M34 48 Q57 43 53 17 Q30 20 34 48 Z" {...common} />
+        <path d="M32 54 L32 30" fill="none" stroke={PREVIEW_COLOR} strokeWidth="1.5" />
+      </>,
+    );
+  }
+
+  if (type === "petal" || type === "petal-rounded" || type === "petal-pointed") {
+    const d =
+      type === "petal-pointed"
+        ? "M32 7 Q55 32 32 57 Q9 32 32 7 Z"
+        : type === "petal-rounded"
+          ? "M32 7 C51 7 53 37 32 57 C11 37 13 7 32 7 Z"
+          : "M32 7 Q47 27 32 57 Q17 27 32 7 Z";
+
+    return svg(<path d={d} {...common} />);
+  }
+
+  if (type === "vine") {
+    return svg(
+      <>
+        <path d="M12 52 Q49 43 30 10" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2" />
+        <path d="M23 39 Q7 38 12 25 Q26 26 23 39 Z" {...common} />
+        <path d="M32 28 Q48 28 47 14 Q33 14 32 28 Z" {...common} />
+        <path d="M18 47 Q34 45 36 35 Q22 34 18 47 Z" {...common} />
+      </>,
+    );
+  }
+
+  if (type === "flow-process") {
+    return svg(<rect x="8" y="17" width="48" height="30" rx="1" {...common} />);
+  }
+
+  if (type === "flow-decision") {
+    return svg(<polygon points="32,7 56,32 32,57 8,32" {...common} />);
+  }
+
+  if (type === "flow-terminator") {
+    return svg(<rect x="7" y="18" width="50" height="28" rx="14" {...common} />);
+  }
+
+  if (type === "flow-io") {
+    return svg(<polygon points="18,14 56,14 46,50 8,50" {...common} />);
+  }
+
+  if (type === "flow-document") {
+    return svg(
+      <path d="M12 9 H52 V45 Q42 39 32 45 Q22 51 12 45 Z" {...common} />,
+    );
+  }
+
+  if (type === "flow-connector") {
+    return svg(<circle cx="32" cy="32" r="18" {...common} />);
+  }
+
+  if (type === "flow-preparation") {
+    return svg(<polygon points="18,10 46,10 58,32 46,54 18,54 6,32" {...common} />);
+  }
+
+  if (type === "flow-manual-input") {
+    return svg(<polygon points="9,19 55,9 55,53 9,53" {...common} />);
+  }
+
+  if (
+    type === "speech-bubble" ||
+    type === "chat-bubble" ||
+    type === "rounded-bubble"
+  ) {
+    const radius = type === "rounded-bubble" ? 12 : type === "chat-bubble" ? 8 : 3;
+
+    return svg(
+      <>
+        <rect x="7" y="10" width="50" height="34" rx={radius} {...common} />
+        <path d="M18 43 L14 55 L30 43 Z" {...common} />
+      </>,
+    );
+  }
+
+  if (type === "thought-bubble") {
+    return svg(
+      <>
+        <circle cx="30" cy="24" r="17" {...common} />
+        <circle cx="18" cy="45" r="5" {...common} />
+        <circle cx="11" cy="54" r="3" {...common} />
+      </>,
+    );
+  }
+
+  if (type === "line" || type === "dashed-line" || type === "dotted-line") {
+    return svg(
+      <line
+        x1="7"
+        y1="32"
+        x2="57"
+        y2="32"
+        fill="none"
+        stroke={PREVIEW_COLOR}
+        strokeWidth="2.5"
+        strokeDasharray={
+          type === "dashed-line"
+            ? "7 5"
+            : type === "dotted-line"
+              ? "1 6"
+              : undefined
+        }
+      />,
+    );
+  }
+
+  if (type === "arrow" || type === "double-arrow") {
+    return svg(
+      <>
+        <line
+          x1={type === "double-arrow" ? "10" : "8"}
+          y1="32"
+          x2="56"
+          y2="32"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="2.5"
+        />
+        <polyline points="45,21 56,32 45,43" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2.5" />
+        {type === "double-arrow" && (
+          <polyline points="21,21 10,32 21,43" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2.5" />
+        )}
+      </>,
+    );
+  }
+
+  return svg(
+    <polygon
+      points={polygonPoints([
+        [32, 7],
+        [52, 19],
+        [52, 43],
+        [32, 57],
+        [12, 43],
+        [12, 19],
+      ])}
+      {...common}
+    />,
+  );
+}
 
 export default function ElementsPanel() {
-  const {
-    addShape,
-    convertCanvasToElements,
-    selectObjectById,
-    selectedObject,
-  } = useFabric();
+  const { addShape } = useFabric();
 
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<PanelView>("root");
+  const [selectedCategory, setSelectedCategory] =
+    useState<ShapeCategory | null>(null);
 
-  const [
-    showElements,
-    setShowElements,
-  ] = useState(true);
+  const normalizedSearch = search.trim().toLowerCase();
 
-  const [
-    showShapes,
-    setShowShapes,
-  ] = useState(false);
-
-  const [
-    showLines,
-    setShowLines,
-  ] = useState(false);
-
-  
-
-  const elements =
-    convertCanvasToElements();
-
-  const layers =
-    [...elements].reverse();
-
-  function getLayerName(
-    type: string,
-    index: number
-  ) {
-    const names: Record<
-      string,
-      string
-    > = {
-      heading: "Heading",
-      subheading: "Subheading",
-      text: "Text",
-      rectangle: "Rectangle",
-      square: "Square",
-      circle: "Circle",
-      triangle: "Triangle",
-      polygon: "Polygon",
-      pentagon: "Pentagon",
-      hexagon: "Hexagon",
-      heptagon: "Heptagon",
-      octagon: "Octagon",
-      line: "Line",
-      arrow: "Arrow",
-      "double-arrow":
-        "Double Arrow",
-      "dashed-line":
-        "Dashed Line",
-      "dotted-line":
-        "Dotted Line",
-      image: "Image",
-    };
-
-    return (
-      names[type] ??
-      `Element ${index + 1}`
+  const filteredCategories = categories
+    .map((category) => ({
+      ...category,
+      items: category.items.filter((item) =>
+        item.label.toLowerCase().includes(normalizedSearch),
+      ),
+    }))
+    .filter(
+      (category) =>
+        category.title.toLowerCase().includes(normalizedSearch) ||
+        category.items.length > 0,
     );
-  }
 
-  function getLayerIcon(
-    type: string
-  ) {
-    if (
-      type === "heading"
-    ) {
-      return <Heading size={16} />;
+  const handleOpenShapes = () => {
+    setView("categories");
+    setSelectedCategory(null);
+  };
+
+  const handleOpenCategory = (category: ShapeCategory) => {
+    setSelectedCategory(category);
+    setView("items");
+  };
+
+  const handleBack = () => {
+    if (view === "items") {
+      setView("categories");
+      setSelectedCategory(null);
+    } else if (view === "categories") {
+      setView("root");
+      setSearch("");
     }
+  };
 
-    if (
-      type === "subheading"
-    ) {
-      return (
-        <AlignLeft size={16} />
-      );
-    }
+  const handleAddShape = (type: ElementType) => {
+    addShape(type);
+  };
 
-    if (type === "text") {
-      return <Type size={16} />;
-    }
-
-    if (
-      type === "rectangle" ||
-      type === "square"
-    ) {
-      return <Square size={16} />;
-    }
-
-    if (type === "circle") {
-      return <Circle size={16} />;
-    }
-
-    if (type === "triangle") {
-      return (
-        <Triangle size={16} />
-      );
-    }
-
-    if (
-      type === "polygon" ||
-      type === "pentagon" ||
-      type === "hexagon" ||
-      type === "heptagon" ||
-      type === "octagon"
-    ) {
-      return (
-        <Hexagon size={16} />
-      );
-    }
-
-    if (
-      type === "line" ||
-      type === "dashed-line" ||
-      type === "dotted-line"
-    ) {
-      return <Minus size={16} />;
-    }
-
-    if (type === "arrow") {
-      return (
-        <ArrowRight size={16} />
-      );
-    }
-
-    if (
-      type === "double-arrow"
-    ) {
-      return (
-        <ArrowLeftRight size={16} />
-      );
-    }
-
-    if (type === "image") {
-      return (
-        <ImagePlus size={16} />
-      );
-    }
-
-    return (
-      <MousePointer2 size={16} />
-    );
-  }
-
-  const shapeButton =
-    "h-20 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition flex flex-col items-center justify-center gap-2 bg-white";
-
-  return (
-    <aside className="w-64 shrink-0 bg-white border-r border-gray-200 h-full overflow-y-auto">
-
-      {/* HEADER */}
-      <div className="px-5 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-
-          <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
-            <Sparkles
-              size={18}
-              className="text-gray-700"
-            />
-          </div>
-
-          <div>
-            <h2 className="text-sm font-bold text-gray-900">
-              Elements
-            </h2>
-
-            <p className="text-xs text-gray-500 mt-0.5">
-              Add elements to your design
-            </p>
-          </div>
-
-        </div>
-      </div>
-
-      {/* MAIN ELEMENTS BUTTON */}
-      <div className="px-4 pt-5">
-
+  const renderShapeGrid = (items: ShapeItem[]) => (
+    <div className="grid grid-cols-3 gap-2">
+      {items.map((item) => (
         <button
+          key={item.type}
           type="button"
-          onClick={() =>
-            setShowElements(
-              (previous) =>
-                !previous
-            )
-          }
-          className="w-full flex items-center justify-between px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition"
+          title={`Add ${item.label}`}
+          onClick={() => handleAddShape(item.type)}
+          className="group flex min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-transparent px-1 py-3 text-center transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
         >
-          <div className="flex items-center gap-2">
-
-            <Sparkles
-              size={17}
-              className="text-gray-700"
-            />
-
-            <span className="text-sm font-semibold text-gray-800">
-              Elements
-            </span>
-
-          </div>
-
-          {showElements ? (
-            <ChevronDown
-              size={17}
-              className="text-gray-500"
-            />
-          ) : (
-            <ChevronRight
-              size={17}
-              className="text-gray-500"
-            />
-          )}
+          <span className="flex h-12 w-full items-center justify-center text-gray-600 transition group-hover:text-blue-600">
+            <ShapePreview type={item.type} />
+          </span>
+          <span className="w-full break-words text-[10px] leading-4 text-gray-600 group-hover:text-blue-700">
+            {item.label}
+          </span>
         </button>
+      ))}
+    </div>
+  );
 
-      </div>
-
-      {showElements && (
-        <>
-        
-
-          {/* SHAPES */}
-          <div className="px-4 pt-6">
-
-            <button
-              type="button"
-              onClick={() =>
-                setShowShapes(
-                  (previous) =>
-                    !previous
-                )
-              }
-              className="w-full flex items-center justify-between px-3 py-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
-            >
-              <div className="flex items-center gap-2">
-
-                <Square
-                  size={17}
-                  className="text-gray-700"
-                />
-
-                <span className="text-sm font-semibold text-gray-800">
-                  Shapes
-                </span>
-
-              </div>
-
-              {showShapes ? (
-                <ChevronDown
-                  size={17}
-                  className="text-gray-500"
-                />
-              ) : (
-                <ChevronRight
-                  size={17}
-                  className="text-gray-500"
-                />
-              )}
-            </button>
-
-            {showShapes && (
-              <div className="mt-3">
-
-                <div className="grid grid-cols-2 gap-2">
-
-                  {/* RECTANGLE */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "rectangle"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Square
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Rectangle
-                    </span>
-                  </button>
-
-                  {/* SQUARE */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "square"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <div className="w-6 h-6 border-2 border-gray-700 rounded-sm" />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Square
-                    </span>
-                  </button>
-
-                  {/* CIRCLE */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "circle"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Circle
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Circle
-                    </span>
-                  </button>
-
-                  {/* TRIANGLE */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "triangle"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Triangle
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Triangle
-                    </span>
-                  </button>
-
-                  {/* POLYGON */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "polygon"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Hexagon
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Polygon
-                    </span>
-                  </button>
-
-                  {/* PENTAGON */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "pentagon"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Pentagon
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Pentagon
-                    </span>
-                  </button>
-
-                  {/* HEXAGON */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "hexagon"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Hexagon
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Hexagon
-                    </span>
-                  </button>
-
-                  {/* HEPTAGON */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "heptagon"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Hexagon
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Heptagon
-                    </span>
-                  </button>
-
-                  {/* OCTAGON */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addShape(
-                        "octagon"
-                      )
-                    }
-                    className={shapeButton}
-                  >
-                    <Octagon
-                      size={24}
-                      strokeWidth={1.8}
-                    />
-
-                    <span className="text-[11px] font-medium text-gray-600">
-                      Octagon
-                    </span>
-                  </button>
-
-                </div>
-
-                {/* LINES */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowLines(
-                      (previous) =>
-                        !previous
-                    )
-                  }
-                  className="w-full mt-3 flex items-center justify-between px-3 py-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
-                >
-                  <div className="flex items-center gap-2">
-
-                    <Minus
-                      size={17}
-                      className="text-gray-700"
-                    />
-
-                    <span className="text-sm font-semibold text-gray-800">
-                      Lines
-                    </span>
-
-                  </div>
-
-                  {showLines ? (
-                    <ChevronDown
-                      size={17}
-                      className="text-gray-500"
-                    />
-                  ) : (
-                    <ChevronRight
-                      size={17}
-                      className="text-gray-500"
-                    />
-                  )}
-                </button>
-
-                {showLines && (
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-
-                    {/* LINE */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addShape(
-                          "line"
-                        )
-                      }
-                      className={shapeButton}
-                    >
-                      <Minus
-                        size={25}
-                      />
-
-                      <span className="text-[11px] font-medium text-gray-600">
-                        Line
-                      </span>
-                    </button>
-
-                    {/* ARROW */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addShape(
-                          "arrow"
-                        )
-                      }
-                      className={shapeButton}
-                    >
-                      <ArrowRight
-                        size={25}
-                      />
-
-                      <span className="text-[11px] font-medium text-gray-600">
-                        Arrow
-                      </span>
-                    </button>
-
-                    {/* DOUBLE ARROW */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addShape(
-                          "double-arrow"
-                        )
-                      }
-                      className={shapeButton}
-                    >
-                      <ArrowLeftRight
-                        size={25}
-                      />
-
-                      <span className="text-[11px] font-medium text-gray-600">
-                        Double Arrow
-                      </span>
-                    </button>
-
-                    {/* DASHED */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addShape(
-                          "dashed-line"
-                        )
-                      }
-                      className={shapeButton}
-                    >
-                      <div className="w-8 border-t-2 border-dashed border-gray-700" />
-
-                      <span className="text-[11px] font-medium text-gray-600">
-                        Dashed
-                      </span>
-                    </button>
-
-                    {/* DOTTED */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addShape(
-                          "dotted-line"
-                        )
-                      }
-                      className={shapeButton}
-                    >
-                      <div className="w-8 border-t-2 border-dotted border-gray-700" />
-
-                      <span className="text-[11px] font-medium text-gray-600">
-                        Dotted
-                      </span>
-                    </button>
-
-                  </div>
-                )}
-
-              </div>
-            )}
-
-          </div>
-        </>
-      )}
-
-      {/* LAYERS */}
-      <div className="px-4 pt-6 pb-6 border-t border-gray-100 mt-4">
-
-        <div className="flex items-center justify-between px-1 mb-3">
-
-          <div className="flex items-center gap-2">
-
-            <Layers
-              size={15}
-              className="text-gray-500"
-            />
-
-            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
-              Layers
-            </p>
-
-          </div>
-
-          <span className="text-[10px] font-medium text-gray-400">
-            {layers.length}
+  const renderCategoryList = (items: ShapeCategory[]) => (
+    <div className="space-y-2">
+      {items.map((category) => (
+        <button
+          key={category.title}
+          type="button"
+          onClick={() => handleOpenCategory(category)}
+          className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-600">
+            {category.icon}
           </span>
 
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-gray-800">
+              {category.title}
+            </span>
+            <span className="mt-1 block text-xs text-gray-500">
+              {category.items.length} shapes
+            </span>
+          </span>
+
+          <ChevronRight size={17} className="shrink-0 text-gray-400" />
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="border-b border-gray-200 p-4">
+        <div className="flex items-center gap-2">
+          {view !== "root" && (
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Go back"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+            >
+              <ArrowLeft size={17} />
+            </button>
+          )}
+
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              {view === "root"
+                ? "Elements"
+                : view === "categories"
+                  ? "Shapes"
+                  : selectedCategory?.title ?? "Shapes"}
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              {view === "root"
+                ? "Browse elements for your design."
+                : view === "categories"
+                  ? "Choose a shape category."
+                  : "Select a shape to add it to your canvas."}
+            </p>
+          </div>
         </div>
 
-        {layers.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
-
-            <Layers
-              size={22}
-              className="mx-auto text-gray-300"
-            />
-
-            <p className="text-xs font-medium text-gray-500 mt-2">
-              No layers yet
-            </p>
-
-            <p className="text-[11px] text-gray-400 mt-1">
-              Add an element to see it here
-            </p>
-
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-
-            {layers.map(
-              (element, index) => {
-
-                const isSelected =
-                  selectedObject &&
-                  selectedObject.elementId ===
-                    element.id;
-
-                return (
-                  <button
-                    key={element.id}
-                    type="button"
-                    onClick={() =>
-                      selectObjectById(
-                        element.id
-                      )
-                    }
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition ${
-                      isSelected
-                        ? "bg-gray-100 border border-gray-300"
-                        : "bg-white border border-transparent hover:bg-gray-50 hover:border-gray-200"
-                    }`}
-                  >
-
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                        isSelected
-                          ? "bg-white text-gray-900"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {getLayerIcon(
-                        element.type
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-
-                      <p
-                        className={`text-xs font-medium truncate ${
-                          isSelected
-                            ? "text-gray-900"
-                            : "text-gray-700"
-                        }`}
-                      >
-                        {element.text
-                          ? element.text
-                          : getLayerName(
-                              element.type,
-                              index
-                            )}
-                      </p>
-
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        {getLayerName(
-                          element.type,
-                          index
-                        )}
-                      </p>
-
-                    </div>
-
-                    {isSelected && (
-                      <span className="text-[10px] font-semibold text-gray-500">
-                        Selected
-                      </span>
-                    )}
-
-                  </button>
-                );
-              }
-            )}
-
-          </div>
-        )}
-
+        <div className="relative mt-4">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search elements..."
+            aria-label="Search elements"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+          />
+        </div>
       </div>
 
-    </aside>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {normalizedSearch ? (
+          filteredCategories.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+              <Search size={28} className="mb-3 text-gray-300" />
+              <p className="text-sm font-medium text-gray-700">
+                No elements found
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Try a different search term.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredCategories.map((category) => {
+                const matchingItems = category.items.filter((item) =>
+                  item.label.toLowerCase().includes(normalizedSearch),
+                );
+
+                return (
+                  <section
+                    key={category.title}
+                    className="overflow-hidden rounded-xl border border-gray-100"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCategory(category)}
+                      className="flex w-full items-center gap-3 bg-gray-50 p-3 text-left transition hover:bg-gray-100"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 shadow-sm">
+                        {category.icon}
+                      </span>
+                      <span className="flex-1 text-sm font-semibold text-gray-800">
+                        {category.title}
+                      </span>
+                      <ChevronRight size={16} className="text-gray-500" />
+                    </button>
+
+                    {matchingItems.length > 0 && (
+                      <div className="p-2">
+                        {renderShapeGrid(matchingItems)}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          )
+        ) : view === "root" ? (
+          <button
+            type="button"
+            onClick={handleOpenShapes}
+            className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Shapes size={22} />
+            </span>
+
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-900">
+                Shapes
+              </span>
+              <span className="mt-1 block text-xs text-gray-500">
+                Explore all shape categories
+              </span>
+            </span>
+
+            <ChevronRight size={18} className="text-gray-400" />
+          </button>
+        ) : view === "categories" ? (
+          renderCategoryList(categories)
+        ) : selectedCategory ? (
+          <div>
+            <div className="mb-3 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-gray-600">{selectedCategory.icon}</span>
+              <span className="text-sm font-semibold text-gray-800">
+                {selectedCategory.title}
+              </span>
+              <span className="ml-auto text-xs text-gray-500">
+                {selectedCategory.items.length} shapes
+              </span>
+            </div>
+
+            {renderShapeGrid(selectedCategory.items)}
+          </div>
+        ) : (
+          renderCategoryList(categories)
+        )}
+      </div>
+
+      <div className="border-t border-gray-200 px-4 py-3">
+        <p className="text-[11px] leading-4 text-gray-400">
+          Select a shape to add it to your canvas. You can then move, resize,
+          rotate, and customize it.
+        </p>
+      </div>
+    </div>
   );
 }
