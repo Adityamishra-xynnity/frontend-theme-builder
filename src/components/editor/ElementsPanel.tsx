@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -172,10 +173,6 @@ const PREVIEW_COLOR = "#64748b";
 const PREVIEW_FILL = "#e2e8f0";
 const PREVIEW_SIZE = 64;
 
-function polygonPoints(points: number[][]): string {
-  return points.map(([x, y]) => `${x},${y}`).join(" ");
-}
-
 function getRegularPolygonPoints(
   sides: number,
   radius = 23,
@@ -183,6 +180,7 @@ function getRegularPolygonPoints(
 ): string {
   return Array.from({ length: sides }, (_, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / sides;
+
     return [
       center + Math.cos(angle) * radius,
       center + Math.sin(angle) * radius,
@@ -217,8 +215,7 @@ function getCogPoints(teeth: number): string {
 
   return Array.from({ length: steps }, (_, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / steps;
-    const radiusForPoint =
-      index % 4 < 2 ? radius : innerRadius;
+    const radiusForPoint = index % 4 < 2 ? radius : innerRadius;
 
     return [
       32 + Math.cos(angle) * radiusForPoint,
@@ -306,29 +303,11 @@ function ShapePreview({ type }: { type: ElementType }) {
     return svg(<circle cx="32" cy="32" r="23" {...common} />);
   }
 
-  if (type === "triangle") {
-    return regularPolygon(3);
-  }
-
-  if (type === "polygon") {
-    return regularPolygon(5);
-  }
-
-  if (type === "pentagon") {
-    return regularPolygon(5);
-  }
-
-  if (type === "hexagon") {
-    return regularPolygon(6);
-  }
-
-  if (type === "heptagon") {
-    return regularPolygon(7);
-  }
-
-  if (type === "octagon") {
-    return regularPolygon(8);
-  }
+  if (type === "triangle") return regularPolygon(3);
+  if (type === "polygon" || type === "pentagon") return regularPolygon(5);
+  if (type === "hexagon") return regularPolygon(6);
+  if (type === "heptagon") return regularPolygon(7);
+  if (type === "octagon") return regularPolygon(8);
 
   if (type === "star" || type === "star-outline") {
     return svg(
@@ -357,6 +336,7 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   const cogMatch = /^cog-(\d+)$/.exec(String(type));
+
   if (cogMatch) {
     const teeth = Number(cogMatch[1]);
 
@@ -376,6 +356,7 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   const squareStarMatch = /^square-star-(\d+)$/.exec(String(type));
+
   if (squareStarMatch) {
     const points = Number(squareStarMatch[1]);
 
@@ -387,9 +368,21 @@ function ShapePreview({ type }: { type: ElementType }) {
     );
   }
 
-  const flowerMatch = /^flower(?:-(\d+))?$/.exec(String(type));
-  if (flowerMatch) {
-    const petals = flowerMatch[1] ? Number(flowerMatch[1]) : 6;
+  // Only the four flower types present in the existing category are previewed.
+  if (
+    type === "flower" ||
+    type === "flower-5" ||
+    type === "flower-8" ||
+    type === "flower-12"
+  ) {
+    const petals =
+      type === "flower-5"
+        ? 5
+        : type === "flower-8"
+          ? 8
+          : type === "flower-12"
+            ? 12
+            : 6;
 
     return svg(
       <>
@@ -406,25 +399,60 @@ function ShapePreview({ type }: { type: ElementType }) {
     );
   }
 
-  if (type === "organic-blob" || type === "organic-blob-2" || type === "organic-blob-3") {
-    const variant =
-      type === "organic-blob" ? 1 : type === "organic-blob-2" ? 2 : 3;
+  if (
+    type === "organic-blob" ||
+    type === "organic-blob-2" ||
+    type === "organic-blob-3" ||
+    type === "organic-cloud" ||
+    type === "organic-splash" ||
+    type === "organic-pebble"
+  ) {
+    const variantMap: Partial<Record<string, number>> = {
+      "organic-blob": 1,
+      "organic-blob-2": 2,
+      "organic-blob-3": 3,
+      "organic-cloud": 4,
+      "organic-splash": 5,
+      "organic-pebble": 6,
+    };
 
-    return svg(<polygon points={getOrganicPoints(variant)} {...common} />);
+    return svg(
+      <polygon
+        points={getOrganicPoints(variantMap[String(type)] ?? 1)}
+        {...common}
+      />,
+    );
+  }
+
+  if (type === "organic-wave") {
+    return svg(
+      <path
+        d="M 0 25 Q 15 0 30 25 T 60 25 L 60 52 L 0 52 Z"
+        {...common}
+      />,
+    );
+  }
+
+  if (type === "organic-wave-2") {
+    return svg(
+      <path
+        d="M 0 28 C 10 0 20 55 30 28 S 50 0 60 28 L 60 52 L 0 52 Z"
+        {...common}
+      />,
+    );
   }
 
   if (type === "leaf" || type === "leaf-rounded" || type === "leaf-pointed") {
-    const radius = type === "leaf-rounded" ? 13 : 17;
     const d =
-      type === "leaf-pointed"
-        ? "M 32 7 Q 58 27 32 57 Q 6 34 32 7 Z"
-        : `M 32 7 Q ${32 + radius} 28 32 57 Q ${32 - radius} 30 32 7 Z`;
+      type === "leaf-rounded"
+        ? "M 7 32 Q 12 7 57 7 Q 57 32 7 32 Z"
+        : "M 7 32 Q 17 7 57 7 Q 52 27 7 32 Z";
 
     return svg(
       <>
         <path d={d} {...common} />
         <path
-          d="M32 53 Q32 31 32 11"
+          d="M 9 31 Q 31 23 55 9"
           fill="none"
           stroke={PREVIEW_COLOR}
           strokeWidth="1.5"
@@ -436,14 +464,23 @@ function ShapePreview({ type }: { type: ElementType }) {
   if (type === "leaf-pair") {
     return svg(
       <>
-        <path d="M30 48 Q7 43 11 17 Q34 20 30 48 Z" {...common} />
-        <path d="M34 48 Q57 43 53 17 Q30 20 34 48 Z" {...common} />
-        <path d="M32 54 L32 30" fill="none" stroke={PREVIEW_COLOR} strokeWidth="1.5" />
+        <path d="M 5 40 Q 10 8 32 8 Q 34 30 5 40 Z" {...common} />
+        <path d="M 32 48 Q 32 15 58 12 Q 60 35 32 48 Z" {...common} />
+        <path
+          d="M 5 40 Q 24 31 32 24"
+          fill="none"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="1.5"
+        />
       </>,
     );
   }
 
-  if (type === "petal" || type === "petal-rounded" || type === "petal-pointed") {
+  if (
+    type === "petal" ||
+    type === "petal-rounded" ||
+    type === "petal-pointed"
+  ) {
     const d =
       type === "petal-pointed"
         ? "M32 7 Q55 32 32 57 Q9 32 32 7 Z"
@@ -456,12 +493,12 @@ function ShapePreview({ type }: { type: ElementType }) {
 
   if (type === "vine") {
     return svg(
-      <>
-        <path d="M12 52 Q49 43 30 10" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2" />
-        <path d="M23 39 Q7 38 12 25 Q26 26 23 39 Z" {...common} />
-        <path d="M32 28 Q48 28 47 14 Q33 14 32 28 Z" {...common} />
-        <path d="M18 47 Q34 45 36 35 Q22 34 18 47 Z" {...common} />
-      </>,
+      <path
+        d="M 5 54 Q 24 48 20 33 T 38 15 Q 51 11 48 24 T 59 38"
+        fill="none"
+        stroke={PREVIEW_COLOR}
+        strokeWidth="2"
+      />,
     );
   }
 
@@ -470,7 +507,7 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   if (type === "flow-decision") {
-    return svg(<polygon points="32,7 56,32 32,57 8,32" {...common} />);
+    return svg(<polygon points="32,5 59,32 32,59 5,32" {...common} />);
   }
 
   if (type === "flow-terminator") {
@@ -492,39 +529,55 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   if (type === "flow-preparation") {
-    return svg(<polygon points="18,10 46,10 58,32 46,54 18,54 6,32" {...common} />);
+    return svg(
+      <polygon points="18,10 46,10 58,32 46,54 18,54 6,32" {...common} />,
+    );
   }
 
   if (type === "flow-manual-input") {
     return svg(<polygon points="9,19 55,9 55,53 9,53" {...common} />);
   }
 
-  if (
-    type === "speech-bubble" ||
-    type === "chat-bubble" ||
-    type === "rounded-bubble"
-  ) {
-    const radius = type === "rounded-bubble" ? 12 : type === "chat-bubble" ? 8 : 3;
-
+  if (type === "speech-bubble") {
     return svg(
-      <>
-        <rect x="7" y="10" width="50" height="34" rx={radius} {...common} />
-        <path d="M18 43 L14 55 L30 43 Z" {...common} />
-      </>,
+      <path
+        d="M 5 9 L 59 9 L 59 43 L 30 43 L 18 56 L 20 43 L 5 43 Z"
+        {...common}
+      />,
+    );
+  }
+
+  if (type === "chat-bubble") {
+    return svg(
+      <path
+        d="M 15 8 H 49 Q 59 8 59 18 V 38 Q 59 47 49 47 H 28 L 15 57 L 18 47 Q 5 47 5 37 V 18 Q 5 8 15 8 Z"
+        {...common}
+      />,
     );
   }
 
   if (type === "thought-bubble") {
     return svg(
       <>
-        <circle cx="30" cy="24" r="17" {...common} />
-        <circle cx="18" cy="45" r="5" {...common} />
-        <circle cx="11" cy="54" r="3" {...common} />
+        <path
+          d="M 20 17 C 7 17 5 32 13 38 C 5 49 18 57 29 51 C 39 60 51 51 50 42 C 61 34 53 20 44 22 C 36 11 26 12 20 17 Z"
+          {...common}
+        />
+        <circle cx="15" cy="48" r="3" {...common} />
+        <circle cx="9" cy="55" r="2" {...common} />
       </>,
     );
   }
 
-  if (type === "line" || type === "dashed-line" || type === "dotted-line") {
+  if (type === "rounded-bubble") {
+    return svg(<rect x="6" y="9" width="52" height="37" rx="10" {...common} />);
+  }
+
+  if (
+    type === "line" ||
+    type === "dashed-line" ||
+    type === "dotted-line"
+  ) {
     return svg(
       <line
         x1="7"
@@ -556,9 +609,19 @@ function ShapePreview({ type }: { type: ElementType }) {
           stroke={PREVIEW_COLOR}
           strokeWidth="2.5"
         />
-        <polyline points="45,21 56,32 45,43" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2.5" />
+        <polyline
+          points="45,21 56,32 45,43"
+          fill="none"
+          stroke={PREVIEW_COLOR}
+          strokeWidth="2.5"
+        />
         {type === "double-arrow" && (
-          <polyline points="21,21 10,32 21,43" fill="none" stroke={PREVIEW_COLOR} strokeWidth="2.5" />
+          <polyline
+            points="21,21 10,32 21,43"
+            fill="none"
+            stroke={PREVIEW_COLOR}
+            strokeWidth="2.5"
+          />
         )}
       </>,
     );
@@ -566,14 +629,7 @@ function ShapePreview({ type }: { type: ElementType }) {
 
   return svg(
     <polygon
-      points={polygonPoints([
-        [32, 7],
-        [52, 19],
-        [52, 43],
-        [32, 57],
-        [12, 43],
-        [12, 19],
-      ])}
+      points="32,7 52,19 52,43 32,57 12,43 12,19"
       {...common}
     />,
   );
