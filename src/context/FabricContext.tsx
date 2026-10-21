@@ -57,7 +57,7 @@ type FabricObjectWithMeta = {
 
 type TextElementType = "heading" | "subheading" | "text";
 
-type ShapeElementType =
+export type ShapeElementType =
   | "rectangle" | "circle" | "triangle" | "square" | "polygon"
   | "pentagon" | "hexagon" | "heptagon" | "octagon"
   | "line" | "arrow" | "double-arrow" | "dashed-line" | "dotted-line"

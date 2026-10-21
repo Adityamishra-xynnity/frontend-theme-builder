@@ -1,10 +1,11 @@
 
 import {
-  LayoutTemplate,
   Shapes,
   Type,
-  Upload,
-  Wrench,
+  CloudUpload,
+  Sparkles,
+  PanelsTopLeft,
+  Code2
 } from "lucide-react";
 
 interface EditorSidebarProps {
@@ -19,8 +20,8 @@ export default function EditorSidebar({
   const sidebarItems = [
     {
       id: "templates",
-      label: "Templates",
-      icon: LayoutTemplate,
+      label: "Design",
+      icon: PanelsTopLeft,
     },
     {
       id: "elements",
@@ -35,17 +36,22 @@ export default function EditorSidebar({
     {
       id: "uploads",
       label: "Uploads",
-      icon: Upload,
+      icon: CloudUpload,
     },
     {
       id: "tools",
       label: "Tools",
-      icon: Wrench,
+      icon: Sparkles,
+    },
+    {
+      id: "html-import",
+      label: "HTML Import",
+      icon: Code2,
     },
   ];
 
   return (
-    <aside className="relative z-20 flex h-full w-[76px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-slate-200 bg-white px-2 py-4">
+    <aside className="relative z-30 flex h-full w-[76px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-b-gray-100 bg-gray-50/80 px-1.5 py-3">
       {sidebarItems.map((item) => {
         const Icon = item.icon;
         const isActive = activePanel === item.id;
@@ -58,23 +64,25 @@ export default function EditorSidebar({
             aria-label={item.label}
             aria-pressed={isActive}
             title={item.label}
-            className={`group flex min-h-[68px] w-full shrink-0 flex-col items-center justify-center gap-2 rounded-xl px-1 py-2 text-[11px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-              isActive
-                ? "bg-blue-50 text-blue-700 shadow-sm"
-                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+            className={`group flex min-h-[64px] w-full shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-[11px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${isActive
+              ? "bg-violet-50 text-violet-700"
+              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              }`}
           >
             <span
-              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                isActive
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-transparent text-slate-500 group-hover:bg-slate-100 group-hover:text-slate-800"
-              }`}
+              className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${isActive
+                ? "bg-violet-600 text-white shadow-md shadow-violet-200"
+                : "text-gray-700 group-hover:bg-gray-100 group-hover:text-gray-900"
+                }`}
             >
-              <Icon size={21} strokeWidth={isActive ? 2.2 : 1.8} />
+              <Icon
+                size={24}
+                strokeWidth={2.5}
+                className="transition-transform duration-200 group-hover:scale-110"
+              />
             </span>
 
-            <span className="max-w-full truncate">
+            <span className="max-w-full truncate text-[11px] font-semibold tracking-tight">
               {item.label}
             </span>
           </button>
@@ -83,4 +91,3 @@ export default function EditorSidebar({
     </aside>
   );
 }
-

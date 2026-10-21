@@ -8,6 +8,7 @@ import UploadsPanel from "./UploadsPanel";
 import ToolsPanel from "./ToolsPanel";
 
 import { templates } from "../../data/templates";
+import HTMLImportPanel from "./HTMLImportPanel";
 
 interface EditorPanelProps {
   activePanel: string;
@@ -27,12 +28,11 @@ export default function EditorPanel({
   };
 
   const panelClass =
-    "h-full w-72 shrink-0 overflow-y-auto border-r border-slate-200 bg-white";
-
+    "relative z-20 ml-2 mr-3 h-[calc(100%-16px)] w-72 shrink-0 self-center overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-xl shadow-gray-200/40";
   if (activePanel === "templates") {
     return (
       <aside
-        className={`${panelClass} bg-slate-50/80`}
+        className={`${panelClass} bg-white`}
       >
         {/* Panel Header */}
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-5 backdrop-blur-md">
@@ -248,6 +248,14 @@ export default function EditorPanel({
       </aside>
     );
   }
+
+  if (activePanel === "html-import") {
+  return (
+    <aside className={panelClass}>
+      <HTMLImportPanel />
+    </aside>
+  );
+}
 
   return null;
 }

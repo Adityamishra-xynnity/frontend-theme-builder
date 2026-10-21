@@ -24,11 +24,13 @@ import {
 } from "lucide-react";
 
 import { useFabric } from "../../context/FabricContext";
+import type { ShapeElementType } from "../../context/FabricContext";
 import type { ElementType } from "../../types/editor";
+
 
 interface ShapeItem {
   label: string;
-  type: ElementType;
+  type: ShapeElementType;
   icon?: ReactNode;
 }
 
@@ -678,7 +680,7 @@ export default function ElementsPanel() {
     }
   };
 
-  const handleAddShape = (type: ElementType) => {
+  const handleAddShape = (type: ShapeElementType) => {
     addShape(type);
   };
 

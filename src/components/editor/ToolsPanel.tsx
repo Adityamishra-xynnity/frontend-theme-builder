@@ -34,12 +34,12 @@ export default function ToolsPanel() {
   const [weight, setWeight] = useState(5);
   const [transparency, setTransparency] = useState(100);
 
-  const rowClass = (selected: boolean) =>
-    `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-      selected
-        ? "bg-violet-50 font-semibold text-violet-800"
-        : "text-gray-700 hover:bg-gray-100"
-    }`;
+const rowClass = (selected: boolean) =>
+  `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+    selected
+      ? "bg-violet-50 font-semibold text-violet-800"
+      : "text-gray-700 hover:bg-gray-100"
+  }`;
 
   function activateSelect() {
     setActiveTool("select");
@@ -302,6 +302,8 @@ export default function ToolsPanel() {
             <Table2 size={20} strokeWidth={1.8} />
             <span>Table</span>
           </button>
+
+      
         </div>
       </div>
     </aside>
