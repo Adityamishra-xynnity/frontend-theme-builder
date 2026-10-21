@@ -1,4 +1,3 @@
-
 import {
   Shapes,
   Type,
@@ -69,6 +68,10 @@ export default function EditorSidebar({
               : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
           >
+            {isActive && (
+              <span className="absolute -left-[9px] top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-blue-600" />
+            )}
+
             <span
               className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${isActive
                 ? "bg-violet-600 text-white shadow-md shadow-violet-200"

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -25,7 +24,7 @@ import {
 
 import { useFabric } from "../../context/FabricContext";
 import type { ShapeElementType } from "../../context/FabricContext";
-import type { ElementType } from "../../types/editor";
+// import type { ElementType } from "../../types/editor";
 
 
 interface ShapeItem {
@@ -171,8 +170,8 @@ const categories: ShapeCategory[] = [
   },
 ];
 
-const PREVIEW_COLOR = "#64748b";
-const PREVIEW_FILL = "#e2e8f0";
+const PREVIEW_COLOR = "#2563eb";
+const PREVIEW_FILL = "#dbeafe";
 const PREVIEW_SIZE = 64;
 
 function getRegularPolygonPoints(
@@ -267,7 +266,7 @@ function getOrganicPoints(variant: number): string {
     .join(" ");
 }
 
-function ShapePreview({ type }: { type: ElementType }) {
+function ShapePreview({ type }: { type: ShapeElementType }) {
   const common = {
     fill: PREVIEW_FILL,
     stroke: PREVIEW_COLOR,
@@ -370,7 +369,6 @@ function ShapePreview({ type }: { type: ElementType }) {
     );
   }
 
-  // Only the four flower types present in the existing category are previewed.
   if (
     type === "flower" ||
     type === "flower-5" ||
@@ -444,7 +442,11 @@ function ShapePreview({ type }: { type: ElementType }) {
     );
   }
 
-  if (type === "leaf" || type === "leaf-rounded" || type === "leaf-pointed") {
+  if (
+    type === "leaf" ||
+    type === "leaf-rounded" ||
+    type === "leaf-pointed"
+  ) {
     const d =
       type === "leaf-rounded"
         ? "M 7 32 Q 12 7 57 7 Q 57 32 7 32 Z"
@@ -505,24 +507,35 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   if (type === "flow-process") {
-    return svg(<rect x="8" y="17" width="48" height="30" rx="1" {...common} />);
+    return svg(
+      <rect x="8" y="17" width="48" height="30" rx="1" {...common} />,
+    );
   }
 
   if (type === "flow-decision") {
-    return svg(<polygon points="32,5 59,32 32,59 5,32" {...common} />);
+    return svg(
+      <polygon points="32,5 59,32 32,59 5,32" {...common} />,
+    );
   }
 
   if (type === "flow-terminator") {
-    return svg(<rect x="7" y="18" width="50" height="28" rx="14" {...common} />);
+    return svg(
+      <rect x="7" y="18" width="50" height="28" rx="14" {...common} />,
+    );
   }
 
   if (type === "flow-io") {
-    return svg(<polygon points="18,14 56,14 46,50 8,50" {...common} />);
+    return svg(
+      <polygon points="18,14 56,14 46,50 8,50" {...common} />,
+    );
   }
 
   if (type === "flow-document") {
     return svg(
-      <path d="M12 9 H52 V45 Q42 39 32 45 Q22 51 12 45 Z" {...common} />,
+      <path
+        d="M12 9 H52 V45 Q42 39 32 45 Q22 51 12 45 Z"
+        {...common}
+      />,
     );
   }
 
@@ -532,12 +545,17 @@ function ShapePreview({ type }: { type: ElementType }) {
 
   if (type === "flow-preparation") {
     return svg(
-      <polygon points="18,10 46,10 58,32 46,54 18,54 6,32" {...common} />,
+      <polygon
+        points="18,10 46,10 58,32 46,54 18,54 6,32"
+        {...common}
+      />,
     );
   }
 
   if (type === "flow-manual-input") {
-    return svg(<polygon points="9,19 55,9 55,53 9,53" {...common} />);
+    return svg(
+      <polygon points="9,19 55,9 55,53 9,53" {...common} />,
+    );
   }
 
   if (type === "speech-bubble") {
@@ -572,7 +590,9 @@ function ShapePreview({ type }: { type: ElementType }) {
   }
 
   if (type === "rounded-bubble") {
-    return svg(<rect x="6" y="9" width="52" height="37" rx="10" {...common} />);
+    return svg(
+      <rect x="6" y="9" width="52" height="37" rx="10" {...common} />,
+    );
   }
 
   if (
@@ -685,19 +705,20 @@ export default function ElementsPanel() {
   };
 
   const renderShapeGrid = (items: ShapeItem[]) => (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-3">
       {items.map((item) => (
         <button
           key={item.type}
           type="button"
           title={`Add ${item.label}`}
           onClick={() => handleAddShape(item.type)}
-          className="group flex min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-transparent px-1 py-3 text-center transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
+          className="group flex min-w-0 flex-col items-center justify-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white px-1.5 py-3.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/60 hover:shadow-[0_8px_20px_rgba(37,99,235,0.09)] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1 active:scale-[0.98]"
         >
-          <span className="flex h-12 w-full items-center justify-center text-gray-600 transition group-hover:text-blue-600">
+          <span className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-50/80 text-slate-600 transition-colors duration-200 group-hover:bg-white group-hover:text-blue-600">
             <ShapePreview type={item.type} />
           </span>
-          <span className="w-full break-words text-[10px] leading-4 text-gray-600 group-hover:text-blue-700">
+
+          <span className="w-full break-words px-0.5 text-[10px] font-semibold leading-4 text-slate-600 transition-colors group-hover:text-blue-700">
             {item.label}
           </span>
         </button>
@@ -706,57 +727,66 @@ export default function ElementsPanel() {
   );
 
   const renderCategoryList = (items: ShapeCategory[]) => (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((category) => (
         <button
           key={category.title}
           type="button"
           onClick={() => handleOpenCategory(category)}
-          className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="group flex w-full items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/60 hover:shadow-[0_8px_20px_rgba(37,99,235,0.08)] focus:outline-none focus:ring-2 focus:ring-blue-100"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-600">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 transition-all duration-200 group-hover:border-blue-100 group-hover:from-blue-100 group-hover:to-indigo-100 group-hover:text-blue-700">
             {category.icon}
           </span>
 
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-gray-800">
+            <span className="block text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-800">
               {category.title}
             </span>
-            <span className="mt-1 block text-xs text-gray-500">
+
+            <span className="mt-1 block text-xs text-slate-500">
               {category.items.length} shapes
             </span>
           </span>
 
-          <ChevronRight size={17} className="shrink-0 text-gray-400" />
+          <ChevronRight
+            size={17}
+            className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
+          />
         </button>
       ))}
     </div>
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800 selection:bg-blue-100">
+      <div className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-slate-50/80 p-4">
+        <div className="flex items-center gap-2.5">
           {view !== "root" && (
             <button
               type="button"
               onClick={handleBack}
               aria-label="Go back"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
             >
               <ArrowLeft size={17} />
             </button>
           )}
 
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">
+          <div className="min-w-0">
+            <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.18em] text-blue-600">
+              Design workspace
+            </p>
+
+            <h2 className="text-base font-bold tracking-tight text-slate-900">
               {view === "root"
                 ? "Elements"
                 : view === "categories"
                   ? "Shapes"
                   : selectedCategory?.title ?? "Shapes"}
             </h2>
-            <p className="mt-1 text-xs leading-5 text-gray-500">
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
               {view === "root"
                 ? "Browse elements for your design."
                 : view === "categories"
@@ -769,28 +799,31 @@ export default function ElementsPanel() {
         <div className="relative mt-4">
           <Search
             size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
+
           <input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search elements..."
             aria-label="Search elements"
-            className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
           />
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/40 p-3">
         {normalizedSearch ? (
           filteredCategories.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-              <Search size={28} className="mb-3 text-gray-300" />
-              <p className="text-sm font-medium text-gray-700">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
+              <Search size={28} className="mb-3 text-slate-300" />
+
+              <p className="text-sm font-semibold text-slate-700">
                 No elements found
               </p>
-              <p className="mt-1 text-xs text-gray-500">
+
+              <p className="mt-1 text-xs text-slate-500">
                 Try a different search term.
               </p>
             </div>
@@ -804,24 +837,29 @@ export default function ElementsPanel() {
                 return (
                   <section
                     key={category.title}
-                    className="overflow-hidden rounded-xl border border-gray-100"
+                    className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm"
                   >
                     <button
                       type="button"
                       onClick={() => handleOpenCategory(category)}
-                      className="flex w-full items-center gap-3 bg-gray-50 p-3 text-left transition hover:bg-gray-100"
+                      className="group flex w-full items-center gap-3 bg-gradient-to-r from-slate-50 to-white p-3.5 text-left transition-colors hover:from-blue-50 hover:to-indigo-50"
                     >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 shadow-sm">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-600 shadow-sm transition-colors group-hover:border-blue-100 group-hover:text-blue-700">
                         {category.icon}
                       </span>
-                      <span className="flex-1 text-sm font-semibold text-gray-800">
+
+                      <span className="flex-1 text-sm font-semibold text-slate-800">
                         {category.title}
                       </span>
-                      <ChevronRight size={16} className="text-gray-500" />
+
+                      <ChevronRight
+                        size={16}
+                        className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
+                      />
                     </button>
 
                     {matchingItems.length > 0 && (
-                      <div className="p-2">
+                      <div className="p-2.5">
                         {renderShapeGrid(matchingItems)}
                       </div>
                     )}
@@ -834,33 +872,39 @@ export default function ElementsPanel() {
           <button
             type="button"
             onClick={handleOpenShapes}
-            className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 shadow-sm transition-transform group-hover:scale-105">
               <Shapes size={22} />
             </span>
 
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-gray-900">
+              <span className="block text-sm font-bold text-slate-900">
                 Shapes
               </span>
-              <span className="mt-1 block text-xs text-gray-500">
+
+              <span className="mt-1 block text-xs text-slate-500">
                 Explore all shape categories
               </span>
             </span>
 
-            <ChevronRight size={18} className="text-gray-400" />
+            <ChevronRight
+              size={18}
+              className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
+            />
           </button>
         ) : view === "categories" ? (
           renderCategoryList(categories)
         ) : selectedCategory ? (
           <div>
-            <div className="mb-3 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-              <span className="text-gray-600">{selectedCategory.icon}</span>
-              <span className="text-sm font-semibold text-gray-800">
+            <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+              <span className="text-blue-600">{selectedCategory.icon}</span>
+
+              <span className="text-sm font-semibold text-slate-800">
                 {selectedCategory.title}
               </span>
-              <span className="ml-auto text-xs text-gray-500">
+
+              <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
                 {selectedCategory.items.length} shapes
               </span>
             </div>
@@ -872,8 +916,8 @@ export default function ElementsPanel() {
         )}
       </div>
 
-      <div className="border-t border-gray-200 px-4 py-3">
-        <p className="text-[11px] leading-4 text-gray-400">
+      <div className="border-t border-slate-200 bg-white px-4 py-3">
+        <p className="text-[11px] leading-4 text-slate-400">
           Select a shape to add it to your canvas. You can then move, resize,
           rotate, and customize it.
         </p>
