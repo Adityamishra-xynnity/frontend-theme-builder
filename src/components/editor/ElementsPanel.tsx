@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -24,8 +25,6 @@ import {
 
 import { useFabric } from "../../context/FabricContext";
 import type { ShapeElementType } from "../../context/FabricContext";
-// import type { ElementType } from "../../types/editor";
-
 
 interface ShapeItem {
   label: string;
@@ -171,113 +170,62 @@ const categories: ShapeCategory[] = [
 ];
 
 const PREVIEW_COLOR = "#2563eb";
-const PREVIEW_FILL = "#dbeafe";
-const PREVIEW_SIZE = 64;
+const PREVIEW_STROKE = "#1d4ed8";
 
-function getRegularPolygonPoints(
-  sides: number,
-  radius = 23,
-  center = 32,
-): string {
+function getRegularPolygonPoints(sides: number, radius = 75): string {
   return Array.from({ length: sides }, (_, index) => {
-    const angle = -Math.PI / 2 + (index * Math.PI * 2) / sides;
-
-    return [
-      center + Math.cos(angle) * radius,
-      center + Math.sin(angle) * radius,
-    ];
-  })
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / sides;
+    return `${radius + radius * Math.cos(angle)},${radius + radius * Math.sin(angle)}`;
+  }).join(" ");
 }
 
 function getStarPoints(
   points: number,
-  outerRadius = 25,
-  innerRadius = 11,
+  outerRadius: number,
+  innerRadius: number,
 ): string {
   return Array.from({ length: points * 2 }, (_, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI) / points;
     const radius = index % 2 === 0 ? outerRadius : innerRadius;
-
-    return [
-      32 + Math.cos(angle) * radius,
-      32 + Math.sin(angle) * radius,
-    ];
-  })
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+    return `${outerRadius + Math.cos(angle) * radius},${outerRadius + Math.sin(angle) * radius}`;
+  }).join(" ");
 }
 
-function getCogPoints(teeth: number): string {
-  const radius = 25;
-  const innerRadius = radius * 0.78;
-  const steps = teeth * 4;
-
-  return Array.from({ length: steps }, (_, index) => {
-    const angle = -Math.PI / 2 + (index * Math.PI * 2) / steps;
-    const radiusForPoint = index % 4 < 2 ? radius : innerRadius;
-
-    return [
-      32 + Math.cos(angle) * radiusForPoint,
-      32 + Math.sin(angle) * radiusForPoint,
-    ];
-  })
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+function getCogPoints(teeth: number, radius: number): string {
+  return Array.from({ length: teeth * 4 }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / (teeth * 4);
+    const currentRadius = index % 4 < 2 ? radius : radius * 0.78;
+    return `${radius + Math.cos(angle) * currentRadius},${radius + Math.sin(angle) * currentRadius}`;
+  }).join(" ");
 }
 
-function getFlowerPoints(petals: number): string {
+function getFlowerPoints(petals: number, radius: number): string {
   const steps = petals * 24;
-  const radius = 25;
 
   return Array.from({ length: steps }, (_, index) => {
-    const angle = (index * Math.PI * 2) / steps;
-    const currentRadius =
-      radius * (0.68 + 0.32 * Math.cos(petals * angle));
+    const angle = (index / steps) * Math.PI * 2;
+    const currentRadius = radius * (0.68 + 0.32 * Math.cos(petals * angle));
 
-    return [
-      32 + Math.cos(angle) * currentRadius,
-      32 + Math.sin(angle) * currentRadius,
-    ];
-  })
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+    return `${radius + Math.cos(angle) * currentRadius},${radius + Math.sin(angle) * currentRadius}`;
+  }).join(" ");
 }
 
-function getOrganicPoints(variant: number): string {
-  const steps = 80;
-  const radius = 25;
+function getOrganicPoints(variant: number, radius: number): string {
+  return Array.from({ length: 80 }, (_, index) => {
+    const angle = (index / 80) * Math.PI * 2;
+    const wave =
+      Math.sin(angle * (variant + 2)) * 0.09 +
+      Math.cos(angle * (variant + 3)) * 0.06;
+    const currentRadius = radius * (0.83 + wave);
 
-  return Array.from({ length: steps }, (_, index) => {
-    const angle = (index * Math.PI * 2) / steps;
-    const currentRadius =
-      radius *
-      (0.83 +
-        Math.sin(angle * (variant + 2)) * 0.09 +
-        Math.cos(angle * (variant + 3)) * 0.06);
-
-    return [
-      32 + Math.cos(angle) * currentRadius,
-      32 + Math.sin(angle) * currentRadius,
-    ];
-  })
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+    return `${radius + Math.cos(angle) * currentRadius},${radius + Math.sin(angle) * currentRadius}`;
+  }).join(" ");
 }
 
 function ShapePreview({ type }: { type: ShapeElementType }) {
-  const common = {
-    fill: PREVIEW_FILL,
-    stroke: PREVIEW_COLOR,
-    strokeWidth: 1.8,
-    strokeLinejoin: "round" as const,
-    strokeLinecap: "round" as const,
-  };
-
-  const svg = (children: ReactNode) => (
+  const svg = (children: ReactNode, viewBox = "0 0 150 150") => (
     <svg
-      viewBox={`0 0 ${PREVIEW_SIZE} ${PREVIEW_SIZE}`}
+      viewBox={viewBox}
       className="h-10 w-10 overflow-visible"
       aria-hidden="true"
     >
@@ -285,96 +233,112 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
     </svg>
   );
 
-  const regularPolygon = (sides: number) =>
-    svg(<polygon points={getRegularPolygonPoints(sides)} {...common} />);
+  const polygonStyle = {
+    fill: PREVIEW_COLOR,
+    stroke: PREVIEW_STROKE,
+    strokeWidth: 2,
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+  };
 
   if (type === "rectangle") {
     return svg(
-      <rect x="8" y="13" width="48" height="38" rx="1" {...common} />,
+      <rect x="0" y="25" width="180" height="100" fill={PREVIEW_COLOR} />,
+      "0 0 180 150",
     );
   }
 
   if (type === "square") {
     return svg(
-      <rect x="11" y="11" width="42" height="42" rx="1" {...common} />,
+      <rect x="5" y="5" width="140" height="140" fill={PREVIEW_COLOR} />,
     );
   }
 
   if (type === "circle") {
-    return svg(<circle cx="32" cy="32" r="23" {...common} />);
+    return svg(<circle cx="75" cy="75" r="70" fill={PREVIEW_COLOR} />);
   }
 
-  if (type === "triangle") return regularPolygon(3);
-  if (type === "polygon" || type === "pentagon") return regularPolygon(5);
-  if (type === "hexagon") return regularPolygon(6);
-  if (type === "heptagon") return regularPolygon(7);
-  if (type === "octagon") return regularPolygon(8);
+  if (type === "triangle") {
+    return svg(
+      <polygon points="0,120 75,0 150,120" fill={PREVIEW_COLOR} />,
+      "0 0 150 120",
+    );
+  }
 
-  if (type === "star" || type === "star-outline") {
+  if (
+    ["polygon", "pentagon", "hexagon", "heptagon", "octagon"].includes(type)
+  ) {
+    const sides =
+      type === "pentagon"
+        ? 5
+        : type === "heptagon"
+          ? 7
+          : type === "octagon"
+            ? 8
+            : 6;
+
+    return svg(
+      <polygon points={getRegularPolygonPoints(sides)} {...polygonStyle} />,
+    );
+  }
+
+  if (
+    type === "star" ||
+    type === "star-outline" ||
+    /^star-(4|6|8|12)$/.test(type)
+  ) {
+    const points =
+      type === "star-4"
+        ? 4
+        : type === "star-6"
+          ? 6
+          : type === "star-8"
+            ? 8
+            : type === "star-12"
+              ? 12
+              : 5;
+
     return svg(
       <polygon
-        points={getStarPoints(5)}
-        {...common}
-        fill={type === "star-outline" ? "white" : PREVIEW_FILL}
+        points={getStarPoints(points, 75, 34)}
+        {...polygonStyle}
+        fill={type === "star-outline" ? "transparent" : PREVIEW_COLOR}
+        strokeWidth="3"
       />,
     );
   }
 
-  if (type === "star-4") {
-    return svg(<polygon points={getStarPoints(4, 25, 7)} {...common} />);
-  }
-
-  if (type === "star-6") {
-    return svg(<polygon points={getStarPoints(6, 25, 13)} {...common} />);
-  }
-
-  if (type === "star-8") {
-    return svg(<polygon points={getStarPoints(8, 25, 15)} {...common} />);
-  }
-
-  if (type === "star-12") {
-    return svg(<polygon points={getStarPoints(12, 25, 19)} {...common} />);
-  }
-
-  const cogMatch = /^cog-(\d+)$/.exec(String(type));
-
-  if (cogMatch) {
-    const teeth = Number(cogMatch[1]);
-
-    return svg(
-      <>
-        <polygon points={getCogPoints(teeth)} {...common} />
-        <circle
-          cx="32"
-          cy="32"
-          r="7"
-          fill="white"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="1.8"
-        />
-      </>,
-    );
-  }
-
-  const squareStarMatch = /^square-star-(\d+)$/.exec(String(type));
+  const squareStarMatch = /^square-star-(4|8|12|16|24|32)$/.exec(type);
 
   if (squareStarMatch) {
     const points = Number(squareStarMatch[1]);
 
     return svg(
       <polygon
-        points={getStarPoints(points, 25, points >= 24 ? 22 : 15)}
-        {...common}
+        points={getStarPoints(points, 75, 41)}
+        fill="#fbbf24"
+        stroke="#b45309"
+        strokeWidth="2"
+        strokeLinejoin="round"
       />,
     );
   }
 
-  if (
-    type === "flower" ||
-    type === "flower-5" ||
-    type === "flower-8" ||
-    type === "flower-12"
-  ) {
+  const cogMatch = /^cog-(4|6|8|10|12|16|20|24)$/.exec(type);
+
+  if (cogMatch) {
+    return svg(
+      <polygon
+        points={getCogPoints(Number(cogMatch[1]), 75)}
+        fill="#94a3b8"
+        stroke="#475569"
+        strokeWidth="3"
+        strokeLinejoin="round"
+      />,
+    );
+  }
+
+  if (["flower", "flower-5", "flower-8", "flower-12"].includes(type)) {
     const petals =
       type === "flower-5"
         ? 5
@@ -385,41 +349,35 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
             : 6;
 
     return svg(
-      <>
-        <polygon points={getFlowerPoints(petals)} {...common} />
-        <circle
-          cx="32"
-          cy="32"
-          r="4"
-          fill="#f8fafc"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="1.5"
-        />
-      </>,
+      <polygon
+        points={getFlowerPoints(petals, 75)}
+        fill="#f9a8d4"
+        stroke="#be185d"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />,
     );
   }
 
-  if (
-    type === "organic-blob" ||
-    type === "organic-blob-2" ||
-    type === "organic-blob-3" ||
-    type === "organic-cloud" ||
-    type === "organic-splash" ||
-    type === "organic-pebble"
-  ) {
-    const variantMap: Partial<Record<string, number>> = {
-      "organic-blob": 1,
-      "organic-blob-2": 2,
-      "organic-blob-3": 3,
-      "organic-cloud": 4,
-      "organic-splash": 5,
-      "organic-pebble": 6,
-    };
+  const organicVariants: Partial<Record<ShapeElementType, number>> = {
+    "organic-blob": 1,
+    "organic-blob-2": 2,
+    "organic-blob-3": 3,
+    "organic-cloud": 4,
+    "organic-splash": 5,
+    "organic-pebble": 6,
+  };
 
+  const organicVariant = organicVariants[type];
+
+  if (organicVariant) {
     return svg(
       <polygon
-        points={getOrganicPoints(variantMap[String(type)] ?? 1)}
-        {...common}
+        points={getOrganicPoints(organicVariant, 75)}
+        fill="#c4b5fd"
+        stroke="#7c3aed"
+        strokeWidth="2"
+        strokeLinejoin="round"
       />,
     );
   }
@@ -427,18 +385,26 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
   if (type === "organic-wave") {
     return svg(
       <path
-        d="M 0 25 Q 15 0 30 25 T 60 25 L 60 52 L 0 52 Z"
-        {...common}
+        d="M 0 35 Q 35 0 70 35 T 140 35 L 140 90 L 0 90 Z"
+        fill="#a5f3fc"
+        stroke="#0891b2"
+        strokeWidth="3"
+        strokeLinejoin="round"
       />,
+      "0 0 140 90",
     );
   }
 
   if (type === "organic-wave-2") {
     return svg(
       <path
-        d="M 0 28 C 10 0 20 55 30 28 S 50 0 60 28 L 60 52 L 0 52 Z"
-        {...common}
+        d="M 0 45 C 25 0 50 90 75 45 S 125 0 150 45 L 150 90 L 0 90 Z"
+        fill="#a5f3fc"
+        stroke="#0891b2"
+        strokeWidth="3"
+        strokeLinejoin="round"
       />,
+      "0 0 150 90",
     );
   }
 
@@ -447,36 +413,33 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
     type === "leaf-rounded" ||
     type === "leaf-pointed"
   ) {
-    const d =
+    const path =
       type === "leaf-rounded"
-        ? "M 7 32 Q 12 7 57 7 Q 57 32 7 32 Z"
-        : "M 7 32 Q 17 7 57 7 Q 52 27 7 32 Z";
+        ? "M 0 50 Q 10 0 75 0 Q 75 50 0 50 Z"
+        : "M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z";
 
     return svg(
-      <>
-        <path d={d} {...common} />
-        <path
-          d="M 9 31 Q 31 23 55 9"
-          fill="none"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="1.5"
-        />
-      </>,
+      <path
+        d={path}
+        fill="#86efac"
+        stroke="#15803d"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />,
+      "0 0 75 55",
     );
   }
 
   if (type === "leaf-pair") {
     return svg(
-      <>
-        <path d="M 5 40 Q 10 8 32 8 Q 34 30 5 40 Z" {...common} />
-        <path d="M 32 48 Q 32 15 58 12 Q 60 35 32 48 Z" {...common} />
-        <path
-          d="M 5 40 Q 24 31 32 24"
-          fill="none"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="1.5"
-        />
-      </>,
+      <path
+        d="M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z M 75 50 Q 90 0 150 0 Q 145 40 75 50 Z"
+        fill="#86efac"
+        stroke="#15803d"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />,
+      "0 0 150 55",
     );
   }
 
@@ -485,113 +448,145 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
     type === "petal-rounded" ||
     type === "petal-pointed"
   ) {
-    const d =
-      type === "petal-pointed"
-        ? "M32 7 Q55 32 32 57 Q9 32 32 7 Z"
-        : type === "petal-rounded"
-          ? "M32 7 C51 7 53 37 32 57 C11 37 13 7 32 7 Z"
-          : "M32 7 Q47 27 32 57 Q17 27 32 7 Z";
+    const petals =
+      type === "petal-rounded" ? 6 : type === "petal-pointed" ? 4 : 5;
 
-    return svg(<path d={d} {...common} />);
+    return svg(
+      <polygon
+        points={getFlowerPoints(petals, 75)}
+        fill="#f9a8d4"
+        stroke="#be185d"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />,
+    );
   }
 
   if (type === "vine") {
     return svg(
       <path
-        d="M 5 54 Q 24 48 20 33 T 38 15 Q 51 11 48 24 T 59 38"
+        d="M 0 100 Q 40 80 30 50 Q 20 20 60 15 Q 100 10 95 45 Q 90 75 130 70 Q 165 65 150 30"
         fill="none"
-        stroke={PREVIEW_COLOR}
-        strokeWidth="2"
+        stroke="#15803d"
+        strokeWidth="5"
+        strokeLinecap="round"
       />,
+      "0 0 165 110",
     );
   }
 
   if (type === "flow-process") {
     return svg(
-      <rect x="8" y="17" width="48" height="30" rx="1" {...common} />,
+      <rect x="0" y="0" width="180" height="90" {...polygonStyle} />,
+      "0 0 180 90",
     );
   }
 
   if (type === "flow-decision") {
     return svg(
-      <polygon points="32,5 59,32 32,59 5,32" {...common} />,
+      <polygon points="90,0 180,55 90,110 0,55" {...polygonStyle} />,
+      "0 0 180 110",
     );
   }
 
   if (type === "flow-terminator") {
     return svg(
-      <rect x="7" y="18" width="50" height="28" rx="14" {...common} />,
+      <rect
+        x="0"
+        y="0"
+        width="180"
+        height="85"
+        rx="42"
+        ry="42"
+        {...polygonStyle}
+      />,
+      "0 0 180 85",
     );
   }
 
   if (type === "flow-io") {
     return svg(
-      <polygon points="18,14 56,14 46,50 8,50" {...common} />,
+      <polygon points="35,0 180,0 145,90 0,90" {...polygonStyle} />,
+      "0 0 180 90",
     );
   }
 
   if (type === "flow-document") {
     return svg(
       <path
-        d="M12 9 H52 V45 Q42 39 32 45 Q22 51 12 45 Z"
-        {...common}
+        d="M 0 0 L 180 0 L 180 75 Q 150 95 120 80 Q 90 65 60 80 Q 30 95 0 80 Z"
+        {...polygonStyle}
       />,
+      "0 0 180 95",
     );
   }
 
   if (type === "flow-connector") {
-    return svg(<circle cx="32" cy="32" r="18" {...common} />);
+    return svg(
+      <circle cx="32" cy="32" r="32" {...polygonStyle} />,
+      "0 0 64 64",
+    );
   }
 
   if (type === "flow-preparation") {
     return svg(
       <polygon
-        points="18,10 46,10 58,32 46,54 18,54 6,32"
-        {...common}
+        points="45,0 135,0 180,45 135,90 45,90 0,45"
+        {...polygonStyle}
       />,
+      "0 0 180 90",
     );
   }
 
   if (type === "flow-manual-input") {
     return svg(
-      <polygon points="9,19 55,9 55,53 9,53" {...common} />,
+      <polygon points="0,25 180,0 180,90 0,90" {...polygonStyle} />,
+      "0 0 180 90",
     );
   }
 
   if (type === "speech-bubble") {
     return svg(
       <path
-        d="M 5 9 L 59 9 L 59 43 L 30 43 L 18 56 L 20 43 L 5 43 Z"
-        {...common}
+        d="M 0 0 L 180 0 L 180 90 L 55 90 L 30 115 L 35 90 L 0 90 Z"
+        {...polygonStyle}
       />,
+      "0 0 180 115",
     );
   }
 
   if (type === "chat-bubble") {
     return svg(
       <path
-        d="M 15 8 H 49 Q 59 8 59 18 V 38 Q 59 47 49 47 H 28 L 15 57 L 18 47 Q 5 47 5 37 V 18 Q 5 8 15 8 Z"
-        {...common}
+        d="M 20 0 L 160 0 Q 180 0 180 20 L 180 70 Q 180 90 160 90 L 55 90 L 25 115 L 30 90 L 20 90 Q 0 90 0 70 L 0 20 Q 0 0 20 0 Z"
+        {...polygonStyle}
       />,
+      "0 0 180 115",
     );
   }
 
   if (type === "thought-bubble") {
     return svg(
-      <>
-        <path
-          d="M 20 17 C 7 17 5 32 13 38 C 5 49 18 57 29 51 C 39 60 51 51 50 42 C 61 34 53 20 44 22 C 36 11 26 12 20 17 Z"
-          {...common}
-        />
-        <circle cx="15" cy="48" r="3" {...common} />
-        <circle cx="9" cy="55" r="2" {...common} />
-      </>,
+      <path
+        d="M 30 15 C 5 15 0 45 15 60 C 0 85 25 105 50 95 C 70 120 100 105 105 90 C 135 100 155 80 145 60 C 170 35 145 10 125 20 C 105 -5 70 0 60 15 C 50 10 40 10 30 15 Z"
+        {...polygonStyle}
+      />,
+      "0 0 170 120",
     );
   }
 
   if (type === "rounded-bubble") {
     return svg(
-      <rect x="6" y="9" width="52" height="37" rx="10" {...common} />,
+      <rect
+        x="0"
+        y="0"
+        width="180"
+        height="95"
+        rx="24"
+        ry="24"
+        {...polygonStyle}
+      />,
+      "0 0 180 95",
     );
   }
 
@@ -602,58 +597,55 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
   ) {
     return svg(
       <line
-        x1="7"
-        y1="32"
-        x2="57"
-        y2="32"
-        fill="none"
-        stroke={PREVIEW_COLOR}
-        strokeWidth="2.5"
+        x1="0"
+        y1="20"
+        x2="220"
+        y2="20"
+        stroke="#111827"
+        strokeWidth="4"
+        strokeLinecap="round"
         strokeDasharray={
           type === "dashed-line"
-            ? "7 5"
+            ? "18 10"
             : type === "dotted-line"
-              ? "1 6"
+              ? "2 10"
               : undefined
         }
       />,
+      "0 0 220 40",
     );
   }
 
-  if (type === "arrow" || type === "double-arrow") {
+  if (type === "arrow") {
     return svg(
-      <>
-        <line
-          x1={type === "double-arrow" ? "10" : "8"}
-          y1="32"
-          x2="56"
-          y2="32"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="2.5"
-        />
-        <polyline
-          points="45,21 56,32 45,43"
-          fill="none"
-          stroke={PREVIEW_COLOR}
-          strokeWidth="2.5"
-        />
-        {type === "double-arrow" && (
-          <polyline
-            points="21,21 10,32 21,43"
-            fill="none"
-            stroke={PREVIEW_COLOR}
-            strokeWidth="2.5"
-          />
-        )}
-      </>,
+      <path
+        d="M 0 20 L 220 20 M 220 20 L 202 8 M 220 20 L 202 32"
+        fill="none"
+        stroke="#111827"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />,
+      "0 0 220 40",
+    );
+  }
+
+  if (type === "double-arrow") {
+    return svg(
+      <path
+        d="M 0 20 L 220 20 M 0 20 L 18 8 M 0 20 L 18 32 M 220 20 L 202 8 M 220 20 L 202 32"
+        fill="none"
+        stroke="#111827"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />,
+      "0 0 220 40",
     );
   }
 
   return svg(
-    <polygon
-      points="32,7 52,19 52,43 32,57 12,43 12,19"
-      {...common}
-    />,
+    <polygon points="0,0 150,0 150,150 0,150" {...polygonStyle} />,
   );
 }
 
@@ -705,20 +697,20 @@ export default function ElementsPanel() {
   };
 
   const renderShapeGrid = (items: ShapeItem[]) => (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2.5">
       {items.map((item) => (
         <button
           key={item.type}
           type="button"
           title={`Add ${item.label}`}
           onClick={() => handleAddShape(item.type)}
-          className="group flex min-w-0 flex-col items-center justify-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white px-1.5 py-3.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/60 hover:shadow-[0_8px_20px_rgba(37,99,235,0.09)] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1 active:scale-[0.98]"
+          className="group flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white px-1.5 py-3 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
         >
-          <span className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-50/80 text-slate-600 transition-colors duration-200 group-hover:bg-white group-hover:text-blue-600">
+          <span className="flex h-12 w-full items-center justify-center rounded-lg text-slate-600 transition-colors duration-200 group-hover:text-blue-600">
             <ShapePreview type={item.type} />
           </span>
 
-          <span className="w-full break-words px-0.5 text-[10px] font-semibold leading-4 text-slate-600 transition-colors group-hover:text-blue-700">
+          <span className="w-full break-words text-[10px] font-medium leading-4 text-slate-600 transition-colors group-hover:text-blue-700">
             {item.label}
           </span>
         </button>
@@ -727,15 +719,15 @@ export default function ElementsPanel() {
   );
 
   const renderCategoryList = (items: ShapeCategory[]) => (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {items.map((category) => (
         <button
           key={category.title}
           type="button"
           onClick={() => handleOpenCategory(category)}
-          className="group flex w-full items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/60 hover:shadow-[0_8px_20px_rgba(37,99,235,0.08)] focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 transition-all duration-200 group-hover:border-blue-100 group-hover:from-blue-100 group-hover:to-indigo-100 group-hover:text-blue-700">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 transition-colors group-hover:from-blue-100 group-hover:to-indigo-100 group-hover:text-blue-700">
             {category.icon}
           </span>
 
@@ -759,7 +751,7 @@ export default function ElementsPanel() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800 selection:bg-blue-100">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800">
       <div className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-slate-50/80 p-4">
         <div className="flex items-center gap-2.5">
           {view !== "root" && (
@@ -767,17 +759,13 @@ export default function ElementsPanel() {
               type="button"
               onClick={handleBack}
               aria-label="Go back"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 active:scale-95"
             >
               <ArrowLeft size={17} />
             </button>
           )}
 
-          <div className="min-w-0">
-            <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.18em] text-blue-600">
-              Design workspace
-            </p>
-
+          <div>
             <h2 className="text-base font-bold tracking-tight text-slate-900">
               {view === "root"
                 ? "Elements"
@@ -808,7 +796,7 @@ export default function ElementsPanel() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search elements..."
             aria-label="Search elements"
-            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
           />
         </div>
       </div>
@@ -904,7 +892,7 @@ export default function ElementsPanel() {
                 {selectedCategory.title}
               </span>
 
-              <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
+              <span className="ml-auto rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
                 {selectedCategory.items.length} shapes
               </span>
             </div>

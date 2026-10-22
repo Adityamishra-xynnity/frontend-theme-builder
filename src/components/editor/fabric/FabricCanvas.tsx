@@ -1,3 +1,4 @@
+
 import { useEffect, useRef } from "react";
 
 import {
@@ -31,6 +32,41 @@ type FabricObjectWithMeta = FabricObject & {
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 650;
+const CANVAS_PADDING = 30;
+
+function getSafePosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  const safeWidth = Math.min(
+    Math.max(width || 1, 1),
+    CANVAS_WIDTH - CANVAS_PADDING * 2,
+  );
+
+  const safeHeight = Math.min(
+    Math.max(height || 1, 1),
+    CANVAS_HEIGHT - CANVAS_PADDING * 2,
+  );
+
+  return {
+    x: Math.max(
+      CANVAS_PADDING,
+      Math.min(
+        Number.isFinite(x) ? x : CANVAS_PADDING,
+        CANVAS_WIDTH - safeWidth - CANVAS_PADDING,
+      ),
+    ),
+    y: Math.max(
+      CANVAS_PADDING,
+      Math.min(
+        Number.isFinite(y) ? y : CANVAS_PADDING,
+        CANVAS_HEIGHT - safeHeight - CANVAS_PADDING,
+      ),
+    ),
+  };
+}
 
 function getObjectMeta(
   object: FabricObject,
@@ -94,9 +130,24 @@ function applyCommonProperties(
   object: FabricObject,
   element: EditorElement,
 ): void {
+  const objectWidth =
+    (object.width || element.width || 1) *
+    (element.scaleX ?? 1);
+
+  const objectHeight =
+    (object.height || element.height || 1) *
+    (element.scaleY ?? 1);
+
+  const safePosition = getSafePosition(
+    element.x,
+    element.y,
+    objectWidth,
+    objectHeight,
+  );
+
   object.set({
-    left: element.x,
-    top: element.y,
+    left: safePosition.x,
+    top: safePosition.y,
     scaleX: element.scaleX ?? 1,
     scaleY: element.scaleY ?? 1,
     angle: element.angle ?? 0,
@@ -145,10 +196,17 @@ function createElementObject(
     element.type === "subheading" ||
     element.type === "text"
   ) {
+    // Textboxes wrap long text instead of drawing it outside
+    // the available width like an unwrapped IText object.
+    const safeTextWidth = Math.min(
+      Math.max(width, 40),
+      CANVAS_WIDTH - CANVAS_PADDING * 2,
+    );
+
     const textOptions = {
-      left: element.x,
-      top: element.y,
-      width,
+      left: CANVAS_PADDING,
+      top: CANVAS_PADDING,
+      width: safeTextWidth,
       fontSize: element.fontSize ?? 32,
       fontFamily: element.fontFamily || "Arial",
       fill: color,
@@ -160,20 +218,54 @@ function createElementObject(
       angle: element.angle ?? 0,
       opacity: element.opacity ?? 1,
       editable: true,
-      splitByGrapheme: false,
+      splitByGrapheme: true,
       objectCaching: false,
+      originX: "left" as const,
+      originY: "top" as const,
     };
 
-    object =
-      element.type === "text"
-        ? new Textbox(element.text || "Text", textOptions)
-        : new IText(
-            element.text ||
-              (element.type === "heading"
-                ? "Certificate Heading"
-                : "Certificate Subheading"),
-            textOptions,
-          );
+    const text =
+      element.text ||
+      (element.type === "heading"
+        ? "Certificate Heading"
+        : element.type === "subheading"
+          ? "Certificate Subheading"
+          : "Text");
+
+    const textObject = new Textbox(text, textOptions);
+
+    // If the imported text is taller than the usable canvas,
+    // reduce its font size so more content can remain visible.
+    const maxTextHeight =
+      CANVAS_HEIGHT - CANVAS_PADDING * 2;
+
+    if (textObject.height > maxTextHeight) {
+      const originalFontSize = element.fontSize ?? 32;
+
+      const fittedFontSize = Math.max(
+        6,
+        originalFontSize *
+          (maxTextHeight / textObject.height),
+      );
+
+      textObject.set("fontSize", fittedFontSize);
+      textObject.initDimensions();
+      textObject.setCoords();
+    }
+
+    const safeTextPosition = getSafePosition(
+      element.x,
+      element.y,
+      safeTextWidth,
+      textObject.height,
+    );
+
+    textObject.set({
+      left: safeTextPosition.x,
+      top: safeTextPosition.y,
+    });
+
+    object = textObject;
   } else if (
     element.type === "rectangle" ||
     element.type === "square"
@@ -507,19 +599,27 @@ export default function FabricEditorCanvas() {
               const imageHeight =
                 image.height || element.height || 1;
 
+              const targetWidth = element.width || imageWidth;
+              const targetHeight = element.height || imageHeight;
+
+              const imageScaleX =
+                element.scaleX ?? targetWidth / imageWidth;
+
+              const imageScaleY =
+                element.scaleY ?? targetHeight / imageHeight;
+
+              const safeImagePosition = getSafePosition(
+                element.x,
+                element.y,
+                imageWidth * imageScaleX,
+                imageHeight * imageScaleY,
+              );
+
               image.set({
-                left: element.x,
-                top: element.y,
-                scaleX:
-                  element.scaleX ??
-                  (element.width
-                    ? element.width / imageWidth
-                    : 1),
-                scaleY:
-                  element.scaleY ??
-                  (element.height
-                    ? element.height / imageHeight
-                    : 1),
+                left: safeImagePosition.x,
+                top: safeImagePosition.y,
+                scaleX: imageScaleX,
+                scaleY: imageScaleY,
                 angle: element.angle ?? 0,
                 opacity: element.opacity ?? 1,
                 selectable: true,

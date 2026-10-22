@@ -50,7 +50,6 @@ type FabricObjectWithMeta = {
   imageSrc?: string;
   shapeSides?: number;
   isFreehand?: boolean;
-  /** Stable scene-space geometry used by the eraser to avoid cumulative transform drift. */
   freehandScenePoints?: Array<{ x: number; y: number }>;
   backgroundColor?: string;
 };
@@ -97,7 +96,7 @@ interface FabricContextType {
   setLetterSpacing: (value: number) => void;
 
   alignObject: (
-    alignment: "left" | "center" | "right"
+    alignment: "left" | "center" | "right" | "justify"
   ) => void;
 
   rotateSelected: (degrees: number) => void;
@@ -161,22 +160,15 @@ const SERIALIZED_PROPERTIES = [
 ];
 
 function normalizeOpacity(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 1;
-  }
+  if (!Number.isFinite(value)) return 1;
 
-  // Accept both 0–1 and 0–100 input formats.
   const normalized = value > 1 ? value / 100 : value;
-
   return Math.max(0, Math.min(1, normalized));
 }
 
 function colorToRgba(color: string, opacity: number): string {
   const hex = color.trim().replace(/^#/, "");
-
-  const validHex = /^[0-9a-fA-F]{6}$/.test(hex)
-    ? hex
-    : "222222";
+  const validHex = /^[0-9a-fA-F]{6}$/.test(hex) ? hex : "222222";
 
   const red = parseInt(validHex.slice(0, 2), 16);
   const green = parseInt(validHex.slice(2, 4), 16);
@@ -185,9 +177,9 @@ function colorToRgba(color: string, opacity: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
-// Sample Fabric path commands and convert local coordinates to canvas coordinates.
 function sampleFreehandPath(path: any): Array<{ x: number; y: number }> {
   const stablePoints = (path as FabricObjectWithMeta).freehandScenePoints;
+
   if (stablePoints && stablePoints.length > 0) {
     return stablePoints.map((point) => ({ x: point.x, y: point.y }));
   }
@@ -196,15 +188,13 @@ function sampleFreehandPath(path: any): Array<{ x: number; y: number }> {
   const matrix = path.calcTransformMatrix();
   const points: Array<{ x: number; y: number }> = [];
   let current = { x: 0, y: 0 };
-
-  // Fabric Path commands are relative to pathOffset. Remove that offset
-  // before applying the object's full transform matrix so sampled points
-  // match the actual position of the stroke on the canvas.
   const pathOffset = path.pathOffset ?? { x: 0, y: 0 };
+
   const addLocalPoint = (x: number, y: number) => {
     const localX = x - pathOffset.x;
     const localY = y - pathOffset.y;
     const [a, b, c, d, e, f] = matrix;
+
     points.push({
       x: a * localX + c * localY + e,
       y: b * localX + d * localY + f,
@@ -216,15 +206,20 @@ function sampleFreehandPath(path: any): Array<{ x: number; y: number }> {
     const values = command.slice(1).map(Number);
 
     if (op === "M" || op === "L") {
-      current = { x: values[0] ?? current.x, y: values[1] ?? current.y };
+      current = {
+        x: values[0] ?? current.x,
+        y: values[1] ?? current.y,
+      };
       addLocalPoint(current.x, current.y);
     } else if (op === "Q") {
       const start = { ...current };
       const control = { x: values[0], y: values[1] };
       const end = { x: values[2], y: values[3] };
+
       for (let step = 1; step <= 12; step++) {
         const t = step / 12;
         const inv = 1 - t;
+
         addLocalPoint(
           inv * inv * start.x + 2 * inv * t * control.x + t * t * end.x,
           inv * inv * start.y + 2 * inv * t * control.y + t * t * end.y,
@@ -236,9 +231,11 @@ function sampleFreehandPath(path: any): Array<{ x: number; y: number }> {
       const c1 = { x: values[0], y: values[1] };
       const c2 = { x: values[2], y: values[3] };
       const end = { x: values[4], y: values[5] };
+
       for (let step = 1; step <= 16; step++) {
         const t = step / 16;
         const inv = 1 - t;
+
         addLocalPoint(
           inv ** 3 * start.x + 3 * inv ** 2 * t * c1.x + 3 * inv * t ** 2 * c2.x + t ** 3 * end.x,
           inv ** 3 * start.y + 3 * inv ** 2 * t * c1.y + 3 * inv * t ** 2 * c2.y + t ** 3 * end.y,
@@ -259,9 +256,23 @@ function distanceToSegment(
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const lengthSquared = dx * dx + dy * dy;
-  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
-  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+
+  if (lengthSquared === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+    ),
+  );
+
+  return Math.hypot(
+    point.x - (start.x + t * dx),
+    point.y - (start.y + t * dy),
+  );
 }
 
 function splitFreehandPath(
@@ -273,47 +284,74 @@ function splitFreehandPath(
   const original = sampleFreehandPath(path);
   if (original.length < 2) return [];
 
-  // Densify the sampled path so a fast or sharply curved stroke cannot jump
-  // across the eraser between two sampled vertices.
   const points: Array<{ x: number; y: number }> = [];
+
   for (let i = 0; i < original.length; i++) {
     const a = original[i - 1];
     const b = original[i];
-    if (!a) { points.push(b); continue; }
+
+    if (!a) {
+      points.push(b);
+      continue;
+    }
+
     const length = Math.hypot(b.x - a.x, b.y - a.y);
     const steps = Math.max(1, Math.ceil(length / Math.max(1.5, radius / 3)));
+
     for (let j = 1; j <= steps; j++) {
       const t = j / steps;
-      points.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      points.push({
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+      });
     }
   }
 
   const threshold = radius + Math.max(1, Number(path.strokeWidth ?? 1) / 2);
   const inside = (p: { x: number; y: number }) =>
     distanceToSegment(p, sweepStart, pointer) <= threshold;
-  const boundary = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-    let lo = 0, hi = 1;
+
+  const boundary = (
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ) => {
+    let lo = 0;
+    let hi = 1;
     const aInside = inside(a);
+
     for (let n = 0; n < 18; n++) {
       const t = (lo + hi) / 2;
-      const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-      if (inside(q) === aInside) lo = t; else hi = t;
+      const q = {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+      };
+
+      if (inside(q) === aInside) lo = t;
+      else hi = t;
     }
+
     const t = (lo + hi) / 2;
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    return {
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+    };
   };
 
   const runs: Array<Array<{ x: number; y: number }>> = [];
   let run: Array<{ x: number; y: number }> = [];
+
   for (let i = 0; i < points.length; i++) {
     const point = points[i];
     const previous = points[i - 1];
     const pointInside = inside(point);
+
     if (!previous) {
       if (!pointInside) run = [point];
       continue;
     }
+
     const previousInside = inside(previous);
+
     if (!previousInside && !pointInside) {
       if (!run.length) run.push(previous);
       run.push(point);
@@ -329,97 +367,339 @@ function splitFreehandPath(
       run = [];
     }
   }
+
   if (run.length > 1) runs.push(run);
-  return runs.map(part => part.filter((point, index) => index === 0 ||
-    Math.hypot(point.x - part[index - 1].x, point.y - part[index - 1].y) > 0.25))
-    .filter(part => part.length > 1);
+
+  return runs
+    .map((part) =>
+      part.filter(
+        (point, index) =>
+          index === 0 ||
+          Math.hypot(
+            point.x - part[index - 1].x,
+            point.y - part[index - 1].y,
+          ) > 0.25,
+      ),
+    )
+    .filter((part) => part.length > 1);
 }
 
 function getStarPoints(points: number, outerRadius: number, innerRadius: number) {
   const result: { x: number; y: number }[] = [];
+
   for (let i = 0; i < points * 2; i++) {
     const angle = -Math.PI / 2 + (i * Math.PI) / points;
     const radius = i % 2 === 0 ? outerRadius : innerRadius;
-    result.push({ x: outerRadius + Math.cos(angle) * radius, y: outerRadius + Math.sin(angle) * radius });
+
+    result.push({
+      x: outerRadius + Math.cos(angle) * radius,
+      y: outerRadius + Math.sin(angle) * radius,
+    });
   }
+
   return result;
 }
 
 function getCogPoints(teeth: number, radius: number) {
   const result: { x: number; y: number }[] = [];
   const inner = radius * 0.78;
+
   for (let i = 0; i < teeth * 4; i++) {
     const angle = -Math.PI / 2 + (i * Math.PI * 2) / (teeth * 4);
     const r = i % 4 < 2 ? radius : inner;
-    result.push({ x: radius + Math.cos(angle) * r, y: radius + Math.sin(angle) * r });
+
+    result.push({
+      x: radius + Math.cos(angle) * r,
+      y: radius + Math.sin(angle) * r,
+    });
   }
+
   return result;
 }
 
 function getFlowerPoints(petals: number, radius: number) {
   const result: { x: number; y: number }[] = [];
   const steps = petals * 24;
+
   for (let i = 0; i < steps; i++) {
     const angle = (i / steps) * Math.PI * 2;
     const r = radius * (0.68 + 0.32 * Math.cos(petals * angle));
-    result.push({ x: radius + Math.cos(angle) * r, y: radius + Math.sin(angle) * r });
+
+    result.push({
+      x: radius + Math.cos(angle) * r,
+      y: radius + Math.sin(angle) * r,
+    });
   }
+
   return result;
 }
 
 function getOrganicPoints(variant: number, radius: number) {
   const result: { x: number; y: number }[] = [];
+
   for (let i = 0; i < 80; i++) {
     const angle = (i / 80) * Math.PI * 2;
-    const wave = Math.sin(angle * (variant + 2)) * 0.09 + Math.cos(angle * (variant + 3)) * 0.06;
+    const wave =
+      Math.sin(angle * (variant + 2)) * 0.09 +
+      Math.cos(angle * (variant + 3)) * 0.06;
     const r = radius * (0.83 + wave);
-    result.push({ x: radius + Math.cos(angle) * r, y: radius + Math.sin(angle) * r });
+
+    result.push({
+      x: radius + Math.cos(angle) * r,
+      y: radius + Math.sin(angle) * r,
+    });
   }
+
   return result;
 }
 
 function createSpecialShape(type: ShapeElementType): any {
-  const common = { left: 100, top: 100, fill: "#2563eb", stroke: "#1d4ed8", strokeWidth: 2, strokeLineJoin: "round" as const, strokeLineCap: "round" as const, objectCaching: false };
+  const common = {
+    left: 100,
+    top: 100,
+    fill: "#2563eb",
+    stroke: "#1d4ed8",
+    strokeWidth: 2,
+    strokeLineJoin: "round" as const,
+    strokeLineCap: "round" as const,
+    objectCaching: false,
+  };
+
   const starMatch = type.match(/^(star|square-star)-(4|6|8|12|16|24|32)$/);
-  if (type === "star" || type === "star-outline" || /^star-(4|6|8|12)$/.test(type)) {
-    const points = type === "star-4" ? 4 : type === "star-6" ? 6 : type === "star-8" ? 8 : type === "star-12" ? 12 : 5;
-    return new Polygon(getStarPoints(points, 75, 34), { ...common, fill: type === "star-outline" ? "rgba(255,255,255,0)" : "#2563eb", strokeWidth: 3 });
+
+  if (
+    type === "star" ||
+    type === "star-outline" ||
+    /^star-(4|6|8|12)$/.test(type)
+  ) {
+    const points =
+      type === "star-4" ? 4 :
+      type === "star-6" ? 6 :
+      type === "star-8" ? 8 :
+      type === "star-12" ? 12 : 5;
+
+    return new Polygon(getStarPoints(points, 75, 34), {
+      ...common,
+      fill: type === "star-outline" ? "rgba(255,255,255,0)" : "#2563eb",
+      strokeWidth: 3,
+    });
   }
+
   if (starMatch) {
     const points = Number(starMatch[2]);
-    return new Polygon(getStarPoints(points, 75, 41), { ...common, fill: "#fbbf24", stroke: "#b45309", strokeWidth: 2 });
+
+    return new Polygon(getStarPoints(points, 75, 41), {
+      ...common,
+      fill: "#fbbf24",
+      stroke: "#b45309",
+      strokeWidth: 2,
+    });
   }
+
   const cogMatch = type.match(/^cog-(4|6|8|10|12|16|20|24)$/);
-  if (cogMatch) return new Polygon(getCogPoints(Number(cogMatch[1]), 75), { ...common, fill: "#94a3b8", stroke: "#475569", strokeWidth: 3 });
-  const flowers: Record<string, number> = { flower: 6, "flower-5": 5, "flower-6": 6, "flower-8": 8, "flower-12": 12, "flower-daisy": 12, "flower-sunflower": 16, "flower-rose": 10, "flower-lotus": 8, "flower-lily": 6, "flower-tulip": 5, "flower-hibiscus": 5, "flower-cherry-blossom": 5, petal: 5, "petal-rounded": 6, "petal-pointed": 4 };
+
+  if (cogMatch) {
+    return new Polygon(getCogPoints(Number(cogMatch[1]), 75), {
+      ...common,
+      fill: "#94a3b8",
+      stroke: "#475569",
+      strokeWidth: 3,
+    });
+  }
+
+  const flowers: Record<string, number> = {
+    flower: 6,
+    "flower-5": 5,
+    "flower-6": 6,
+    "flower-8": 8,
+    "flower-12": 12,
+    "flower-daisy": 12,
+    "flower-sunflower": 16,
+    "flower-rose": 10,
+    "flower-lotus": 8,
+    "flower-lily": 6,
+    "flower-tulip": 5,
+    "flower-hibiscus": 5,
+    "flower-cherry-blossom": 5,
+    petal: 5,
+    "petal-rounded": 6,
+    "petal-pointed": 4,
+  };
+
   if (type in flowers) {
     const sunflower = type === "flower-sunflower";
-    return new Polygon(getFlowerPoints(flowers[type], 75), { ...common, fill: sunflower ? "#facc15" : "#f9a8d4", stroke: sunflower ? "#92400e" : "#be185d", strokeWidth: 2 });
+
+    return new Polygon(getFlowerPoints(flowers[type], 75), {
+      ...common,
+      fill: sunflower ? "#facc15" : "#f9a8d4",
+      stroke: sunflower ? "#92400e" : "#be185d",
+      strokeWidth: 2,
+    });
   }
-  const organic: Record<string, number> = { "organic-blob": 1, "organic-blob-2": 2, "organic-blob-3": 3, "organic-cloud": 4, "organic-splash": 5, "organic-pebble": 6 };
-  if (type in organic) return new Polygon(getOrganicPoints(organic[type], 75), { ...common, fill: "#c4b5fd", stroke: "#7c3aed" });
+
+  const organic: Record<string, number> = {
+    "organic-blob": 1,
+    "organic-blob-2": 2,
+    "organic-blob-3": 3,
+    "organic-cloud": 4,
+    "organic-splash": 5,
+    "organic-pebble": 6,
+  };
+
+  if (type in organic) {
+    return new Polygon(getOrganicPoints(organic[type], 75), {
+      ...common,
+      fill: "#c4b5fd",
+      stroke: "#7c3aed",
+    });
+  }
+
   if (type === "organic-wave" || type === "organic-wave-2") {
-    const path = type === "organic-wave" ? "M 0 35 Q 35 0 70 35 T 140 35 L 140 90 L 0 90 Z" : "M 0 45 C 25 0 50 90 75 45 S 125 0 150 45 L 150 90 L 0 90 Z";
-    return new Path(path, { ...common, fill: "#a5f3fc", stroke: "#0891b2", strokeWidth: 3 });
+    const path =
+      type === "organic-wave"
+        ? "M 0 35 Q 35 0 70 35 T 140 35 L 140 90 L 0 90 Z"
+        : "M 0 45 C 25 0 50 90 75 45 S 125 0 150 45 L 150 90 L 0 90 Z";
+
+    return new Path(path, {
+      ...common,
+      fill: "#a5f3fc",
+      stroke: "#0891b2",
+      strokeWidth: 3,
+    });
   }
+
   if (["leaf", "leaf-rounded", "leaf-pointed"].includes(type)) {
-    const path = type === "leaf-rounded" ? "M 0 50 Q 10 0 75 0 Q 75 50 0 50 Z" : "M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z";
-    return new Path(path, { ...common, fill: "#86efac", stroke: "#15803d", strokeWidth: 2 });
+    const path =
+      type === "leaf-rounded"
+        ? "M 0 50 Q 10 0 75 0 Q 75 50 0 50 Z"
+        : "M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z";
+
+    return new Path(path, {
+      ...common,
+      fill: "#86efac",
+      stroke: "#15803d",
+      strokeWidth: 2,
+    });
   }
-  if (type === "leaf-pair") return new Path("M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z M 75 50 Q 90 0 150 0 Q 145 40 75 50 Z", { ...common, fill: "#86efac", stroke: "#15803d", strokeWidth: 2 });
-  if (type === "vine") return new Path("M 0 100 Q 40 80 30 50 Q 20 20 60 15 Q 100 10 95 45 Q 90 75 130 70 Q 165 65 150 30", { ...common, fill: "", stroke: "#15803d", strokeWidth: 5 });
-  if (type === "flow-process") return new Rect({ ...common, width: 180, height: 90 });
-  if (type === "flow-decision") return new Polygon([{ x: 90, y: 0 }, { x: 180, y: 55 }, { x: 90, y: 110 }, { x: 0, y: 55 }], common);
-  if (type === "flow-terminator") return new Rect({ ...common, width: 180, height: 85, rx: 42, ry: 42 });
-  if (type === "flow-io") return new Polygon([{ x: 35, y: 0 }, { x: 180, y: 0 }, { x: 145, y: 90 }, { x: 0, y: 90 }], common);
-  if (type === "flow-document") return new Path("M 0 0 L 180 0 L 180 75 Q 150 95 120 80 Q 90 65 60 80 Q 30 95 0 80 Z", common);
-  if (type === "flow-connector") return new Circle({ ...common, radius: 32 });
-  if (type === "flow-preparation") return new Polygon([{ x: 45, y: 0 }, { x: 135, y: 0 }, { x: 180, y: 45 }, { x: 135, y: 90 }, { x: 45, y: 90 }, { x: 0, y: 45 }], common);
-  if (type === "flow-manual-input") return new Polygon([{ x: 0, y: 25 }, { x: 180, y: 0 }, { x: 180, y: 90 }, { x: 0, y: 90 }], common);
-  if (type === "speech-bubble") return new Path("M 0 0 L 180 0 L 180 90 L 55 90 L 30 115 L 35 90 L 0 90 Z", common);
-  if (type === "chat-bubble") return new Path("M 20 0 L 160 0 Q 180 0 180 20 L 180 70 Q 180 90 160 90 L 55 90 L 25 115 L 30 90 L 20 90 Q 0 90 0 70 L 0 20 Q 0 0 20 0 Z", common);
-  if (type === "thought-bubble") return new Path("M 30 15 C 5 15 0 45 15 60 C 0 85 25 105 50 95 C 70 120 100 105 105 90 C 135 100 155 80 145 60 C 170 35 145 10 125 20 C 105 -5 70 0 60 15 C 50 10 40 10 30 15 Z", common);
-  if (type === "rounded-bubble") return new Rect({ ...common, width: 180, height: 95, rx: 24, ry: 24 });
+
+  if (type === "leaf-pair") {
+    return new Path(
+      "M 0 50 Q 15 0 75 0 Q 70 40 0 50 Z M 75 50 Q 90 0 150 0 Q 145 40 75 50 Z",
+      {
+        ...common,
+        fill: "#86efac",
+        stroke: "#15803d",
+        strokeWidth: 2,
+      },
+    );
+  }
+
+  if (type === "vine") {
+    return new Path(
+      "M 0 100 Q 40 80 30 50 Q 20 20 60 15 Q 100 10 95 45 Q 90 75 130 70 Q 165 65 150 30",
+      {
+        ...common,
+        fill: "",
+        stroke: "#15803d",
+        strokeWidth: 5,
+      },
+    );
+  }
+
+  if (type === "flow-process") {
+    return new Rect({ ...common, width: 180, height: 90 });
+  }
+
+  if (type === "flow-decision") {
+    return new Polygon(
+      [
+        { x: 90, y: 0 },
+        { x: 180, y: 55 },
+        { x: 90, y: 110 },
+        { x: 0, y: 55 },
+      ],
+      common,
+    );
+  }
+
+  if (type === "flow-terminator") {
+    return new Rect({ ...common, width: 180, height: 85, rx: 42, ry: 42 });
+  }
+
+  if (type === "flow-io") {
+    return new Polygon(
+      [
+        { x: 35, y: 0 },
+        { x: 180, y: 0 },
+        { x: 145, y: 90 },
+        { x: 0, y: 90 },
+      ],
+      common,
+    );
+  }
+
+  if (type === "flow-document") {
+    return new Path(
+      "M 0 0 L 180 0 L 180 75 Q 150 95 120 80 Q 90 65 60 80 Q 30 95 0 80 Z",
+      common,
+    );
+  }
+
+  if (type === "flow-connector") {
+    return new Circle({ ...common, radius: 32 });
+  }
+
+  if (type === "flow-preparation") {
+    return new Polygon(
+      [
+        { x: 45, y: 0 },
+        { x: 135, y: 0 },
+        { x: 180, y: 45 },
+        { x: 135, y: 90 },
+        { x: 45, y: 90 },
+        { x: 0, y: 45 },
+      ],
+      common,
+    );
+  }
+
+  if (type === "flow-manual-input") {
+    return new Polygon(
+      [
+        { x: 0, y: 25 },
+        { x: 180, y: 0 },
+        { x: 180, y: 90 },
+        { x: 0, y: 90 },
+      ],
+      common,
+    );
+  }
+
+  if (type === "speech-bubble") {
+    return new Path(
+      "M 0 0 L 180 0 L 180 90 L 55 90 L 30 115 L 35 90 L 0 90 Z",
+      common,
+    );
+  }
+
+  if (type === "chat-bubble") {
+    return new Path(
+      "M 20 0 L 160 0 Q 180 0 180 20 L 180 70 Q 180 90 160 90 L 55 90 L 25 115 L 30 90 L 20 90 Q 0 90 0 70 L 0 20 Q 0 0 20 0 Z",
+      common,
+    );
+  }
+
+  if (type === "thought-bubble") {
+    return new Path(
+      "M 30 15 C 5 15 0 45 15 60 C 0 85 25 105 50 95 C 70 120 100 105 105 90 C 135 100 155 80 145 60 C 170 35 145 10 125 20 C 105 -5 70 0 60 15 C 50 10 40 10 30 15 Z",
+      common,
+    );
+  }
+
+  if (type === "rounded-bubble") {
+    return new Rect({ ...common, width: 180, height: 95, rx: 24, ry: 24 });
+  }
+
   return null;
 }
 
@@ -430,23 +710,18 @@ export function FabricProvider({
 }) {
   const canvasRef = useRef<FabricCanvas | null>(null);
 
-  const [selectedObject, setSelectedObjectState] =
-    useState<any>(null);
-
+  const [selectedObject, setSelectedObjectState] = useState<any>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
 
-  const [, setToolModeState] =
-    useState<ToolMode>("select");
-
+  const [, setToolModeState] = useState<ToolMode>("select");
   const toolModeRef = useRef<ToolMode>("select");
 
-  const [, setDrawingSettingsState] =
-    useState<DrawingSettings>({
-      color: "#222222",
-      width: 5,
-      opacity: 100,
-    });
+  const [, setDrawingSettingsState] = useState<DrawingSettings>({
+    color: "#222222",
+    width: 5,
+    opacity: 100,
+  });
 
   const drawingSettingsRef = useRef<DrawingSettings>({
     color: "#222222",
@@ -455,7 +730,7 @@ export function FabricProvider({
   });
 
   const objectInteractionRef = useRef(
-    new Map<string, { selectable: boolean; evented: boolean }>()
+    new Map<string, { selectable: boolean; evented: boolean }>(),
   );
 
   const eraserHandlersRef = useRef<{
@@ -464,19 +739,13 @@ export function FabricProvider({
     up?: (event: any) => void;
   }>({});
 
-  // Keep one undo snapshot and the previous scene point for each eraser gesture.
   const eraserGestureSavedRef = useRef(false);
   const eraserPreviousPointRef = useRef<{ x: number; y: number } | null>(null);
   const eraserCursorRef = useRef<HTMLDivElement | null>(null);
   const eraserCursorMoveRef = useRef<((event: PointerEvent) => void) | null>(null);
 
-  const drawingHistoryHandlerRef = useRef<
-    ((event: any) => void) | null
-  >(null);
-
-  const pathCreatedHandlerRef = useRef<
-    ((event: any) => void) | null
-  >(null);
+  const drawingHistoryHandlerRef = useRef<((event: any) => void) | null>(null);
+  const pathCreatedHandlerRef = useRef<((event: any) => void) | null>(null);
 
   const {
     saveDesign,
@@ -496,25 +765,20 @@ export function FabricProvider({
       : null;
 
   function getCanvasJSON(canvas: FabricCanvas) {
-    return JSON.stringify(
-      canvas.toObject(SERIALIZED_PROPERTIES)
-    );
+    return JSON.stringify(canvas.toObject(SERIALIZED_PROPERTIES));
   }
 
   function saveCanvasState() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const snapshot = getCanvasJSON(canvas);
-
     setHistory((previous) => [...previous, snapshot]);
     setFuture([]);
   }
 
   function syncCanvasToEditor() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     syncElementsFromCanvas(convertCanvasToElements());
@@ -522,20 +786,14 @@ export function FabricProvider({
 
   function convertCanvasToElements(): EditorElement[] {
     const canvas = canvasRef.current;
-
     if (!canvas) return [];
 
     return canvas.getObjects().map((object) => {
-      const item =
-        object as typeof object & FabricObjectWithMeta;
-
+      const item = object as typeof object & FabricObjectWithMeta;
       let type = item.elementType;
 
       if (!type) {
-        if (
-          object.type === "i-text" ||
-          object.type === "textbox"
-        ) {
+        if (object.type === "i-text" || object.type === "textbox") {
           type = "text";
         } else if (object.type === "rect") {
           type = "rectangle";
@@ -545,10 +803,7 @@ export function FabricProvider({
           type = "triangle";
         } else if (object.type === "polygon") {
           type = "polygon";
-        } else if (
-          object.type === "line" ||
-          object.type === "path"
-        ) {
+        } else if (object.type === "line" || object.type === "path") {
           type = "line";
         } else if (object.type === "image") {
           type = "image";
@@ -570,49 +825,35 @@ export function FabricProvider({
         opacity: object.opacity ?? 1,
       };
 
-      if (
-        object.type === "i-text" ||
-        object.type === "textbox"
-      ) {
+      if (object.type === "i-text" || object.type === "textbox") {
         const textObject = object as IText;
 
         element.text = textObject.text ?? "";
         element.fontSize = textObject.fontSize ?? 18;
-        element.fontFamily =
-          textObject.fontFamily ?? "Arial";
-
+        element.fontFamily = textObject.fontFamily ?? "Arial";
         element.color =
           typeof textObject.fill === "string"
             ? textObject.fill
             : "#111827";
 
         element.fontWeight =
-          textObject.fontWeight === "bold"
-            ? "bold"
-            : "normal";
+          textObject.fontWeight === "bold" ? "bold" : "normal";
 
         element.fontStyle =
-          textObject.fontStyle === "italic"
-            ? "italic"
-            : "normal";
+          textObject.fontStyle === "italic" ? "italic" : "normal";
 
-        element.lineHeight =
-          textObject.lineHeight ?? 1.16;
-
-        element.charSpacing =
-          textObject.charSpacing ?? 0;
+        element.lineHeight = textObject.lineHeight ?? 1.16;
+        element.charSpacing = textObject.charSpacing ?? 0;
 
         element.textAlign =
           (
             textObject as IText & {
-              textAlign?: "left" | "center" | "right";
+              textAlign?: "left" | "center" | "right" | "justify";
             }
           ).textAlign ?? "left";
 
         const backgroundColor = (
-          textObject as IText & {
-            backgroundColor?: string;
-          }
+          textObject as IText & { backgroundColor?: string }
         ).backgroundColor;
 
         if (backgroundColor) {
@@ -622,9 +863,7 @@ export function FabricProvider({
 
       if (SHAPE_TYPES.includes(type)) {
         element.backgroundColor =
-          typeof object.fill === "string"
-            ? object.fill
-            : "#2563eb";
+          typeof object.fill === "string" ? object.fill : "#2563eb";
 
         if (item.shapeSides) {
           element.shapeSides = item.shapeSides;
@@ -632,7 +871,9 @@ export function FabricProvider({
       }
 
       if (item.isFreehand && object.type === "path") {
-        element.pathData = ((object as any).path ?? []).map((command: any[]) => [...command]);
+        element.pathData = ((object as any).path ?? []).map(
+          (command: any[]) => [...command],
+        );
       }
 
       if (LINE_TYPES.includes(type) || item.isFreehand) {
@@ -649,9 +890,7 @@ export function FabricProvider({
             : 4;
 
         const dash = (
-          object as typeof object & {
-            strokeDashArray?: number[];
-          }
+          object as typeof object & { strokeDashArray?: number[] }
         ).strokeDashArray;
 
         if (dash) {
@@ -669,13 +908,11 @@ export function FabricProvider({
 
   function selectObjectById(id: string) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const object = canvas.getObjects().find(
       (item) =>
-        (item as typeof item & FabricObjectWithMeta)
-          .elementId === id
+        (item as typeof item & FabricObjectWithMeta).elementId === id,
     );
 
     if (!object) return;
@@ -707,29 +944,19 @@ export function FabricProvider({
       imageSrc?: string;
       shapeSides?: number;
       isFreehand?: boolean;
-    }
+    },
   ) {
     const item = object as FabricObjectWithMeta;
-
     item.elementId = id;
     item.elementType = type;
 
-    if (extra?.imageSrc) {
-      item.imageSrc = extra.imageSrc;
-    }
-
-    if (extra?.shapeSides) {
-      item.shapeSides = extra.shapeSides;
-    }
-
-    if (extra?.isFreehand) {
-      item.isFreehand = true;
-    }
+    if (extra?.imageSrc) item.imageSrc = extra.imageSrc;
+    if (extra?.shapeSides) item.shapeSides = extra.shapeSides;
+    if (extra?.isFreehand) item.isFreehand = true;
   }
 
   function activateObject(object: any) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     setToolMode("select");
@@ -740,7 +967,6 @@ export function FabricProvider({
 
   function addText(type: TextElementType = "text") {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     saveCanvasState();
@@ -807,14 +1033,12 @@ export function FabricProvider({
     if (type === "hexagon") return 6;
     if (type === "heptagon") return 7;
     if (type === "octagon") return 8;
-
     return 6;
   }
 
   function getPolygonPoints(sides: number, radius: number) {
     return Array.from({ length: sides }, (_, index) => {
-      const angle =
-        -Math.PI / 2 + (index * 2 * Math.PI) / sides;
+      const angle = -Math.PI / 2 + (index * 2 * Math.PI) / sides;
 
       return {
         x: radius + radius * Math.cos(angle),
@@ -831,7 +1055,7 @@ export function FabricProvider({
       | "double-arrow"
       | "dashed-line"
       | "dotted-line"
-    >
+    >,
   ) {
     const width = 220;
 
@@ -849,11 +1073,7 @@ export function FabricProvider({
       evented: true,
     };
 
-    if (
-      type === "line" ||
-      type === "dashed-line" ||
-      type === "dotted-line"
-    ) {
+    if (type === "line" || type === "dashed-line" || type === "dotted-line") {
       return new Line([0, 0, width, 0], {
         ...commonOptions,
         strokeDashArray:
@@ -870,7 +1090,7 @@ export function FabricProvider({
         `M 0 0 L ${width} 0
          M ${width} 0 L ${width - 18} -12
          M ${width} 0 L ${width - 18} 12`,
-        commonOptions
+        commonOptions,
       );
     }
 
@@ -880,13 +1100,12 @@ export function FabricProvider({
        M 0 0 L 18 12
        M ${width} 0 L ${width - 18} -12
        M ${width} 0 L ${width - 18} 12`,
-      commonOptions
+      commonOptions,
     );
   }
 
   function addShape(type: ShapeElementType) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     saveCanvasState();
@@ -934,18 +1153,21 @@ export function FabricProvider({
     ) {
       sides = getPolygonSides(type);
 
-      object = new Polygon(
-        getPolygonPoints(sides, 75),
-        {
-          left: 100,
-          top: 100,
-          fill: "#2563eb",
-        }
-      );
+      object = new Polygon(getPolygonPoints(sides, 75), {
+        left: 100,
+        top: 100,
+        fill: "#2563eb",
+      });
     } else if (LINE_TYPES.includes(type)) {
-      object = createLineObject(type as Extract<ElementType, "line" | "arrow" | "double-arrow" | "dashed-line" | "dotted-line">);
+      object = createLineObject(
+        type as Extract<
+          ElementType,
+          "line" | "arrow" | "double-arrow" | "dashed-line" | "dotted-line"
+        >,
+      );
     } else {
       object = createSpecialShape(type);
+
       if (!object) {
         console.error(`Unsupported shape type: ${type}`);
         return;
@@ -953,7 +1175,6 @@ export function FabricProvider({
     }
 
     applyObjectControls(object);
-
     attachMetadata(object, type, crypto.randomUUID(), {
       shapeSides: sides,
     });
@@ -966,13 +1187,11 @@ export function FabricProvider({
 
   async function addImage(dataUrl: string) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     try {
       const image = await FabricImage.fromURL(dataUrl);
       const currentCanvas = canvasRef.current;
-
       if (!currentCanvas) return;
 
       saveCanvasState();
@@ -990,7 +1209,6 @@ export function FabricProvider({
       });
 
       applyObjectControls(image);
-
       attachMetadata(image, "image", crypto.randomUUID(), {
         imageSrc: dataUrl,
       });
@@ -1007,13 +1225,9 @@ export function FabricProvider({
   function configureDrawingBrush(
     canvas: FabricCanvas,
     mode: ToolMode,
-    settings: DrawingSettings
+    settings: DrawingSettings,
   ) {
-    if (
-      mode !== "pen" &&
-      mode !== "marker" &&
-      mode !== "highlighter"
-    ) {
+    if (mode !== "pen" && mode !== "marker" && mode !== "highlighter") {
       return;
     }
 
@@ -1029,10 +1243,7 @@ export function FabricProvider({
           ? Math.max(settings.width, 18)
           : settings.width;
 
-    const configuredOpacity = normalizeOpacity(
-      settings.opacity
-    );
-
+    const configuredOpacity = normalizeOpacity(settings.opacity);
     const opacity =
       mode === "highlighter"
         ? Math.min(configuredOpacity, 0.3)
@@ -1040,13 +1251,10 @@ export function FabricProvider({
 
     brush.color = colorToRgba(settings.color, opacity);
     brush.width = width;
-
     canvas.freeDrawingBrush = brush;
   }
 
-  function setDrawingSettings(
-    settings: Partial<DrawingSettings>
-  ) {
+  function setDrawingSettings(settings: Partial<DrawingSettings>) {
     const next: DrawingSettings = {
       ...drawingSettingsRef.current,
       ...settings,
@@ -1062,21 +1270,14 @@ export function FabricProvider({
     setDrawingSettingsState(next);
 
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
-    configureDrawingBrush(
-      canvas,
-      toolModeRef.current,
-      next
-    );
-
+    configureDrawingBrush(canvas, toolModeRef.current, next);
     canvas.requestRenderAll();
   }
 
   function handleFreehandPathCreated(event: any) {
     const canvas = canvasRef.current;
-
     const path = event.path as
       | (Path & FabricObjectWithMeta)
       | undefined;
@@ -1097,7 +1298,6 @@ export function FabricProvider({
 
     path.setCoords();
     canvas.requestRenderAll();
-
     syncCanvasToEditor();
   }
 
@@ -1105,12 +1305,20 @@ export function FabricProvider({
     const canvas = canvasRef.current;
     if (!canvas || !event.e) return;
 
-    const pointer = event.e.__eraserScenePoint ?? canvas.getScenePoint(event.e);
-    const sweepStart = event.e.__eraserPreviousScenePoint ?? pointer;
+    const pointer =
+      event.e.__eraserScenePoint ?? canvas.getScenePoint(event.e);
+
+    const sweepStart =
+      event.e.__eraserPreviousScenePoint ?? pointer;
+
     const radius = Math.max(5, drawingSettingsRef.current.width * 1.15);
-    const freehandObjects = [...canvas.getObjects()].reverse().filter((object) =>
-      Boolean((object as typeof object & FabricObjectWithMeta).isFreehand) && object.type === "path"
-    );
+
+    const freehandObjects = [...canvas.getObjects()]
+      .reverse()
+      .filter((object) =>
+        Boolean((object as typeof object & FabricObjectWithMeta).isFreehand) &&
+        object.type === "path",
+      );
 
     for (const target of freehandObjects) {
       const bounds = target.getBoundingRect();
@@ -1118,23 +1326,38 @@ export function FabricProvider({
       const sweepMaxX = Math.max(pointer.x, sweepStart.x) + radius;
       const sweepMinY = Math.min(pointer.y, sweepStart.y) - radius;
       const sweepMaxY = Math.max(pointer.y, sweepStart.y) + radius;
+
       if (
         sweepMaxX < bounds.left ||
         sweepMinX > bounds.left + bounds.width ||
         sweepMaxY < bounds.top ||
         sweepMinY > bounds.top + bounds.height
-      ) continue;
+      ) {
+        continue;
+      }
 
       const item = target as typeof target & FabricObjectWithMeta;
       const runs = splitFreehandPath(target, pointer, radius, sweepStart);
       const sampled = sampleFreehandPath(target);
-      const threshold = radius + Math.max(1, ((target as any).strokeWidth ?? 1) / 2);
+      const threshold =
+        radius + Math.max(1, ((target as any).strokeWidth ?? 1) / 2);
+
       const actuallyTouched = sampled.some((point, index) => {
         const previous = sampled[index - 1];
-        return distanceToSegment(point, sweepStart, pointer) <= threshold ||
-          Boolean(previous && distanceToSegment(sweepStart, previous, point) <= threshold) ||
-          Boolean(previous && distanceToSegment(pointer, previous, point) <= threshold);
+
+        return (
+          distanceToSegment(point, sweepStart, pointer) <= threshold ||
+          Boolean(
+            previous &&
+            distanceToSegment(sweepStart, previous, point) <= threshold,
+          ) ||
+          Boolean(
+            previous &&
+            distanceToSegment(pointer, previous, point) <= threshold,
+          )
+        );
       });
+
       if (!actuallyTouched) continue;
 
       if (!eraserGestureSavedRef.current) {
@@ -1143,21 +1366,24 @@ export function FabricProvider({
       }
 
       const replacements: Path[] = [];
+
       for (const run of runs) {
         const minX = Math.min(...run.map((point) => point.x));
         const minY = Math.min(...run.map((point) => point.y));
         const maxX = Math.max(...run.map((point) => point.x));
         const maxY = Math.max(...run.map((point) => point.y));
+
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
 
-        // Build path coordinates around (0, 0), then place the Fabric object
-        // at the scene-space center. This avoids pathOffset/left/top mismatches
-        // that can turn curved strokes into scattered straight fragments.
         const commands: (string | number)[][] = [
           ["M", run[0].x - centerX, run[0].y - centerY],
-          ...run.slice(1).map((point) => ["L", point.x - centerX, point.y - centerY] as (string | number)[]),
+          ...run.slice(1).map(
+            (point) =>
+              ["L", point.x - centerX, point.y - centerY] as (string | number)[],
+          ),
         ];
+
         const replacement = new Path(commands as any, {
           left: centerX,
           top: centerY,
@@ -1174,14 +1400,16 @@ export function FabricProvider({
           evented: false,
           objectCaching: false,
         });
+
         const replacementMeta = replacement as Path & FabricObjectWithMeta;
         replacementMeta.elementId = crypto.randomUUID();
         replacementMeta.elementType = item.elementType ?? "line";
         replacementMeta.isFreehand = true;
-        // Keep the remaining geometry in scene coordinates. Re-sampling the
-        // replacement Path on every eraser move can otherwise accumulate
-        // Fabric pathOffset/bounds rounding and make strokes distort or stop erasing.
-        replacementMeta.freehandScenePoints = run.map((point) => ({ x: point.x, y: point.y }));
+        replacementMeta.freehandScenePoints = run.map((point) => ({
+          x: point.x,
+          y: point.y,
+        }));
+
         replacement.setCoords();
         replacements.push(replacement);
       }
@@ -1190,32 +1418,28 @@ export function FabricProvider({
       replacements.forEach((replacement) => canvas.add(replacement));
       canvas.requestRenderAll();
       syncCanvasToEditor();
-      // Continue through the other strokes too; one eraser move may cross
-      // more than one independent pen/marker/highlighter path.
     }
   }
 
   function removeToolHandlers(canvas: FabricCanvas) {
     const previousEraser = eraserHandlersRef.current;
 
-    if (previousEraser.down) {
-      canvas.off("mouse:down", previousEraser.down);
-    }
-
-    if (previousEraser.move) {
-      canvas.off("mouse:move", previousEraser.move);
-    }
-
-    if (previousEraser.up) {
-      canvas.off("mouse:up", previousEraser.up);
-    }
+    if (previousEraser.down) canvas.off("mouse:down", previousEraser.down);
+    if (previousEraser.move) canvas.off("mouse:move", previousEraser.move);
+    if (previousEraser.up) canvas.off("mouse:up", previousEraser.up);
 
     eraserHandlersRef.current = {};
     eraserPreviousPointRef.current = null;
+
     if (eraserCursorMoveRef.current) {
-      window.removeEventListener("pointermove", eraserCursorMoveRef.current, true);
+      window.removeEventListener(
+        "pointermove",
+        eraserCursorMoveRef.current,
+        true,
+      );
       eraserCursorMoveRef.current = null;
     }
+
     if (eraserCursorRef.current) {
       eraserCursorRef.current.remove();
       eraserCursorRef.current = null;
@@ -1234,31 +1458,21 @@ export function FabricProvider({
 
   function setToolMode(mode: ToolMode) {
     const canvas = canvasRef.current;
-
     toolModeRef.current = mode;
     setToolModeState(mode);
 
-    // Canvas may not have mounted yet. The latest mode is kept
-    // in the ref and reapplied when the canvas becomes available.
     if (!canvas) return;
 
     removeToolHandlers(canvas);
-
     canvas.isDrawingMode = false;
     canvas.selection = mode === "select";
     canvas.skipTargetFind = mode !== "select";
 
     if (mode === "pen" || mode === "marker" || mode === "highlighter") {
-      configureDrawingBrush(
-        canvas,
-        mode,
-        drawingSettingsRef.current
-      );
-
+      configureDrawingBrush(canvas, mode, drawingSettingsRef.current);
       canvas.selection = false;
       canvas.skipTargetFind = true;
       canvas.isDrawingMode = true;
-
       objectInteractionRef.current.clear();
 
       canvas.getObjects().forEach((object) => {
@@ -1272,30 +1486,24 @@ export function FabricProvider({
           });
         }
 
-        object.set({
-          selectable: false,
-          evented: false,
-        });
+        object.set({ selectable: false, evented: false });
       });
 
-      const historyHandler = () => {
-        saveCanvasState();
-      };
-
+      const historyHandler = () => saveCanvasState();
       drawingHistoryHandlerRef.current = historyHandler;
       canvas.on("mouse:down", historyHandler);
 
-      const pathHandler = (event: any) => {
-        handleFreehandPathCreated(event);
-      };
-
+      const pathHandler = (event: any) => handleFreehandPathCreated(event);
       pathCreatedHandlerRef.current = pathHandler;
       canvas.on("path:created", pathHandler);
     } else if (mode === "eraser") {
-      // Use a real DOM overlay as the eraser cursor. Browser custom cursors
-      // can silently fall back to an arrow when an SVG data URL is rejected.
       canvas.upperCanvasEl.style.cursor = "none";
-      const cursorSize = Math.max(18, Math.min(48, Math.round(drawingSettingsRef.current.width * 2 + 10)));
+
+      const cursorSize = Math.max(
+        18,
+        Math.min(48, Math.round(drawingSettingsRef.current.width * 2 + 10)),
+      );
+
       const cursor = document.createElement("div");
       cursor.setAttribute("aria-hidden", "true");
       cursor.style.position = "fixed";
@@ -1309,15 +1517,19 @@ export function FabricProvider({
       cursor.style.pointerEvents = "none";
       cursor.style.zIndex = "2147483647";
       cursor.style.transform = "translate(-50%, -50%)";
+
       document.body.appendChild(cursor);
       eraserCursorRef.current = cursor;
+
       const moveCursor = (event: PointerEvent) => {
         if (!eraserCursorRef.current) return;
         eraserCursorRef.current.style.left = `${event.clientX}px`;
         eraserCursorRef.current.style.top = `${event.clientY}px`;
       };
+
       eraserCursorMoveRef.current = moveCursor;
       window.addEventListener("pointermove", moveCursor, true);
+
       canvas.isDrawingMode = false;
       canvas.selection = false;
       canvas.skipTargetFind = true;
@@ -1332,16 +1544,10 @@ export function FabricProvider({
 
       const moveHandler = (event: any) => {
         if (!event.e) return;
+
         const current = canvas.getScenePoint(event.e);
         const previous = eraserPreviousPointRef.current;
 
-        // Erase the entire swept capsule between pointer events in one pass.
-        // This avoids repeatedly splitting the already-split stroke, which
-        // caused curves to collapse into straight-looking fragments.
-        // Keep the native pointer event intact. Spreading a MouseEvent creates
-        // a plain object without reliable clientX/clientY properties, which
-        // makes Fabric calculate the pointer as (0, 0) on subsequent moves.
-        // Pass both scene-space points explicitly so every move keeps erasing.
         const eraseEvent = {
           ...event,
           e: Object.assign(event.e, {
@@ -1349,6 +1555,7 @@ export function FabricProvider({
             __eraserPreviousScenePoint: previous ?? current,
           }),
         };
+
         eraseAtPointer(eraseEvent);
         eraserPreviousPointRef.current = current;
       };
@@ -1392,7 +1599,6 @@ export function FabricProvider({
     canvas.requestRenderAll();
   }
 
-  // Reapply the selected mode after the canvas is mounted.
   useEffect(() => {
     const timer = window.setInterval(() => {
       const canvas = canvasRef.current;
@@ -1408,7 +1614,6 @@ export function FabricProvider({
 
   function addStickyNote() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     saveCanvasState();
@@ -1429,7 +1634,6 @@ export function FabricProvider({
 
     applyObjectControls(note);
     attachMetadata(note, "text");
-
     canvas.add(note);
     activateObject(note);
     canvas.requestRenderAll();
@@ -1438,7 +1642,6 @@ export function FabricProvider({
 
   function addSignature() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     saveCanvasState();
@@ -1455,7 +1658,6 @@ export function FabricProvider({
 
     applyObjectControls(signature);
     attachMetadata(signature, "text");
-
     canvas.add(signature);
     activateObject(signature);
     canvas.requestRenderAll();
@@ -1464,7 +1666,6 @@ export function FabricProvider({
 
   function addTable() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     saveCanvasState();
@@ -1479,7 +1680,6 @@ export function FabricProvider({
 
     for (let row = 0; row <= rows; row++) {
       const y = (height / rows) * row;
-
       const line = new Line([0, 0, width, 0], {
         left,
         top: top + y,
@@ -1495,7 +1695,6 @@ export function FabricProvider({
 
     for (let column = 0; column <= columns; column++) {
       const x = (width / columns) * column;
-
       const line = new Line([0, 0, 0, height], {
         left: left + x,
         top,
@@ -1510,7 +1709,6 @@ export function FabricProvider({
     }
 
     objects.forEach((object) => canvas.add(object));
-
     activateObject(objects[0]);
     canvas.requestRenderAll();
     syncCanvasToEditor();
@@ -1518,11 +1716,9 @@ export function FabricProvider({
 
   function deleteSelected() {
     const canvas = canvasRef.current;
-
     if (!canvas || !selectedObject) return;
 
     saveCanvasState();
-
     canvas.remove(selectedObject);
     canvas.discardActiveObject();
     setSelectedObject(null);
@@ -1556,7 +1752,7 @@ export function FabricProvider({
           imageSrc: originalMeta.imageSrc,
           shapeSides: originalMeta.shapeSides,
           isFreehand: originalMeta.isFreehand,
-        }
+        },
       );
 
       canvas.add(cloned);
@@ -1571,14 +1767,14 @@ export function FabricProvider({
   function isTextSelected() {
     return Boolean(
       selectedObject &&
-        (selectedObject.type === "i-text" ||
-          selectedObject.type === "textbox")
+      (selectedObject.type === "i-text" ||
+        selectedObject.type === "textbox"),
     );
   }
 
   function updateSelectedText(
     updates: Record<string, unknown>,
-    refreshDimensions = false
+    refreshDimensions = false,
   ) {
     if (!isTextSelected()) return;
 
@@ -1599,7 +1795,7 @@ export function FabricProvider({
 
     updateSelectedText(
       { fontSize: (selectedObject.fontSize ?? 18) + 2 },
-      true
+      true,
     );
   }
 
@@ -1608,12 +1804,9 @@ export function FabricProvider({
 
     updateSelectedText(
       {
-        fontSize: Math.max(
-          8,
-          (selectedObject.fontSize ?? 18) - 2
-        ),
+        fontSize: Math.max(8, (selectedObject.fontSize ?? 18) - 2),
       },
-      true
+      true,
     );
   }
 
@@ -1622,36 +1815,27 @@ export function FabricProvider({
 
     updateSelectedText(
       { fontSize: Math.max(8, Math.min(200, size)) },
-      true
+      true,
     );
   }
 
   function setTextColor(color: string) {
     if (!isTextSelected()) return;
-
     updateSelectedText({ fill: color });
   }
 
   function setShapeColor(color: string) {
     const canvas = canvasRef.current;
-
     if (!canvas || !selectedObject) return;
 
     const meta = selectedObject as FabricObjectWithMeta;
 
-    if (
-      meta.elementType &&
-      LINE_TYPES.includes(meta.elementType)
-    ) {
+    if (meta.elementType && LINE_TYPES.includes(meta.elementType)) {
       saveCanvasState();
       selectedObject.set({ stroke: color });
-    } else if (
-      SHAPE_TYPES.includes(meta.elementType ?? "rectangle")
-    ) {
+    } else if (SHAPE_TYPES.includes(meta.elementType ?? "rectangle")) {
       saveCanvasState();
 
-      // Keep the outline in sync with the selected color for every shape.
-      // Outline-only shapes (for example star-outline and vine) keep their fill transparent.
       const outlineOnly =
         meta.elementType === "star-outline" ||
         meta.elementType === "vine";
@@ -1672,7 +1856,6 @@ export function FabricProvider({
 
   function setFontFamily(fontFamily: string) {
     if (!isTextSelected()) return;
-
     updateSelectedText({ fontFamily }, true);
   }
 
@@ -1682,11 +1865,9 @@ export function FabricProvider({
     updateSelectedText(
       {
         fontWeight:
-          selectedObject.fontWeight === "bold"
-            ? "normal"
-            : "bold",
+          selectedObject.fontWeight === "bold" ? "normal" : "bold",
       },
-      true
+      true,
     );
   }
 
@@ -1696,11 +1877,9 @@ export function FabricProvider({
     updateSelectedText(
       {
         fontStyle:
-          selectedObject.fontStyle === "italic"
-            ? "normal"
-            : "italic",
+          selectedObject.fontStyle === "italic" ? "normal" : "italic",
       },
-      true
+      true,
     );
   }
 
@@ -1709,7 +1888,7 @@ export function FabricProvider({
 
     updateSelectedText(
       { lineHeight: Math.min(3, Math.max(1, value)) },
-      true
+      true,
     );
   }
 
@@ -1720,12 +1899,13 @@ export function FabricProvider({
       {
         charSpacing: Math.min(200, Math.max(0, value)) * 10,
       },
-      true
+      true,
     );
   }
 
+  // UPDATED: justify alignment is now supported.
   function alignObject(
-    alignment: "left" | "center" | "right"
+    alignment: "left" | "center" | "right" | "justify"
   ) {
     if (!isTextSelected()) return;
 
@@ -1734,7 +1914,6 @@ export function FabricProvider({
 
   function rotateSelected(degrees: number) {
     const canvas = canvasRef.current;
-
     if (!canvas || !selectedObject) return;
 
     saveCanvasState();
@@ -1749,10 +1928,9 @@ export function FabricProvider({
   }
 
   function changeObjectOrder(
-    action: "forward" | "backward" | "front" | "back"
+    action: "forward" | "backward" | "front" | "back",
   ) {
     const canvas = canvasRef.current;
-
     if (!canvas || !selectedObject) return;
 
     saveCanvasState();
@@ -1789,13 +1967,12 @@ export function FabricProvider({
 
   function restoreSelection(id?: string) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const object = id
       ? canvas.getObjects().find(
           (item) =>
-            (item as typeof item & FabricObjectWithMeta).elementId === id
+            (item as typeof item & FabricObjectWithMeta).elementId === id,
         )
       : undefined;
 
@@ -1813,10 +1990,9 @@ export function FabricProvider({
 
   async function restoreCanvasState(
     snapshot: string,
-    selectionId?: string
+    selectionId?: string,
   ) {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     await canvas.loadFromJSON(JSON.parse(snapshot));
@@ -1826,7 +2002,6 @@ export function FabricProvider({
 
   function undo() {
     const canvas = canvasRef.current;
-
     if (!canvas || history.length === 0) return;
 
     const active = canvas.getActiveObject() as
@@ -1840,13 +2015,12 @@ export function FabricProvider({
     setHistory((previous) => previous.slice(0, -1));
 
     void restoreCanvasState(previousState, active?.elementId).catch(
-      (error) => console.error("Undo failed:", error)
+      (error) => console.error("Undo failed:", error),
     );
   }
 
   function redo() {
     const canvas = canvasRef.current;
-
     if (!canvas || future.length === 0) return;
 
     const active = canvas.getActiveObject() as
@@ -1860,7 +2034,7 @@ export function FabricProvider({
     setFuture((previous) => previous.slice(0, -1));
 
     void restoreCanvasState(nextState, active?.elementId).catch(
-      (error) => console.error("Redo failed:", error)
+      (error) => console.error("Redo failed:", error),
     );
   }
 
@@ -1871,7 +2045,6 @@ export function FabricProvider({
     if (elements.length === 0 || !trimmedName) return;
 
     await saveDesign(trimmedName, elements);
-
     setHistory([]);
     setFuture([]);
 
@@ -1896,11 +2069,9 @@ export function FabricProvider({
 
   function downloadPNG() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const activeObject = canvas.getActiveObject();
-
     canvas.discardActiveObject();
     canvas.requestRenderAll();
 
@@ -1911,7 +2082,6 @@ export function FabricProvider({
     });
 
     const link = document.createElement("a");
-
     link.href = dataUrl;
     link.download = `${getDownloadName()}.png`;
 
@@ -1929,11 +2099,9 @@ export function FabricProvider({
 
   function downloadPDF() {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const activeObject = canvas.getActiveObject();
-
     canvas.discardActiveObject();
     canvas.requestRenderAll();
 
@@ -2027,7 +2195,7 @@ export function useFabric() {
 
   if (!context) {
     throw new Error(
-      "useFabric must be used inside FabricProvider"
+      "useFabric must be used inside FabricProvider",
     );
   }
 
