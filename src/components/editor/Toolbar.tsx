@@ -28,6 +28,7 @@ import {
   Plus,
   MoveHorizontal,
   MoveVertical,
+  Mail,
 } from "lucide-react";
 
 import {
@@ -43,9 +44,11 @@ import type {
 
 import { useFabric } from "../../context/FabricContext";
 import { useEditor } from "../../context/EditorContext";
+import { designToHtml } from "../../utils/designToHtml";
 
 export default function Toolbar() {
   const {
+    canvasRef,
     selectedObject,
     selectedFontSize,
     deleteSelected,
@@ -97,6 +100,10 @@ export default function Toolbar() {
   const [designName, setDesignName] = useState("");
   const [saveError, setSaveError] = useState("");
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailMessage, setEmailMessage] = useState("");
 
   const downloadButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -161,8 +168,8 @@ export default function Toolbar() {
 
   const shapeColor =
     typeof selectedObject?.stroke === "string" &&
-    (selectedObject?.type === "line" ||
-      selectedObject?.type === "path")
+      (selectedObject?.type === "line" ||
+        selectedObject?.type === "path")
       ? selectedObject.stroke
       : typeof selectedObject?.fill === "string"
         ? selectedObject.fill
@@ -353,6 +360,70 @@ export default function Toolbar() {
     setShowDownloadMenu(false);
     downloadPDF();
   }
+
+
+
+  async function handleSendCanvasEmail() {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      setEmailMessage("The canvas is not ready.");
+      return;
+    }
+
+    if (!recipientEmail.trim()) {
+      setEmailMessage("Please enter a recipient email address.");
+      return;
+    }
+
+    try {
+      setEmailSending(true);
+      setEmailMessage("");
+
+      const canvasDataUrl = canvas.toDataURL({
+        format: "png",
+        multiplier: 1,
+        enableRetinaScaling: false,
+      });
+
+      const htmlContent = designToHtml(
+        canvasDataUrl,
+        currentDesignName || "My Design"
+      );
+
+      const response = await fetch(
+        "http://localhost:8080/api/email/send-design",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            recipientEmail: recipientEmail.trim(),
+            designName: currentDesignName || "My Design",
+            htmlContent,
+          }),
+        }
+      );
+
+      const result = await response.text();
+
+      if (!response.ok) {
+        throw new Error(result || "Email sending failed.");
+      }
+
+      setEmailMessage("Design email sent successfully!");
+    } catch (error) {
+      setEmailMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to send the email."
+      );
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
 
   const iconButton =
     "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-30";
@@ -549,11 +620,10 @@ export default function Toolbar() {
                       type="button"
                       onMouseDown={preserveCanvasSelection}
                       onClick={toggleBold}
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
-                        isBold
-                          ? "bg-violet-600 text-white shadow-sm"
-                          : "text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${isBold
+                        ? "bg-violet-600 text-white shadow-sm"
+                        : "text-slate-700 hover:bg-slate-100"
+                        }`}
                       title="Bold"
                       aria-label="Bold"
                       aria-pressed={Boolean(isBold)}
@@ -566,11 +636,10 @@ export default function Toolbar() {
                       type="button"
                       onMouseDown={preserveCanvasSelection}
                       onClick={toggleItalic}
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
-                        isItalic
-                          ? "bg-violet-600 text-white shadow-sm"
-                          : "text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${isItalic
+                        ? "bg-violet-600 text-white shadow-sm"
+                        : "text-slate-700 hover:bg-slate-100"
+                        }`}
                       title="Italic"
                       aria-label="Italic"
                       aria-pressed={Boolean(isItalic)}
@@ -584,11 +653,10 @@ export default function Toolbar() {
                         type="button"
                         onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("left")}
-                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                          currentTextAlign === "left"
-                            ? "bg-violet-600 text-white shadow-sm"
-                            : "text-slate-600 hover:bg-white"
-                        }`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${currentTextAlign === "left"
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-slate-600 hover:bg-white"
+                          }`}
                         title="Align left"
                         aria-label="Align left"
                         aria-pressed={currentTextAlign === "left"}
@@ -600,11 +668,10 @@ export default function Toolbar() {
                         type="button"
                         onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("center")}
-                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                          currentTextAlign === "center"
-                            ? "bg-violet-600 text-white shadow-sm"
-                            : "text-slate-600 hover:bg-white"
-                        }`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${currentTextAlign === "center"
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-slate-600 hover:bg-white"
+                          }`}
                         title="Align center"
                         aria-label="Align center"
                         aria-pressed={currentTextAlign === "center"}
@@ -616,11 +683,10 @@ export default function Toolbar() {
                         type="button"
                         onMouseDown={preserveCanvasSelection}
                         onClick={() => alignObject("right")}
-                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                          currentTextAlign === "right"
-                            ? "bg-violet-600 text-white shadow-sm"
-                            : "text-slate-600 hover:bg-white"
-                        }`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md transition ${currentTextAlign === "right"
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-slate-600 hover:bg-white"
+                          }`}
                         title="Align right"
                         aria-label="Align right"
                         aria-pressed={currentTextAlign === "right"}
@@ -733,7 +799,7 @@ export default function Toolbar() {
                       className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 transition hover:border-violet-300 hover:bg-violet-50"
                       title={
                         selectedObject?.type === "line" ||
-                        selectedObject?.type === "path"
+                          selectedObject?.type === "path"
                           ? "Line color"
                           : "Shape color"
                       }
@@ -849,6 +915,24 @@ export default function Toolbar() {
                 <span>Save</span>
               </button>
 
+
+
+              {/* SEND DESIGN BY EMAIL */}
+              <button
+                type="button"
+                onMouseDown={preserveCanvasSelection}
+                onClick={() => {
+                  setEmailMessage("");
+                  setShowEmailModal(true);
+                }}
+                className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-violet-200 bg-white px-3.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-50"
+                title="Send canvas design by email"
+              >
+                <Mail size={15} />
+                <span>Send Design by Email</span>
+              </button>
+
+
               {/* DOWNLOAD */}
               <button
                 type="button"
@@ -864,9 +948,8 @@ export default function Toolbar() {
 
                 <ChevronDown
                   size={14}
-                  className={`transition-transform ${
-                    showDownloadMenu ? "rotate-180" : ""
-                  }`}
+                  className={`transition-transform ${showDownloadMenu ? "rotate-180" : ""
+                    }`}
                 />
               </button>
             </div>
@@ -1046,6 +1129,121 @@ export default function Toolbar() {
           </div>
         </div>
       )}
+
+
+      {/* SEND DESIGN BY EMAIL MODAL */}
+      {showEmailModal && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          onMouseDown={(event: ReactMouseEvent<HTMLDivElement>) => {
+            if (event.target === event.currentTarget && !emailSending) {
+              setShowEmailModal(false);
+              setEmailMessage("");
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+              <div>
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                  <Mail size={19} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Send Design by Email
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Enter the email address where you want to send this design.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!emailSending) {
+                    setShowEmailModal(false);
+                    setEmailMessage("");
+                  }
+                }}
+                disabled={emailSending}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+                aria-label="Close email dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <label
+                htmlFor="recipient-email"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Recipient email
+              </label>
+
+              <input
+                id="recipient-email"
+                autoFocus
+                type="email"
+                value={recipientEmail}
+                onChange={(event) => {
+                  setRecipientEmail(event.target.value);
+                  setEmailMessage("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !emailSending) {
+                    void handleSendCanvasEmail();
+                  }
+                  if (event.key === "Escape" && !emailSending) {
+                    setShowEmailModal(false);
+                    setEmailMessage("");
+                  }
+                }}
+                placeholder="name@example.com"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3.5 text-sm text-slate-800 outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+              />
+
+              {emailMessage && (
+                <p
+                  role="status"
+                  className={`mt-3 text-sm ${emailMessage === "Design email sent successfully!"
+                      ? "text-emerald-600"
+                      : "text-rose-600"
+                    }`}
+                >
+                  {emailMessage}
+                </p>
+              )}
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!emailSending) {
+                      setShowEmailModal(false);
+                      setEmailMessage("");
+                    }
+                  }}
+                  disabled={emailSending}
+                  className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleSendCanvasEmail()}
+                  disabled={emailSending || !recipientEmail.trim()}
+                  className="flex h-10 items-center gap-2 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Mail size={15} />
+                  {emailSending ? "Sending Email..." : "Send Email"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
   );
 }

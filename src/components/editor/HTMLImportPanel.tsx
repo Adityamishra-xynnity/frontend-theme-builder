@@ -130,6 +130,7 @@ export default function HTMLImportPanel() {
         <Download size={17} />
         Import to Canvas
       </button>
+
     </div>
   );
 }
