@@ -3,8 +3,8 @@ import type { EditorElement, ElementType } from "../../types/editor";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 650;
-const CANVAS_PADDING = 30;
-const ELEMENT_GAP = 20;
+const CANVAS_PADDING = 40;
+const ELEMENT_GAP = 24;
 
 const CONTENT_WIDTH = CANVAS_WIDTH - CANVAS_PADDING * 2;
 const CONTENT_HEIGHT = CANVAS_HEIGHT - CANVAS_PADDING * 2;
@@ -18,11 +18,9 @@ function getNumber(
   }
 
   const match = value.match(/-?\d+(?:\.\d+)?/);
-
   if (!match) return fallback;
 
   const number = Number(match[0]);
-
   return Number.isFinite(number) ? number : fallback;
 }
 
@@ -57,10 +55,7 @@ function getElementType(tagName: string): ElementType | null {
   const tag = tagName.toLowerCase();
 
   if (tag === "h1") return "heading";
-
-  if (tag === "h2" || tag === "h3") {
-    return "subheading";
-  }
+  if (tag === "h2" || tag === "h3") return "subheading";
 
   if (
     tag === "h4" ||
@@ -79,18 +74,44 @@ function getElementType(tagName: string): ElementType | null {
   return null;
 }
 
-function hasOwnText(element: HTMLElement): boolean {
-  return Array.from(element.childNodes).some(
-    (child) =>
-      child.nodeType === Node.TEXT_NODE &&
-      Boolean(child.textContent?.trim()),
-  );
+function getDefaultFontSize(tag: string): number {
+  switch (tag.toLowerCase()) {
+    case "h1":
+      return 36;
+    case "h2":
+      return 30;
+    case "h3":
+      return 24;
+    case "h4":
+      return 20;
+    case "h5":
+      return 18;
+    case "h6":
+      return 16;
+    default:
+      return 16;
+  }
 }
 
-/**
- * Wrap long text into lines before sending it to Fabric.
- * This prevents long imported headings from being cut off.
- */
+function getImportedFontSize(
+  element: HTMLElement,
+  tag: string,
+  computedFontSize: string,
+): number {
+  const defaultSize = getDefaultFontSize(tag);
+  const inlineSize = element.style
+    .getPropertyValue("font-size")
+    .trim();
+
+  const size = inlineSize
+    ? getNumber(inlineSize, defaultSize)
+    : /^h[1-6]$/.test(tag.toLowerCase())
+      ? defaultSize
+      : getNumber(computedFontSize, defaultSize);
+
+  return Math.min(64, Math.max(10, size));
+}
+
 function wrapText(
   text: string,
   fontSize: number,
@@ -153,12 +174,10 @@ function getTextHeight(
   fontSize: number,
   width: number,
 ): number {
-  const wrappedText = wrapText(text, fontSize, width);
-  const lineCount = Math.max(1, wrappedText.split("\n").length);
+  const wrapped = wrapText(text, fontSize, width);
+  const lineCount = Math.max(1, wrapped.split("\n").length);
 
-  // Extra vertical room prevents Fabric's text descenders
-  // and line-height from being clipped.
-  return Math.ceil(lineCount * fontSize * 1.45 + 18);
+  return Math.ceil(lineCount * fontSize * 1.5 + 12);
 }
 
 export function htmlToElements(html: string): {
@@ -166,13 +185,16 @@ export function htmlToElements(html: string): {
   backgroundColor: string;
 } {
   const parser = new DOMParser();
-  const parsedDocument = parser.parseFromString(html, "text/html");
+  const document = parser.parseFromString(html, "text/html");
+  const body = document.body;
 
   const elements: EditorElement[] = [];
-  const body = parsedDocument.body;
 
-  const bodyBackground =
-    getColor(body, "background-color", "#FFFFFF") || "#FFFFFF";
+  const backgroundColor = getColor(
+    body,
+    "background-color",
+    "#FFFFFF",
+  );
 
   const nodes = Array.from(
     body.querySelectorAll(
@@ -189,11 +211,16 @@ export function htmlToElements(html: string): {
 
     if (!type) continue;
 
-    // Avoid duplicating text already represented by child elements.
+    // Parent containers ko skip karo agar unka text
+    // child elements se already import ho raha ho.
     if (
       type !== "image" &&
       element.children.length > 0 &&
-      !hasOwnText(element)
+      !Array.from(element.childNodes).some(
+        (child) =>
+          child.nodeType === Node.TEXT_NODE &&
+          Boolean(child.textContent?.trim()),
+      )
     ) {
       continue;
     }
@@ -206,26 +233,21 @@ export function htmlToElements(html: string): {
     if (type !== "image" && !originalText) continue;
 
     const style = window.getComputedStyle(element);
-    const isHeading = type === "heading";
-    const isSubheading = type === "subheading";
 
-    const fontSize = Math.min(
-      Math.max(
-        getNumber(
-          style.fontSize,
-          isHeading ? 32 : isSubheading ? 24 : 16,
-        ),
-        8,
-      ),
-      72,
+    const fontSize =
+      type === "image"
+        ? 16
+        : getImportedFontSize(element, tag, style.fontSize);
+
+    // Imported content ko canvas ki safe width mein rakho.
+    const requestedWidth = getNumber(
+      style.width,
+      CONTENT_WIDTH,
     );
 
     const width = Math.min(
-      Math.max(
-        getNumber(style.width, CONTENT_WIDTH),
-        40,
-      ),
       CONTENT_WIDTH,
+      Math.max(120, requestedWidth),
     );
 
     const text =
@@ -233,35 +255,30 @@ export function htmlToElements(html: string): {
         ? ""
         : wrapText(originalText, fontSize, width);
 
-    const estimatedTextHeight =
+    const estimatedHeight =
       type === "image"
-        ? 150
+        ? 180
         : getTextHeight(text, fontSize, width);
 
-    const sourceHeight = getNumber(
+    const requestedHeight = getNumber(
       style.height,
-      estimatedTextHeight,
+      estimatedHeight,
     );
 
-    // Never use a text box smaller than the estimated text content.
     const height =
       type === "image"
         ? Math.min(
-            Math.max(sourceHeight, 30),
             CONTENT_HEIGHT,
+            Math.max(60, requestedHeight),
           )
         : Math.min(
-            Math.max(sourceHeight, estimatedTextHeight),
             CONTENT_HEIGHT,
+            Math.max(estimatedHeight, requestedHeight),
           );
 
-    /*
-     * Do not clamp every overflowing element to the bottom edge.
-     * That caused elements to overlap and appear cut off.
-     */
+    // Agar agla item neeche fit na ho to safe position se
+    // shuru karo; kisi item ko canvas ke bahar mat bhejo.
     if (nextY + height > CANVAS_HEIGHT - CANVAS_PADDING) {
-      // If the canvas is full, retain remaining content by placing
-      // it at the next safe starting position instead of clipping it.
       nextY = CANVAS_PADDING;
     }
 
@@ -271,20 +288,37 @@ export function htmlToElements(html: string): {
       Math.min(nextY, CANVAS_HEIGHT - height - CANVAS_PADDING),
     );
 
-    const fontWeight =
-      style.fontWeight === "bold" ||
-      Number(style.fontWeight) >= 600
-        ? "bold"
-        : "normal";
+    const inlineWeight = element.style
+      .getPropertyValue("font-weight")
+      .trim();
+
+    const computedWeight = style.fontWeight;
+
+    const isBold =
+      /^h[1-6]$/.test(tag) ||
+      inlineWeight === "bold" ||
+      Number(inlineWeight) >= 600 ||
+      computedWeight === "bold" ||
+      Number(computedWeight) >= 600;
+
+    const fontWeight = isBold ? "bold" : "normal";
 
     const fontStyle =
-      style.fontStyle === "italic" ? "italic" : "normal";
+      element.style.fontStyle === "italic" ||
+      style.fontStyle === "italic"
+        ? "italic"
+        : "normal";
+
+    const alignment =
+      element.style.getPropertyValue("text-align").trim() ||
+      style.textAlign;
 
     const textAlign =
-      style.textAlign === "center" ||
-      style.textAlign === "right"
-        ? style.textAlign
+      alignment === "center" || alignment === "right"
+        ? alignment
         : "left";
+
+    const opacityValue = getNumber(style.opacity, 1);
 
     const common = {
       id: crypto.randomUUID(),
@@ -299,10 +333,7 @@ export function htmlToElements(html: string): {
       fontWeight,
       fontStyle,
       textAlign,
-      opacity: Math.min(
-        1,
-        Math.max(0, getNumber(style.opacity, 1)),
-      ),
+      opacity: Math.min(1, Math.max(0, opacityValue)),
     } satisfies Partial<EditorElement>;
 
     if (type === "image" && image) {
@@ -325,16 +356,15 @@ export function htmlToElements(html: string): {
           type: "image",
           src: url.href,
         } as EditorElement);
-
-        nextY = y + height + ELEMENT_GAP;
       } catch {
         continue;
       }
 
+      nextY = y + height + ELEMENT_GAP;
       continue;
     }
 
-    const backgroundColor = getColor(
+    const elementBackground = getColor(
       element,
       "background-color",
       "transparent",
@@ -344,7 +374,7 @@ export function htmlToElements(html: string): {
       ...common,
       type,
       text,
-      backgroundColor,
+      backgroundColor: elementBackground,
     } as EditorElement);
 
     nextY = y + height + ELEMENT_GAP;
@@ -352,6 +382,6 @@ export function htmlToElements(html: string): {
 
   return {
     elements,
-    backgroundColor: bodyBackground,
+    backgroundColor,
   };
 }

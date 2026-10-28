@@ -751,6 +751,9 @@ export function FabricProvider({
     saveDesign,
     currentDesignName,
     syncElementsFromCanvas,
+    pages,
+    activePageId,
+    selectPage,
   } = useEditor();
 
   const setSelectedObject = (object: any) => {
@@ -781,7 +784,7 @@ export function FabricProvider({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    syncElementsFromCanvas(convertCanvasToElements());
+    syncElementsFromCanvas(convertCanvasToElements(), activePageId);
   }
 
   function convertCanvasToElements(): EditorElement[] {
@@ -815,6 +818,10 @@ export function FabricProvider({
       const element: EditorElement = {
         id: item.elementId ?? crypto.randomUUID(),
         type,
+        // Keep the stored coordinates consistent with applyObjectControls()
+        // and FabricCanvas reconstruction, which both use originX/originY="left"/"top".
+        // Using getPointByOrigin here recalculates a visual bounding corner and can
+        // shift rotated/text/polygon objects when pages are switched or copied.
         x: object.left ?? 0,
         y: object.top ?? 0,
         width: object.width ?? 0,
@@ -864,6 +871,13 @@ export function FabricProvider({
       if (SHAPE_TYPES.includes(type)) {
         element.backgroundColor =
           typeof object.fill === "string" ? object.fill : "#2563eb";
+
+        // Preserve outlines on every shape (including stars, cogs and flowers)
+        // when the canvas is serialized and reconstructed for a copied page.
+        element.strokeColor =
+          typeof object.stroke === "string" ? object.stroke : "";
+        element.strokeWidth =
+          typeof object.strokeWidth === "number" ? object.strokeWidth : 0;
 
         if (item.shapeSides) {
           element.shapeSides = item.shapeSides;
@@ -2097,38 +2111,93 @@ export function FabricProvider({
     canvas.requestRenderAll();
   }
 
-  function downloadPDF() {
+  async function downloadPDF() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const activeObject = canvas.getActiveObject();
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
+    // Save current canvas content before changing pages so the latest edits
+    // are reflected in the page data held by EditorContext.
+    syncCanvasToEditor();
 
-    const width = canvas.getWidth();
-    const height = canvas.getHeight();
+    const pageList = Array.isArray(pages) && pages.length > 0
+      ? pages
+      : [{
+          id: activePageId,
+          name: "Page 1",
+          elements: [],
+          backgroundColor: "#ffffff",
+          pageSize: "A4" as const,
+          orientation: "landscape" as const,
+        }];
 
-    const dataUrl = canvas.toDataURL({
-      format: "png",
-      multiplier: 2,
-      quality: 1,
+    const originalPageId = activePageId;
+    let currentPageId = activePageId;
+    const originalActiveObject = canvas.getActiveObject();
+    let pdf: jsPDF | null = null;
+
+    const waitForCanvasUpdate = () => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
 
-    const pdf = new jsPDF({
-      orientation: width >= height ? "landscape" : "portrait",
-      unit: "px",
-      format: [width, height],
-    });
+    try {
+      for (let index = 0; index < pageList.length; index += 1) {
+        const page = pageList[index];
 
-    pdf.addImage(dataUrl, "PNG", 0, 0, width, height);
-    pdf.save(`${getDownloadName()}.pdf`);
+        if (page.id && page.id !== currentPageId) {
+          selectPage(page.id);
+          currentPageId = page.id;
+          await waitForCanvasUpdate();
+        }
 
-    if (activeObject) {
-      canvas.setActiveObject(activeObject);
-      setSelectedObject(activeObject);
+        const currentCanvas = canvasRef.current;
+        if (!currentCanvas) continue;
+
+        const activeObject = currentCanvas.getActiveObject();
+        currentCanvas.discardActiveObject();
+        currentCanvas.requestRenderAll();
+        await waitForCanvasUpdate();
+
+        const pageWidth = currentCanvas.getWidth();
+        const pageHeight = currentCanvas.getHeight();
+        const dataUrl = currentCanvas.toDataURL({
+          format: "png",
+          multiplier: 2,
+          quality: 1,
+        });
+
+        if (!pdf) {
+          pdf = new jsPDF({
+            orientation: pageWidth >= pageHeight ? "landscape" : "portrait",
+            unit: "px",
+            format: [pageWidth, pageHeight],
+          });
+        } else {
+          pdf.addPage([pageWidth, pageHeight], pageWidth >= pageHeight ? "landscape" : "portrait");
+        }
+
+        pdf.addImage(dataUrl, "PNG", 0, 0, pageWidth, pageHeight);
+
+        if (activeObject) currentCanvas.setActiveObject(activeObject);
+        currentCanvas.requestRenderAll();
+      }
+
+      if (pdf) pdf.save(`${getDownloadName()}.pdf`);
+    } catch (error) {
+      console.error("Failed to export all pages to PDF:", error);
+    } finally {
+      if (originalPageId && originalPageId !== currentPageId) {
+        selectPage(originalPageId);
+        currentPageId = originalPageId;
+        await waitForCanvasUpdate();
+      }
+
+      const restoredCanvas = canvasRef.current;
+      if (restoredCanvas && originalActiveObject) {
+        restoredCanvas.setActiveObject(originalActiveObject);
+        setSelectedObject(originalActiveObject);
+      }
+      restoredCanvas?.requestRenderAll();
     }
-
-    canvas.requestRenderAll();
   }
 
   const value: FabricContextType = {
