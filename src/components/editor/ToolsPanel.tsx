@@ -11,6 +11,8 @@ import {
   Highlighter,
   Eraser,
   Settings2,
+  Minus,
+  Plus,
 } from "lucide-react";
 
 import { useFabric } from "../../context/FabricContext";
@@ -34,12 +36,12 @@ export default function ToolsPanel() {
   const [weight, setWeight] = useState(5);
   const [transparency, setTransparency] = useState(100);
 
-const rowClass = (selected: boolean) =>
-  `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-    selected
-      ? "bg-violet-50 font-semibold text-violet-800"
-      : "text-gray-700 hover:bg-gray-100"
-  }`;
+  const rowClass = (selected: boolean) =>
+    `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+      selected
+        ? "bg-violet-50 font-semibold text-violet-800"
+        : "text-gray-700 hover:bg-gray-100"
+    }`;
 
   function activateSelect() {
     setActiveTool("select");
@@ -69,11 +71,13 @@ const rowClass = (selected: boolean) =>
   }
 
   function updateWeight(value: number) {
-    setWeight(value);
+    const nextWeight = Math.max(1, Math.min(50, value));
+
+    setWeight(nextWeight);
 
     setDrawingSettings({
       color: drawColor,
-      width: value,
+      width: nextWeight,
       opacity: transparency / 100,
     });
   }
@@ -94,6 +98,7 @@ const rowClass = (selected: boolean) =>
         <h2 className="text-lg font-semibold text-gray-900">
           Tools
         </h2>
+
         <p className="mt-1 text-xs text-gray-500">
           Create something amazing
         </p>
@@ -122,7 +127,9 @@ const rowClass = (selected: boolean) =>
             className={rowClass(activeTool === "draw")}
           >
             <Pencil size={20} strokeWidth={1.8} />
+
             <span className="flex-1">Draw</span>
+
             {showDraw ? (
               <ChevronDown size={16} />
             ) : (
@@ -200,6 +207,7 @@ const rowClass = (selected: boolean) =>
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-gray-700 hover:bg-gray-100"
               >
                 <Settings2 size={17} />
+
                 <span className="flex-1 text-left">
                   Settings
                 </span>
@@ -214,12 +222,51 @@ const rowClass = (selected: boolean) =>
               {showSettings && (
                 <div className="space-y-4 px-1 pb-2">
                   <div>
-                    <div className="mb-2 flex justify-between text-xs">
+                    <div className="mb-2 flex items-center justify-between text-xs">
                       <label htmlFor="tool-weight">
-                        Weight
+                        {drawMode === "eraser" ? "Eraser Size" : "Weight"}
                       </label>
-                      <span>{weight}px</span>
+
+                      <span className="font-semibold text-violet-700">
+                        {weight}px
+                      </span>
                     </div>
+
+                    {drawMode === "eraser" && (
+                      <div className="mb-3 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-2">
+                        <span className="text-xs font-medium text-gray-600">
+                          Adjust eraser size
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateWeight(weight - 1)}
+                            disabled={weight <= 1}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Decrease eraser size"
+                            aria-label="Decrease eraser size"
+                          >
+                            <Minus size={15} />
+                          </button>
+
+                          <span className="min-w-8 text-center text-sm font-semibold text-gray-800">
+                            {weight}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => updateWeight(weight + 1)}
+                            disabled={weight >= 50}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Increase eraser size"
+                            aria-label="Increase eraser size"
+                          >
+                            <Plus size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <input
                       id="tool-weight"
@@ -232,30 +279,38 @@ const rowClass = (selected: boolean) =>
                       }
                       className="w-full accent-violet-600"
                     />
-                  </div>
 
-                  <div>
-                    <div className="mb-2 flex justify-between text-xs">
-                      <label htmlFor="tool-transparency">
-                        Transparency
-                      </label>
-                      <span>{transparency}%</span>
+                    <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                      <span>1 px</span>
+                      <span>50 px</span>
                     </div>
-
-                    <input
-                      id="tool-transparency"
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={transparency}
-                      onChange={(event) =>
-                        updateTransparency(
-                          Number(event.target.value)
-                        )
-                      }
-                      className="w-full accent-violet-600"
-                    />
                   </div>
+
+                  {drawMode !== "eraser" && (
+                    <div>
+                      <div className="mb-2 flex justify-between text-xs">
+                        <label htmlFor="tool-transparency">
+                          Transparency
+                        </label>
+
+                        <span>{transparency}%</span>
+                      </div>
+
+                      <input
+                        id="tool-transparency"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={transparency}
+                        onChange={(event) =>
+                          updateTransparency(
+                            Number(event.target.value)
+                          )
+                        }
+                        className="w-full accent-violet-600"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -302,8 +357,6 @@ const rowClass = (selected: boolean) =>
             <Table2 size={20} strokeWidth={1.8} />
             <span>Table</span>
           </button>
-
-      
         </div>
       </div>
     </aside>

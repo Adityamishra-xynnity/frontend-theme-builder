@@ -1,5 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Undo2,
   Redo2,
@@ -88,6 +89,7 @@ export default function Toolbar() {
     backgroundColor,
     setCanvasBackground,
     currentDesignName,
+    pages,
   } = useEditor();
 
   const object = selectedObject as EditableText | null;
@@ -99,9 +101,22 @@ export default function Toolbar() {
   const [designName, setDesignName] = useState("");
   const [saveError, setSaveError] = useState("");
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  // Shared PNG / PDF page-selection modal
+  const [showExportPagesModal, setShowExportPagesModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"png" | "pdf">("png");
+  const [selectedExportPageIds, setSelectedExportPageIds] = useState<string[]>([]);
+
   const [rotation, setRotation] = useState(0);
 
   const downloadRef = useRef<HTMLDivElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+
+  const [downloadMenuPosition, setDownloadMenuPosition] = useState({
+    top: 300,
+    right: 12,
+    maxHeight: 400,
+  });
 
   const isText =
     selectedObject?.type === "i-text" ||
@@ -147,11 +162,15 @@ export default function Toolbar() {
     setRotation(selectedObject.angle ?? 0);
   }, [selectedObject]);
 
+  // Close dropdown when clicking outside.
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
+
       if (
         downloadRef.current &&
-        !downloadRef.current.contains(event.target as Node)
+        !downloadRef.current.contains(target) &&
+        !downloadMenuRef.current?.contains(target)
       ) {
         setShowDownloadMenu(false);
       }
@@ -163,6 +182,57 @@ export default function Toolbar() {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, []);
+
+  // Position dropdown BELOW the toolbar button, inside the canvas area.
+  function updateDownloadMenuPosition() {
+    if (!downloadRef.current) return;
+
+    const rect = downloadRef.current.getBoundingClientRect();
+
+    const gap = 10;
+    const padding = 12;
+    const menuHeight = 150;
+
+    const top = rect.bottom + gap;
+
+    const availableHeight = Math.max(
+      100,
+      window.innerHeight - top - padding
+    );
+
+    const maxHeight = Math.max(
+      100,
+      Math.min(menuHeight, availableHeight)
+    );
+
+    const right = Math.max(
+      padding,
+      window.innerWidth - rect.right
+    );
+
+    setDownloadMenuPosition({
+      top,
+      right,
+      maxHeight,
+    });
+  }
+
+  // Reposition the menu if the page or editor scrolls.
+  useEffect(() => {
+    if (!showDownloadMenu) return;
+
+    function handleViewportChange() {
+      updateDownloadMenuPosition();
+    }
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [showDownloadMenu]);
 
   function preserveSelection(
     event: React.MouseEvent<HTMLButtonElement>
@@ -280,6 +350,30 @@ export default function Toolbar() {
     setSaveError("");
   }
 
+  // Open shared page-selection modal for PNG or PDF.
+  function openExportPagesModal(format: "png" | "pdf") {
+    setExportFormat(format);
+    setSelectedExportPageIds(pages.map((page) => page.id));
+    setShowExportPagesModal(true);
+  }
+
+  // Export all pages or only selected pages.
+  function handleExportPages(allPages: boolean) {
+    const pageIds = allPages
+      ? pages.map((page) => page.id)
+      : selectedExportPageIds;
+
+    setShowExportPagesModal(false);
+
+    if (pageIds.length === 0) return;
+
+    if (exportFormat === "png") {
+      void downloadPNG(pageIds);
+    } else {
+      void downloadPDF(pageIds);
+    }
+  }
+
   const button =
     "inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-lg px-2.5 text-slate-600 transition-all duration-150 hover:bg-indigo-50 hover:text-indigo-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-35";
 
@@ -301,6 +395,7 @@ export default function Toolbar() {
       <div className="relative z-40 w-full border-b border-slate-200 bg-slate-50/95 px-3 py-3">
         <div className="overflow-x-auto pb-0.5">
           <div className="min-w-max space-y-2">
+
             {/* ROW 1: History, layers, typography and export */}
             <div className={panel}>
               <div className={group}>
@@ -553,7 +648,6 @@ export default function Toolbar() {
 
                   <div className={divider} />
 
-                  {/* Text alignment controls */}
                   <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
                     <button
                       type="button"
@@ -612,17 +706,24 @@ export default function Toolbar() {
                   Save
                 </button>
 
+                {/* DOWNLOAD BUTTON AND PORTAL MENU */}
                 <div className="relative" ref={downloadRef}>
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowDownloadMenu((previous) => !previous)
-                    }
+                    onClick={() => {
+                      if (!showDownloadMenu) {
+                        updateDownloadMenuPosition();
+                      }
+
+                      setShowDownloadMenu((previous) => !previous);
+                    }}
                     aria-expanded={showDownloadMenu}
+                    aria-haspopup="menu"
                     className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
                   >
                     <Download size={15} />
                     Download
+
                     <ChevronDown
                       size={14}
                       className={`transition-transform duration-200 ${
@@ -631,54 +732,189 @@ export default function Toolbar() {
                     />
                   </button>
 
-                  {showDownloadMenu && (
-                    <div className="absolute right-0 top-full z-[100] mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowDownloadMenu(false);
-                          downloadPNG();
+                  {showDownloadMenu &&
+                    createPortal(
+                      <div
+                        ref={downloadMenuRef}
+                        style={{
+                          position: "fixed",
+                          top: downloadMenuPosition.top,
+                          right: downloadMenuPosition.right,
+                          maxHeight: downloadMenuPosition.maxHeight,
+                          zIndex: 2147483647,
                         }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-indigo-50"
+                        className="w-72 overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.30)] ring-1 ring-slate-900/10"
+                        role="menu"
+                        aria-label="Download options"
                       >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                          <ImageDown size={18} />
-                        </span>
-                        <span>
-                          <span className="block text-xs font-semibold text-slate-800">
-                            Download PNG
-                          </span>
-                          <span className="mt-1 block text-[11px] text-slate-500">
-                            Export as a high-quality image
-                          </span>
-                        </span>
-                      </button>
+                        {/* DOWNLOAD PNG */}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setShowDownloadMenu(false);
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowDownloadMenu(false);
-                          downloadPDF();
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-rose-50"
-                      >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
-                          <FileDown size={18} />
-                        </span>
-                        <span>
-                          <span className="block text-xs font-semibold text-slate-800">
-                            Download PDF
+                            if (pages.length <= 1) {
+                              void downloadPNG(pages.map((page) => page.id));
+                            } else {
+                              openExportPagesModal("png");
+                            }
+                          }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-indigo-50"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                            <ImageDown size={19} />
                           </span>
-                          <span className="mt-1 block text-[11px] text-slate-500">
-                            Export a print-ready document
+
+                          <span>
+                            <span className="block text-sm font-semibold text-slate-800">
+                              Download PNG
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-500">
+                              Export pages as separate images
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    </div>
-                  )}
+                        </button>
+
+                        {/* DOWNLOAD PDF */}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setShowDownloadMenu(false);
+
+                            if (pages.length <= 1) {
+                              void downloadPDF(pages.map((page) => page.id));
+                            } else {
+                              openExportPagesModal("pdf");
+                            }
+                          }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-rose-50"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                            <FileDown size={19} />
+                          </span>
+
+                          <span>
+                            <span className="block text-sm font-semibold text-slate-800">
+                              Download PDF
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-500">
+                              Export a print-ready document
+                            </span>
+                          </span>
+                        </button>
+                      </div>,
+                      document.body
+                    )}
                 </div>
               </div>
             </div>
+
+            {/* PNG / PDF PAGE SELECTION MODAL */}
+            {showExportPagesModal && (
+              <div
+                className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="export-pages-title"
+              >
+                <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2
+                      id="export-pages-title"
+                      className="text-sm font-semibold text-slate-900"
+                    >
+                      Choose {exportFormat.toUpperCase()} pages
+                    </h2>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowExportPagesModal(false)}
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                      aria-label="Close page selection"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="mb-3 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-medium text-slate-700">
+                      Select pages to export
+                    </span>
+
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                      onClick={() =>
+                        setSelectedExportPageIds(
+                          selectedExportPageIds.length === pages.length
+                            ? []
+                            : pages.map((page) => page.id)
+                        )
+                      }
+                    >
+                      {selectedExportPageIds.length === pages.length
+                        ? "Deselect all"
+                        : "Select all"}
+                    </button>
+                  </div>
+
+                  <div className="mb-5 max-h-64 space-y-1 overflow-y-auto">
+                    {pages.map((page, index) => (
+                      <label
+                        key={page.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-indigo-50"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-indigo-600"
+                          checked={selectedExportPageIds.includes(page.id)}
+                          onChange={(event) =>
+                            setSelectedExportPageIds((current) =>
+                              event.target.checked
+                                ? [...current, page.id]
+                                : current.filter((id) => id !== page.id)
+                            )
+                          }
+                        />
+
+                        <span>
+                          {page.name?.trim() || `Page ${index + 1}`}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowExportPagesModal(false)}
+                      className="rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExportPages(true)}
+                      className="rounded-lg border border-indigo-200 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                    >
+                      Download All Pages
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={selectedExportPageIds.length === 0}
+                      onClick={() => handleExportPages(false)}
+                      className="rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Download Selected
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ROW 2: Text spacing, lists, rotation and canvas */}
             <div className={panel}>
@@ -889,11 +1125,12 @@ export default function Toolbar() {
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
-      {/* Save certificate modal */}
+      {/* SAVE CERTIFICATE MODAL */}
       {showSaveModal && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-[3px]"

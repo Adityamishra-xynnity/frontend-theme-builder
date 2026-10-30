@@ -32,6 +32,7 @@ type FabricObjectWithMeta = FabricObject & {
   elementType?: ElementType;
   imageSrc?: string;
   shapeSides?: number;
+  isFreehand?: boolean;
 };
 
 const DEFAULT_WIDTH = 1400;
@@ -73,6 +74,7 @@ function getElementSignature(elements: EditorElement[]): string {
       lineDash: element.lineDash ?? [],
       shapeSides: element.shapeSides ?? 0,
       src: element.src ?? "",
+      pathData: element.pathData ?? [],
     })),
   );
 }
@@ -93,6 +95,9 @@ function applyElementMetadata(
   if (element.shapeSides !== undefined) {
     meta.shapeSides = element.shapeSides;
   }
+
+  // Keep freehand paths identifiable after a page rebuild.
+  meta.isFreehand = Boolean(element.pathData?.length);
 }
 
 function applyCommonProperties(
@@ -100,10 +105,10 @@ function applyCommonProperties(
   element: EditorElement,
 ): void {
   object.set({
-    // Use a consistent top-left origin for all reconstructed objects.
-    // This keeps their visual position stable when switching/copying pages.
-    originX: "left",
-    originY: "top",
+    // Freehand Path data is serialized around its center point. Keep that
+    // origin when rebuilding it; all other objects use top-left coordinates.
+    originX: element.pathData?.length ? "center" : "left",
+    originY: element.pathData?.length ? "center" : "top",
     left: element.x,
     top: element.y,
     scaleX: element.scaleX ?? 1,
@@ -311,6 +316,26 @@ function createElementObject(
         fill: element.backgroundColor || color,
         stroke: strokeColor,
         strokeWidth,
+      },
+    );
+  } else if (
+    element.type === "line" &&
+    element.pathData &&
+    element.pathData.length > 0
+  ) {
+    // Restore freehand strokes as their original Fabric Path, not as a straight Line.
+    object = new Path(
+      element.pathData.map((command) => [...command]) as any,
+      {
+        fill: "",
+        stroke: element.strokeColor || color,
+        strokeWidth: element.strokeWidth ?? 4,
+        strokeDashArray: element.lineDash,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        originX: "center",
+        originY: "center",
+        objectCaching: false,
       },
     );
   } else if (

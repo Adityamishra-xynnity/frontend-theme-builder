@@ -192,9 +192,17 @@ export function EditorProvider({
       orientation: DEFAULT_ORIENTATION,
     },
   ]);
+  const pagesRef = useRef(pages);
+
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
 
   const [activePageId, setActivePageId] =
     useState<string>(initialPageId);
+  // Synchronous active-page identity prevents stale selectPage callbacks
+  // (such as a multi-page PDF export) from repeatedly saving into the first page.
+  const activePageIdRef = useRef(activePageId);
 
   // Prevent the previous page's state from overwriting
   // the newly selected page during a page switch.
@@ -256,6 +264,7 @@ export function EditorProvider({
     ]);
 
     latestElementsRef.current = [];
+    activePageIdRef.current = newPage.id;
     setActivePageId(newPage.id);
     latestElementsRef.current = [];
     setElements([]);
@@ -316,6 +325,7 @@ export function EditorProvider({
     ]);
 
     latestElementsRef.current = copied.elements;
+    activePageIdRef.current = copied.id;
     setActivePageId(copied.id);
     setElements(copied.elements);
     setBackgroundColorState(copied.backgroundColor);
@@ -354,6 +364,7 @@ export function EditorProvider({
 
     setPages(remaining);
     latestElementsRef.current = nextPage.elements;
+    activePageIdRef.current = nextPage.id;
     setActivePageId(nextPage.id);
     setElements(nextPage.elements);
     setBackgroundColorState(nextPage.backgroundColor);
@@ -368,26 +379,37 @@ export function EditorProvider({
 
   const selectPage = useCallback(
     (id: string) => {
-      if (id === activePageId) return;
+      const currentActivePageId = activePageIdRef.current;
+      if (id === currentActivePageId) return;
 
-      const target = pages.find((page) => page.id === id);
+      const target = pagesRef.current.find((page) => page.id === id);
       if (!target) return;
 
-      setPages((previous) =>
-        previous.map((page) =>
-          page.id === activePageId
-            ? {
-                ...page,
-                elements,
-                backgroundColor,
-                pageSize,
-                orientation,
-              }
-            : page
-        )
+      // Capture the currently rendered Fabric canvas synchronously before
+      // switching pages. React state can lag behind the most recent text edit
+      // or object movement, especially during PDF export/page switching.
+      const canvasSnapshot = canvasSnapshotProviderRef.current?.();
+      const currentElements = canvasSnapshot ?? latestElementsRef.current;
+
+      // Keep the synchronous snapshot in step with the page being saved.
+      latestElementsRef.current = currentElements;
+
+      const nextPages = pagesRef.current.map((page) =>
+        page.id === currentActivePageId
+          ? {
+              ...page,
+              elements: currentElements,
+              backgroundColor,
+              pageSize,
+              orientation,
+            }
+          : page
       );
+      pagesRef.current = nextPages;
+      setPages(nextPages);
 
       latestElementsRef.current = target.elements;
+      activePageIdRef.current = target.id;
       setActivePageId(target.id);
       setElements(target.elements);
       setBackgroundColorState(target.backgroundColor);
@@ -543,6 +565,8 @@ export function EditorProvider({
         },
       ]);
 
+      activePageIdRef.current = pageId;
+
       setActivePageId(pageId);
     },
     []
@@ -571,6 +595,8 @@ export function EditorProvider({
         orientation: DEFAULT_ORIENTATION,
       },
     ]);
+
+    activePageIdRef.current = pageId;
 
     setActivePageId(pageId);
   }, []);
@@ -745,6 +771,8 @@ export function EditorProvider({
         },
       ]);
 
+      activePageIdRef.current = pageId;
+
       setActivePageId(pageId);
     },
     []
@@ -769,29 +797,30 @@ export function EditorProvider({
     sourcePageId?: string
   ) => {
     // Ignore late events from a canvas belonging to another page.
-    if (sourcePageId && sourcePageId !== activePageId) {
+    if (sourcePageId && sourcePageId !== activePageIdRef.current) {
       return;
     }
 
     latestElementsRef.current = canvasElements;
     setElements(canvasElements);
 
-    // Keep the canvas update attached to the page that emitted it.
-    // Delayed events from a previous page must never update the newly active page.
-    const syncedPageId = sourcePageId ?? activePageId;
-    setPages((previous) =>
-      previous.map((page) =>
-        page.id === syncedPageId
-          ? {
-              ...page,
-              elements: canvasElements,
-              backgroundColor,
-              pageSize,
-              orientation,
-            }
-          : page
-      )
+    // Update the synchronous page snapshot as well as React state. PDF export
+    // can start before the next React effect runs; without this, selectPage()
+    // may reload an older text value (for example the original "Subheading").
+    const syncedPageId = sourcePageId ?? activePageIdRef.current;
+    const nextPages = pagesRef.current.map((page) =>
+      page.id === syncedPageId
+        ? {
+            ...page,
+            elements: canvasElements,
+            backgroundColor,
+            pageSize,
+            orientation,
+          }
+        : page
     );
+    pagesRef.current = nextPages;
+    setPages(nextPages);
   };
 
   return (
