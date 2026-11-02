@@ -1,8 +1,11 @@
+
 import {
   createContext,
   useContext,
   useState,
   useCallback,
+  useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 
@@ -16,6 +19,18 @@ import {
   type Design,
 } from "../api/designApi";
 
+export type PaperSize = "A1" | "A2" | "A3" | "A4" | "A5";
+export type PageOrientation = "portrait" | "landscape";
+
+export interface EditorPage {
+  id: string;
+  name: string;
+  elements: EditorElement[];
+  backgroundColor: string;
+  pageSize: PaperSize;
+  orientation: PageOrientation;
+}
+
 export interface SavedDesign {
   id: number;
   name: string;
@@ -23,6 +38,8 @@ export interface SavedDesign {
   backgroundColor: string;
   createdAt: string;
   updatedAt: string;
+  pageSize?: PaperSize;
+  orientation?: PageOrientation;
 }
 
 interface EditorContextType {
@@ -33,6 +50,20 @@ interface EditorContextType {
   currentDesignName: string;
   canUndo: boolean;
   canRedo: boolean;
+  pageSize: PaperSize;
+  orientation: PageOrientation;
+  pages: EditorPage[];
+  activePageId: string;
+
+  addPage: () => void;
+  copyPage: () => void;
+  deletePage: () => void;
+  selectPage: (id: string) => void;
+
+  setPageSettings: (
+    pageSize: PaperSize,
+    orientation: PageOrientation
+  ) => void;
 
   addElement: (element: EditorElement) => void;
   selectElement: (id: string | null) => void;
@@ -60,7 +91,9 @@ interface EditorContextType {
   saveDesign: (
     name?: string,
     elementsOverride?: EditorElement[],
-    backgroundOverride?: string
+    backgroundOverride?: string,
+    pageSizeOverride?: PaperSize,
+    orientationOverride?: PageOrientation
   ) => Promise<void>;
 
   loadSavedDesign: (design: SavedDesign) => void;
@@ -68,14 +101,18 @@ interface EditorContextType {
   deleteSavedDesign: (id: number) => Promise<void>;
 
   syncElementsFromCanvas: (
-    elements: EditorElement[]
+    elements: EditorElement[],
+    sourcePageId?: string
   ) => void;
+  registerCanvasSnapshotProvider: (provider: (() => EditorElement[]) | null) => void;
 }
 
 const EditorContext =
   createContext<EditorContextType | null>(null);
 
 const DEFAULT_BACKGROUND = "#ffffff";
+const DEFAULT_PAGE_SIZE: PaperSize = "A4";
+const DEFAULT_ORIENTATION: PageOrientation = "landscape";
 
 interface EditorState {
   elements: EditorElement[];
@@ -88,11 +125,42 @@ interface EditorProviderProps {
 
 const createId = () => crypto.randomUUID();
 
+function isPaperSize(value: unknown): value is PaperSize {
+  return (
+    value === "A1" ||
+    value === "A2" ||
+    value === "A3" ||
+    value === "A4" ||
+    value === "A5"
+  );
+}
+
+function isOrientation(
+  value: unknown
+): value is PageOrientation {
+  return value === "portrait" || value === "landscape";
+}
+
 export function EditorProvider({
   children,
 }: EditorProviderProps) {
   const [elements, setElements] =
     useState<EditorElement[]>([]);
+
+  // Synchronous snapshot used by page actions so they never copy stale state.
+  const latestElementsRef = useRef<EditorElement[]>([]);
+  const canvasSnapshotProviderRef = useRef<(() => EditorElement[]) | null>(null);
+
+  const registerCanvasSnapshotProvider = useCallback(
+    (provider: (() => EditorElement[]) | null) => {
+      canvasSnapshotProviderRef.current = provider;
+    },
+    []
+  );
+
+  useEffect(() => {
+    latestElementsRef.current = elements;
+  }, [elements]);
 
   const [selectedId, setSelectedId] =
     useState<string | null>(null);
@@ -106,11 +174,251 @@ export function EditorProvider({
   const [currentDesignName, setCurrentDesignName] =
     useState("");
 
-  const [history, setHistory] =
-    useState<EditorState[]>([]);
+  const [pageSize, setPageSize] =
+    useState<PaperSize>(DEFAULT_PAGE_SIZE);
 
-  const [future, setFuture] =
-    useState<EditorState[]>([]);
+  const [orientation, setOrientation] =
+    useState<PageOrientation>(DEFAULT_ORIENTATION);
+
+  const [initialPageId] = useState(() => createId());
+
+  const [pages, setPages] = useState<EditorPage[]>([
+    {
+      id: initialPageId,
+      name: "Page 1",
+      elements: [],
+      backgroundColor: DEFAULT_BACKGROUND,
+      pageSize: DEFAULT_PAGE_SIZE,
+      orientation: DEFAULT_ORIENTATION,
+    },
+  ]);
+
+  const [activePageId, setActivePageId] =
+    useState<string>(initialPageId);
+
+  // Prevent the previous page's state from overwriting
+  // the newly selected page during a page switch.
+  const previousActivePageIdRef = useRef(activePageId);
+
+  useEffect(() => {
+    if (previousActivePageIdRef.current !== activePageId) {
+      previousActivePageIdRef.current = activePageId;
+      return;
+    }
+
+    setPages((previous) =>
+      previous.map((page) =>
+        page.id === activePageId
+          ? {
+              ...page,
+              elements,
+              backgroundColor,
+              pageSize,
+              orientation,
+            }
+          : page
+      )
+    );
+  }, [
+    activePageId,
+    elements,
+    backgroundColor,
+    pageSize,
+    orientation,
+  ]);
+
+  const [history, setHistory] = useState<EditorState[]>([]);
+  const [future, setFuture] = useState<EditorState[]>([]);
+
+  const addPage = useCallback(() => {
+    const newPage: EditorPage = {
+      id: createId(),
+      name: `Page ${pages.length + 1}`,
+      elements: [],
+      backgroundColor: DEFAULT_BACKGROUND,
+      pageSize,
+      orientation,
+    };
+
+    setPages((previous) => [
+      ...previous.map((page) =>
+        page.id === activePageId
+          ? {
+              ...page,
+              elements,
+              backgroundColor,
+              pageSize,
+              orientation,
+            }
+          : page
+      ),
+      newPage,
+    ]);
+
+    latestElementsRef.current = [];
+    setActivePageId(newPage.id);
+    latestElementsRef.current = [];
+    setElements([]);
+    setBackgroundColorState(DEFAULT_BACKGROUND);
+    setSelectedId(null);
+    setHistory([]);
+    setFuture([]);
+    setCurrentDesignId(null);
+    setCurrentDesignName("");
+  }, [
+    pages.length,
+    activePageId,
+    elements,
+    backgroundColor,
+    pageSize,
+    orientation,
+  ]);
+
+  const copyPage = useCallback(() => {
+    // Ask Fabric for a synchronous snapshot at the exact moment Copy Page is
+    // clicked. This includes text currently being edited and the latest object
+    // transforms, instead of relying only on potentially stale React state.
+    const canvasSnapshot = canvasSnapshotProviderRef.current?.();
+    const sourceElements = canvasSnapshot ?? latestElementsRef.current;
+    const elementsToCopy = sourceElements.length ? sourceElements : elements;
+
+    // Clone each element and nested path data so both pages are identical but
+    // independently editable.
+    const copiedElements = elementsToCopy.map((element) => ({
+      ...element,
+      id: createId(),
+      backendId: undefined,
+      pathData: element.pathData?.map((command) => [...command]),
+    }));
+
+    const copied: EditorPage = {
+      id: createId(),
+      name: `Page ${pages.length + 1}`,
+      elements: copiedElements,
+      backgroundColor,
+      pageSize,
+      orientation,
+    };
+
+    setPages((previous) => [
+      ...previous.map((page) =>
+        page.id === activePageId
+          ? {
+              ...page,
+              elements: elementsToCopy,
+              backgroundColor,
+              pageSize,
+              orientation,
+            }
+          : page
+      ),
+      copied,
+    ]);
+
+    latestElementsRef.current = copied.elements;
+    setActivePageId(copied.id);
+    setElements(copied.elements);
+    setBackgroundColorState(copied.backgroundColor);
+    setPageSize(copied.pageSize);
+    setOrientation(copied.orientation);
+    setSelectedId(null);
+    setHistory([]);
+    setFuture([]);
+    setCurrentDesignId(null);
+    setCurrentDesignName("");
+  }, [
+    pages.length,
+    activePageId,
+    elements,
+    backgroundColor,
+    pageSize,
+    orientation,
+    elements,
+  ]);
+
+  const deletePage = useCallback(() => {
+    if (pages.length <= 1) return;
+
+    const index = pages.findIndex(
+      (page) => page.id === activePageId
+    );
+
+    if (index < 0) return;
+
+    const remaining = pages.filter(
+      (page) => page.id !== activePageId
+    );
+
+    const nextPage =
+      remaining[Math.max(0, index - 1)] ?? remaining[0];
+
+    setPages(remaining);
+    latestElementsRef.current = nextPage.elements;
+    setActivePageId(nextPage.id);
+    setElements(nextPage.elements);
+    setBackgroundColorState(nextPage.backgroundColor);
+    setPageSize(nextPage.pageSize);
+    setOrientation(nextPage.orientation);
+    setSelectedId(null);
+    setHistory([]);
+    setFuture([]);
+    setCurrentDesignId(null);
+    setCurrentDesignName("");
+  }, [pages, activePageId]);
+
+  const selectPage = useCallback(
+    (id: string) => {
+      if (id === activePageId) return;
+
+      const target = pages.find((page) => page.id === id);
+      if (!target) return;
+
+      setPages((previous) =>
+        previous.map((page) =>
+          page.id === activePageId
+            ? {
+                ...page,
+                elements,
+                backgroundColor,
+                pageSize,
+                orientation,
+              }
+            : page
+        )
+      );
+
+      latestElementsRef.current = target.elements;
+      setActivePageId(target.id);
+      setElements(target.elements);
+      setBackgroundColorState(target.backgroundColor);
+      setPageSize(target.pageSize);
+      setOrientation(target.orientation);
+      setSelectedId(null);
+      setHistory([]);
+      setFuture([]);
+      setCurrentDesignId(null);
+      setCurrentDesignName("");
+    },
+    [
+      activePageId,
+      pages,
+      elements,
+      backgroundColor,
+      pageSize,
+      orientation,
+    ]
+  );
+
+  const setPageSettings = useCallback(
+    (
+      nextPageSize: PaperSize,
+      nextOrientation: PageOrientation
+    ) => {
+      setPageSize(nextPageSize);
+      setOrientation(nextOrientation);
+    },
+    []
+  );
 
   const createSnapshot = useCallback(
     (): EditorState => ({
@@ -125,15 +433,13 @@ export function EditorProvider({
       ...previous,
       createSnapshot(),
     ]);
-
     setFuture([]);
   }, [createSnapshot]);
 
-  const addElement = (
-    element: EditorElement
-  ) => {
+  const addElement = (element: EditorElement) => {
     addHistory();
 
+    latestElementsRef.current = [...latestElementsRef.current, element];
     setElements((previous) => [
       ...previous,
       element,
@@ -142,9 +448,7 @@ export function EditorProvider({
     setSelectedId(element.id);
   };
 
-  const selectElement = (
-    id: string | null
-  ) => {
+  const selectElement = (id: string | null) => {
     setSelectedId(id);
   };
 
@@ -154,23 +458,19 @@ export function EditorProvider({
   ) => {
     addHistory();
 
-    setElements((previous) =>
-      previous.map((element) =>
-        element.id === id
-          ? { ...element, ...updates }
-          : element
-      )
+    const updatedElements = latestElementsRef.current.map((element) =>
+      element.id === id ? { ...element, ...updates } : element
     );
+    latestElementsRef.current = updatedElements;
+    setElements(updatedElements);
   };
 
   const deleteElement = (id: string) => {
     addHistory();
 
-    setElements((previous) =>
-      previous.filter(
-        (element) => element.id !== id
-      )
-    );
+    const updatedElements = latestElementsRef.current.filter((element) => element.id !== id);
+    latestElementsRef.current = updatedElements;
+    setElements(updatedElements);
 
     setSelectedId((previous) =>
       previous === id ? null : previous
@@ -182,9 +482,7 @@ export function EditorProvider({
       (item) => item.id === id
     );
 
-    if (!element) {
-      return;
-    }
+    if (!element) return;
 
     addHistory();
 
@@ -196,6 +494,7 @@ export function EditorProvider({
       y: element.y + 30,
     };
 
+    latestElementsRef.current = [...latestElementsRef.current, duplicate];
     setElements((previous) => [
       ...previous,
       duplicate,
@@ -214,21 +513,37 @@ export function EditorProvider({
       setHistory([]);
       setFuture([]);
 
-      setElements(
-        template.elements.map((element) => ({
+      const templateElements = template.elements.map(
+        (element) => ({
           ...element,
           id: element.id || createId(),
           backendId: undefined,
-        }))
+        })
       );
 
-      setBackgroundColorState(
-        template.backgroundColor
-      );
-
+      latestElementsRef.current = templateElements;
+      setElements(templateElements);
+      setBackgroundColorState(template.backgroundColor);
       setCurrentDesignId(null);
       setCurrentDesignName(template.name);
       setSelectedId(null);
+      setPageSize(DEFAULT_PAGE_SIZE);
+      setOrientation(DEFAULT_ORIENTATION);
+
+      const pageId = createId();
+
+      setPages([
+        {
+          id: pageId,
+          name: "Page 1",
+          elements: templateElements,
+          backgroundColor: template.backgroundColor,
+          pageSize: DEFAULT_PAGE_SIZE,
+          orientation: DEFAULT_ORIENTATION,
+        },
+      ]);
+
+      setActivePageId(pageId);
     },
     []
   );
@@ -241,6 +556,23 @@ export function EditorProvider({
     setCurrentDesignId(null);
     setCurrentDesignName("");
     setSelectedId(null);
+    setPageSize(DEFAULT_PAGE_SIZE);
+    setOrientation(DEFAULT_ORIENTATION);
+
+    const pageId = createId();
+
+    setPages([
+      {
+        id: pageId,
+        name: "Page 1",
+        elements: [],
+        backgroundColor: DEFAULT_BACKGROUND,
+        pageSize: DEFAULT_PAGE_SIZE,
+        orientation: DEFAULT_ORIENTATION,
+      },
+    ]);
+
+    setActivePageId(pageId);
   }, []);
 
   const setCanvasBackground = (color: string) => {
@@ -249,38 +581,30 @@ export function EditorProvider({
   };
 
   const undo = () => {
-    if (history.length === 0) {
-      return;
-    }
+    if (history.length === 0) return;
 
     const previous = history[history.length - 1];
     const current = createSnapshot();
 
     setFuture((items) => [current, ...items]);
     setHistory((items) => items.slice(0, -1));
-
+    latestElementsRef.current = previous.elements;
     setElements(previous.elements);
-    setBackgroundColorState(
-      previous.backgroundColor
-    );
+    setBackgroundColorState(previous.backgroundColor);
     setSelectedId(null);
   };
 
   const redo = () => {
-    if (future.length === 0) {
-      return;
-    }
+    if (future.length === 0) return;
 
     const next = future[0];
     const current = createSnapshot();
 
     setHistory((items) => [...items, current]);
     setFuture((items) => items.slice(1));
-
+    latestElementsRef.current = next.elements;
     setElements(next.elements);
-    setBackgroundColorState(
-      next.backgroundColor
-    );
+    setBackgroundColorState(next.backgroundColor);
     setSelectedId(null);
   };
 
@@ -298,6 +622,12 @@ export function EditorProvider({
       design.createdAt || new Date().toISOString(),
     updatedAt:
       design.updatedAt || new Date().toISOString(),
+    pageSize: isPaperSize(design.pageSize)
+      ? design.pageSize
+      : DEFAULT_PAGE_SIZE,
+    orientation: isOrientation(design.orientation)
+      ? design.orientation
+      : DEFAULT_ORIENTATION,
   });
 
   const getSavedDesigns =
@@ -306,10 +636,7 @@ export function EditorProvider({
         const designs = await getDesigns();
         return designs.map(convertDesign);
       } catch (error) {
-        console.error(
-          "Failed to load designs:",
-          error
-        );
+        console.error("Failed to load designs:", error);
         return [];
       }
     };
@@ -317,22 +644,26 @@ export function EditorProvider({
   const saveDesign = async (
     name?: string,
     elementsOverride?: EditorElement[],
-    backgroundOverride?: string
+    backgroundOverride?: string,
+    pageSizeOverride?: PaperSize,
+    orientationOverride?: PageOrientation
   ) => {
     const safeName =
       typeof name === "string" && name.trim()
         ? name.trim()
         : currentDesignName || "My Certificate";
 
-    const finalElements =
-      Array.isArray(elementsOverride)
-        ? elementsOverride
-        : elements;
+    const finalElements = Array.isArray(elementsOverride)
+      ? elementsOverride
+      : elements;
 
     const finalBackground =
       typeof backgroundOverride === "string"
         ? backgroundOverride
         : backgroundColor;
+
+    const finalPageSize = pageSizeOverride ?? pageSize;
+    const finalOrientation = orientationOverride ?? orientation;
 
     const designData = {
       name: safeName,
@@ -341,6 +672,8 @@ export function EditorProvider({
         ...element,
         backendId: undefined,
       })),
+      pageSize: finalPageSize,
+      orientation: finalOrientation,
     };
 
     try {
@@ -352,24 +685,20 @@ export function EditorProvider({
           designData
         );
       } else {
-        savedDesign = await createDesign(
-          designData
-        );
+        savedDesign = await createDesign(designData);
       }
 
       const converted = convertDesign(savedDesign);
 
       setCurrentDesignId(converted.id);
       setCurrentDesignName(converted.name);
+      latestElementsRef.current = converted.elements;
       setElements(converted.elements);
-      setBackgroundColorState(
-        converted.backgroundColor
-      );
+      setBackgroundColorState(converted.backgroundColor);
+      setPageSize(converted.pageSize ?? DEFAULT_PAGE_SIZE);
+      setOrientation(converted.orientation ?? DEFAULT_ORIENTATION);
     } catch (error) {
-      console.error(
-        "Failed to save design:",
-        error
-      );
+      console.error("Failed to save design:", error);
       throw error;
     }
   };
@@ -379,28 +708,49 @@ export function EditorProvider({
       setHistory([]);
       setFuture([]);
 
-      setElements(
-        Array.isArray(design.elements)
-          ? design.elements
-          : []
-      );
+      const designElements = Array.isArray(design.elements)
+        ? design.elements
+        : [];
 
-      setBackgroundColorState(
-        design.backgroundColor || DEFAULT_BACKGROUND
-      );
+      const designBackground =
+        design.backgroundColor || DEFAULT_BACKGROUND;
 
+      const designPageSize = isPaperSize(design.pageSize)
+        ? design.pageSize
+        : DEFAULT_PAGE_SIZE;
+
+      const designOrientation = isOrientation(design.orientation)
+        ? design.orientation
+        : DEFAULT_ORIENTATION;
+
+      latestElementsRef.current = designElements;
+      setElements(designElements);
+      setBackgroundColorState(designBackground);
       setCurrentDesignId(design.id);
-      setCurrentDesignName(
-        design.name || "My Certificate"
-      );
+      setCurrentDesignName(design.name || "My Certificate");
       setSelectedId(null);
+      setPageSize(designPageSize);
+      setOrientation(designOrientation);
+
+      const pageId = createId();
+
+      setPages([
+        {
+          id: pageId,
+          name: "Page 1",
+          elements: designElements,
+          backgroundColor: designBackground,
+          pageSize: designPageSize,
+          orientation: designOrientation,
+        },
+      ]);
+
+      setActivePageId(pageId);
     },
     []
   );
 
-  const deleteSavedDesign = async (
-    id: number
-  ) => {
+  const deleteSavedDesign = async (id: number) => {
     try {
       await deleteDesign(id);
 
@@ -409,18 +759,39 @@ export function EditorProvider({
         setCurrentDesignName("");
       }
     } catch (error) {
-      console.error(
-        "Failed to delete design:",
-        error
-      );
+      console.error("Failed to delete design:", error);
       throw error;
     }
   };
 
   const syncElementsFromCanvas = (
-    canvasElements: EditorElement[]
+    canvasElements: EditorElement[],
+    sourcePageId?: string
   ) => {
+    // Ignore late events from a canvas belonging to another page.
+    if (sourcePageId && sourcePageId !== activePageId) {
+      return;
+    }
+
+    latestElementsRef.current = canvasElements;
     setElements(canvasElements);
+
+    // Keep the canvas update attached to the page that emitted it.
+    // Delayed events from a previous page must never update the newly active page.
+    const syncedPageId = sourcePageId ?? activePageId;
+    setPages((previous) =>
+      previous.map((page) =>
+        page.id === syncedPageId
+          ? {
+              ...page,
+              elements: canvasElements,
+              backgroundColor,
+              pageSize,
+              orientation,
+            }
+          : page
+      )
+    );
   };
 
   return (
@@ -433,6 +804,16 @@ export function EditorProvider({
         currentDesignName,
         canUndo: history.length > 0,
         canRedo: future.length > 0,
+        pageSize,
+        orientation,
+        pages,
+        activePageId,
+
+        addPage,
+        copyPage,
+        deletePage,
+        selectPage,
+        setPageSettings,
 
         addElement,
         selectElement,
@@ -452,6 +833,7 @@ export function EditorProvider({
         getSavedDesigns,
         deleteSavedDesign,
         syncElementsFromCanvas,
+        registerCanvasSnapshotProvider,
       }}
     >
       {children}

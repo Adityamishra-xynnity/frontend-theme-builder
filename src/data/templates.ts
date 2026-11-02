@@ -14,7 +14,6 @@ export const templates: CertificateTemplate[] = [
     name: "Classic Gold",
     description: "A premium traditional certificate with elegant gold borders.",
     backgroundColor: "#fffdf7",
-
     elements: [
       {
         id: "classic-border-1",
@@ -26,7 +25,6 @@ export const templates: CertificateTemplate[] = [
         backgroundColor: "transparent",
         color: "#c9a227",
       },
-
       {
         id: "classic-border-2",
         type: "rectangle",
@@ -37,7 +35,6 @@ export const templates: CertificateTemplate[] = [
         backgroundColor: "transparent",
         color: "#e6c65c",
       },
-
       {
         id: "classic-top-line",
         type: "rectangle",
@@ -47,7 +44,6 @@ export const templates: CertificateTemplate[] = [
         height: 3,
         backgroundColor: "#c9a227",
       },
-
       {
         id: "classic-title",
         type: "heading",
@@ -58,10 +54,10 @@ export const templates: CertificateTemplate[] = [
         text: "CERTIFICATE",
         fontSize: 48,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#9a7414",
         fontWeight: "bold",
       },
-
       {
         id: "classic-subtitle",
         type: "subheading",
@@ -72,10 +68,10 @@ export const templates: CertificateTemplate[] = [
         text: "OF ACHIEVEMENT",
         fontSize: 22,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#555555",
         fontWeight: "bold",
       },
-
       {
         id: "classic-presented",
         type: "text",
@@ -86,9 +82,9 @@ export const templates: CertificateTemplate[] = [
         text: "This certificate is proudly presented to",
         fontSize: 18,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "classic-name",
         type: "heading",
@@ -99,10 +95,10 @@ export const templates: CertificateTemplate[] = [
         text: "Your Name",
         fontSize: 38,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#222222",
         fontWeight: "bold",
       },
-
       {
         id: "classic-description",
         type: "text",
@@ -113,9 +109,9 @@ export const templates: CertificateTemplate[] = [
         text: "For outstanding performance, dedication and remarkable achievement.",
         fontSize: 17,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "classic-bottom-line",
         type: "rectangle",
@@ -125,7 +121,6 @@ export const templates: CertificateTemplate[] = [
         height: 3,
         backgroundColor: "#c9a227",
       },
-
       {
         id: "classic-date",
         type: "text",
@@ -136,9 +131,9 @@ export const templates: CertificateTemplate[] = [
         text: "Date",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "classic-signature",
         type: "text",
@@ -149,17 +144,16 @@ export const templates: CertificateTemplate[] = [
         text: "Authorized Signature",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
     ],
   },
-
   {
     id: "royal-blue",
     name: "Royal Blue",
     description: "A modern premium certificate with royal blue styling.",
     backgroundColor: "#f7faff",
-
     elements: [
       {
         id: "royal-left",
@@ -170,7 +164,6 @@ export const templates: CertificateTemplate[] = [
         height: 650,
         backgroundColor: "#173f7a",
       },
-
       {
         id: "royal-right",
         type: "rectangle",
@@ -180,7 +173,6 @@ export const templates: CertificateTemplate[] = [
         height: 650,
         backgroundColor: "#173f7a",
       },
-
       {
         id: "royal-top",
         type: "rectangle",
@@ -190,7 +182,6 @@ export const templates: CertificateTemplate[] = [
         height: 12,
         backgroundColor: "#d4af37",
       },
-
       {
         id: "royal-bottom",
         type: "rectangle",
@@ -200,7 +191,6 @@ export const templates: CertificateTemplate[] = [
         height: 12,
         backgroundColor: "#d4af37",
       },
-
       {
         id: "royal-title",
         type: "heading",
@@ -211,10 +201,10 @@ export const templates: CertificateTemplate[] = [
         text: "CERTIFICATE",
         fontSize: 48,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#173f7a",
         fontWeight: "bold",
       },
-
       {
         id: "royal-subtitle",
         type: "subheading",
@@ -225,10 +215,10 @@ export const templates: CertificateTemplate[] = [
         text: "OF EXCELLENCE",
         fontSize: 22,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#d4af37",
         fontWeight: "bold",
       },
-
       {
         id: "royal-presented",
         type: "text",
@@ -239,9 +229,9 @@ export const templates: CertificateTemplate[] = [
         text: "Presented with appreciation to",
         fontSize: 18,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "royal-name",
         type: "heading",
@@ -252,10 +242,10 @@ export const templates: CertificateTemplate[] = [
         text: "Your Name",
         fontSize: 40,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#173f7a",
         fontWeight: "bold",
       },
-
       {
         id: "royal-description",
         type: "text",
@@ -266,9 +256,9 @@ export const templates: CertificateTemplate[] = [
         text: "In recognition of exceptional dedication, outstanding performance and excellence.",
         fontSize: 17,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "royal-date",
         type: "text",
@@ -279,9 +269,9 @@ export const templates: CertificateTemplate[] = [
         text: "Date",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "royal-signature",
         type: "text",
@@ -292,17 +282,16 @@ export const templates: CertificateTemplate[] = [
         text: "Director / Signature",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
     ],
   },
-
   {
     id: "elegant-green",
     name: "Elegant Green",
     description: "A clean elegant certificate inspired by nature and prestige.",
     backgroundColor: "#fbfdf9",
-
     elements: [
       {
         id: "green-corner-top",
@@ -313,7 +302,6 @@ export const templates: CertificateTemplate[] = [
         height: 14,
         backgroundColor: "#2f6b4f",
       },
-
       {
         id: "green-corner-bottom",
         type: "rectangle",
@@ -323,7 +311,6 @@ export const templates: CertificateTemplate[] = [
         height: 14,
         backgroundColor: "#2f6b4f",
       },
-
       {
         id: "green-border",
         type: "rectangle",
@@ -334,7 +321,6 @@ export const templates: CertificateTemplate[] = [
         backgroundColor: "transparent",
         color: "#9bb8a5",
       },
-
       {
         id: "green-title",
         type: "heading",
@@ -345,10 +331,10 @@ export const templates: CertificateTemplate[] = [
         text: "CERTIFICATE",
         fontSize: 46,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#2f6b4f",
         fontWeight: "bold",
       },
-
       {
         id: "green-subtitle",
         type: "subheading",
@@ -359,10 +345,10 @@ export const templates: CertificateTemplate[] = [
         text: "OF APPRECIATION",
         fontSize: 21,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#6f8f7b",
         fontWeight: "bold",
       },
-
       {
         id: "green-presented",
         type: "text",
@@ -373,9 +359,9 @@ export const templates: CertificateTemplate[] = [
         text: "This certificate is awarded to",
         fontSize: 18,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "green-name",
         type: "heading",
@@ -386,10 +372,10 @@ export const templates: CertificateTemplate[] = [
         text: "Your Name",
         fontSize: 39,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#2f6b4f",
         fontWeight: "bold",
       },
-
       {
         id: "green-description",
         type: "text",
@@ -400,9 +386,9 @@ export const templates: CertificateTemplate[] = [
         text: "For valuable contribution, commitment and outstanding dedication.",
         fontSize: 17,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "green-date",
         type: "text",
@@ -413,9 +399,9 @@ export const templates: CertificateTemplate[] = [
         text: "Date",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
-
       {
         id: "green-signature",
         type: "text",
@@ -426,17 +412,16 @@ export const templates: CertificateTemplate[] = [
         text: "Authorized Signature",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#555555",
       },
     ],
   },
-
   {
     id: "corporate-blue",
     name: "Corporate Blue",
     description: "A professional corporate certificate for organizations and institutions.",
     backgroundColor: "#f8fafc",
-
     elements: [
       {
         id: "corporate-header",
@@ -447,7 +432,6 @@ export const templates: CertificateTemplate[] = [
         height: 125,
         backgroundColor: "#12355b",
       },
-
       {
         id: "corporate-accent",
         type: "rectangle",
@@ -457,7 +441,6 @@ export const templates: CertificateTemplate[] = [
         height: 8,
         backgroundColor: "#3b82f6",
       },
-
       {
         id: "corporate-title",
         type: "heading",
@@ -468,10 +451,10 @@ export const templates: CertificateTemplate[] = [
         text: "CERTIFICATE OF ACHIEVEMENT",
         fontSize: 34,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#12355b",
         fontWeight: "bold",
       },
-
       {
         id: "corporate-presented",
         type: "text",
@@ -482,9 +465,9 @@ export const templates: CertificateTemplate[] = [
         text: "This certificate is awarded to",
         fontSize: 18,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#64748b",
       },
-
       {
         id: "corporate-name",
         type: "heading",
@@ -495,10 +478,10 @@ export const templates: CertificateTemplate[] = [
         text: "Your Name",
         fontSize: 40,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#12355b",
         fontWeight: "bold",
       },
-
       {
         id: "corporate-line",
         type: "rectangle",
@@ -508,7 +491,6 @@ export const templates: CertificateTemplate[] = [
         height: 3,
         backgroundColor: "#3b82f6",
       },
-
       {
         id: "corporate-description",
         type: "text",
@@ -519,9 +501,9 @@ export const templates: CertificateTemplate[] = [
         text: "For demonstrating exceptional professionalism, leadership and commitment.",
         fontSize: 17,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#475569",
       },
-
       {
         id: "corporate-date",
         type: "text",
@@ -532,9 +514,9 @@ export const templates: CertificateTemplate[] = [
         text: "Date",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#64748b",
       },
-
       {
         id: "corporate-signature",
         type: "text",
@@ -545,17 +527,16 @@ export const templates: CertificateTemplate[] = [
         text: "Authorized Signature",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#64748b",
       },
     ],
   },
-
   {
     id: "achievement-award",
     name: "Achievement Award",
     description: "A bold award-style certificate for competitions and achievements.",
     backgroundColor: "#fffaf0",
-
     elements: [
       {
         id: "award-top",
@@ -566,7 +547,6 @@ export const templates: CertificateTemplate[] = [
         height: 20,
         backgroundColor: "#7c2d12",
       },
-
       {
         id: "award-bottom",
         type: "rectangle",
@@ -576,7 +556,6 @@ export const templates: CertificateTemplate[] = [
         height: 20,
         backgroundColor: "#7c2d12",
       },
-
       {
         id: "award-circle-left",
         type: "circle",
@@ -586,7 +565,6 @@ export const templates: CertificateTemplate[] = [
         height: 90,
         backgroundColor: "#f59e0b",
       },
-
       {
         id: "award-circle-right",
         type: "circle",
@@ -596,7 +574,6 @@ export const templates: CertificateTemplate[] = [
         height: 90,
         backgroundColor: "#f59e0b",
       },
-
       {
         id: "award-title",
         type: "heading",
@@ -607,10 +584,10 @@ export const templates: CertificateTemplate[] = [
         text: "ACHIEVEMENT AWARD",
         fontSize: 40,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#7c2d12",
         fontWeight: "bold",
       },
-
       {
         id: "award-subtitle",
         type: "subheading",
@@ -621,10 +598,10 @@ export const templates: CertificateTemplate[] = [
         text: "IN RECOGNITION OF EXCELLENCE",
         fontSize: 18,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#a16207",
         fontWeight: "bold",
       },
-
       {
         id: "award-presented",
         type: "text",
@@ -635,9 +612,9 @@ export const templates: CertificateTemplate[] = [
         text: "Presented to",
         fontSize: 19,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#57534e",
       },
-
       {
         id: "award-name",
         type: "heading",
@@ -648,10 +625,10 @@ export const templates: CertificateTemplate[] = [
         text: "Your Name",
         fontSize: 42,
         fontFamily: "Georgia",
+        textAlign: "center",
         color: "#7c2d12",
         fontWeight: "bold",
       },
-
       {
         id: "award-description",
         type: "text",
@@ -662,9 +639,9 @@ export const templates: CertificateTemplate[] = [
         text: "For achieving remarkable results and demonstrating outstanding dedication.",
         fontSize: 17,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#57534e",
       },
-
       {
         id: "award-date",
         type: "text",
@@ -675,9 +652,9 @@ export const templates: CertificateTemplate[] = [
         text: "Date",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#57534e",
       },
-
       {
         id: "award-signature",
         type: "text",
@@ -688,6 +665,7 @@ export const templates: CertificateTemplate[] = [
         text: "Presented By",
         fontSize: 16,
         fontFamily: "Arial",
+        textAlign: "center",
         color: "#57534e",
       },
     ],

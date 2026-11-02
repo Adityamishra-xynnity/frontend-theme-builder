@@ -117,7 +117,13 @@ export interface EditorElement {
   angle?: number;
   opacity?: number;
 
+  // Existing plain text content
   text?: string;
+
+  // Tiptap rich text HTML content
+  // Keeps inline formatting such as bold, italic, underline and colors.
+  richTextHtml?: string;
+
   fontSize?: number;
   fontFamily?: string;
   color?: string;
@@ -132,7 +138,8 @@ export interface EditorElement {
   lineHeight?: number;
   charSpacing?: number;
 
-  textAlign?: "left" | "center" | "right";
+  // Text alignment
+  textAlign?: "left" | "center" | "right" | "justify";
 
   strokeColor?: string;
   strokeWidth?: number;

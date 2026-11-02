@@ -1,16 +1,21 @@
+
 import { useState } from "react";
 import { Code2, Trash2, Download } from "lucide-react";
+
 import { useEditor } from "../../context/EditorContext";
 import { htmlToElements } from "./HtmlToElements";
 
 export default function HTMLImportPanel() {
   const [htmlCode, setHtmlCode] = useState("");
   const { loadTemplate, elements } = useEditor();
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const handleClear = () => {
     setHtmlCode("");
+    setError("");
+    setSuccess("");
   };
 
   const handleImport = () => {
@@ -33,7 +38,7 @@ export default function HTMLImportPanel() {
       if (
         elements.length > 0 &&
         !window.confirm(
-          "Importing this HTML will replace your current canvas. Continue?"
+          "Importing this HTML will replace your current canvas. Continue?",
         )
       ) {
         return;
@@ -47,7 +52,8 @@ export default function HTMLImportPanel() {
       });
 
       setSuccess("HTML imported successfully!");
-    } catch {
+    } catch (error) {
+      console.error("HTML import failed:", error);
       setError("Something went wrong while importing the HTML.");
     }
   };
@@ -57,6 +63,7 @@ export default function HTMLImportPanel() {
       <div>
         <div className="flex items-center gap-2">
           <Code2 size={22} className="text-violet-600" />
+
           <h2 className="text-lg font-semibold text-gray-900">
             HTML Import
           </h2>
@@ -78,7 +85,11 @@ export default function HTMLImportPanel() {
         <textarea
           id="html-import-code"
           value={htmlCode}
-          onChange={(event) => setHtmlCode(event.target.value)}
+          onChange={(event) => {
+            setHtmlCode(event.target.value);
+            setError("");
+            setSuccess("");
+          }}
           placeholder={'<h1>Welcome!</h1>\n<p>Your design starts here.</p>'}
           spellCheck={false}
           className="min-h-64 w-full resize-y rounded-xl border border-gray-200 bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-800 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
@@ -103,6 +114,7 @@ export default function HTMLImportPanel() {
         <p className="text-sm font-medium text-violet-900">
           Supported content
         </p>
+
         <p className="mt-1 text-xs leading-relaxed text-violet-700">
           We'll start with headings, paragraphs, images, simple shapes,
           colors, and basic text styling.
