@@ -122,8 +122,8 @@ interface FabricContextType {
   addTable: () => void;
 
   saveCurrentDesign: (name: string) => Promise<void>;
-  downloadPNG: () => void;
-  downloadPDF: () => void;
+ downloadPNG: (pageIds?: string[]) => Promise<void>;
+  downloadPDF: (pageIds?: string[]) => void;
 }
 
 const FabricContext =
@@ -275,6 +275,43 @@ function distanceToSegment(
   );
 }
 
+
+function simplifyFreehandPoints(
+  points: Array<{ x: number; y: number }>,
+  tolerance = 0.45,
+): Array<{ x: number; y: number }> {
+  if (points.length <= 2) return points.map((point) => ({ ...point }));
+
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack: Array<[number, number]> = [[0, points.length - 1]];
+  const toleranceSquared = tolerance * tolerance;
+
+  while (stack.length) {
+    const [first, last] = stack.pop()!;
+    let maxDistance = toleranceSquared;
+    let selected = -1;
+    const start = points[first];
+    const end = points[last];
+
+    for (let i = first + 1; i < last; i++) {
+      const distance = distanceToSegment(points[i], start, end);
+      if (distance * distance > maxDistance) {
+        maxDistance = distance * distance;
+        selected = i;
+      }
+    }
+
+    if (selected !== -1) {
+      keep[selected] = 1;
+      stack.push([first, selected], [selected, last]);
+    }
+  }
+
+  return points.filter((_, index) => keep[index] === 1);
+}
+
 function splitFreehandPath(
   path: any,
   pointer: { x: number; y: number },
@@ -284,19 +321,16 @@ function splitFreehandPath(
   const original = sampleFreehandPath(path);
   if (original.length < 2) return [];
 
-  const points: Array<{ x: number; y: number }> = [];
+  // Densely sample the curve so a short eraser pass cannot jump over
+  // a narrow part of the stroke between two sampled points.
+  const points: Array<{ x: number; y: number }> = [original[0]];
+  const maxStep = Math.max(0.75, Math.min(2, radius / 5));
 
-  for (let i = 0; i < original.length; i++) {
+  for (let i = 1; i < original.length; i++) {
     const a = original[i - 1];
     const b = original[i];
-
-    if (!a) {
-      points.push(b);
-      continue;
-    }
-
     const length = Math.hypot(b.x - a.x, b.y - a.y);
-    const steps = Math.max(1, Math.ceil(length / Math.max(1.5, radius / 3)));
+    const steps = Math.max(1, Math.ceil(length / maxStep));
 
     for (let j = 1; j <= steps; j++) {
       const t = j / steps;
@@ -307,81 +341,119 @@ function splitFreehandPath(
     }
   }
 
-  const threshold = radius + Math.max(1, Number(path.strokeWidth ?? 1) / 2);
-  const inside = (p: { x: number; y: number }) =>
-    distanceToSegment(p, sweepStart, pointer) <= threshold;
+  const threshold =
+    Math.max(1, radius) + Math.max(1, Number(path.strokeWidth ?? 1) / 2);
 
-  const boundary = (
-    a: { x: number; y: number },
-    b: { x: number; y: number },
+  const inside = (point: { x: number; y: number }) =>
+    distanceToSegment(point, sweepStart, pointer) <= threshold;
+
+  // Locate the exact transition between retained and erased portions.
+  const findBoundary = (
+    outsidePoint: { x: number; y: number },
+    insidePoint: { x: number; y: number },
   ) => {
-    let lo = 0;
-    let hi = 1;
-    const aInside = inside(a);
+    let low = 0;
+    let high = 1;
 
-    for (let n = 0; n < 18; n++) {
-      const t = (lo + hi) / 2;
-      const q = {
-        x: a.x + (b.x - a.x) * t,
-        y: a.y + (b.y - a.y) * t,
+    for (let iteration = 0; iteration < 22; iteration++) {
+      const t = (low + high) / 2;
+      const candidate = {
+        x: outsidePoint.x + (insidePoint.x - outsidePoint.x) * t,
+        y: outsidePoint.y + (insidePoint.y - outsidePoint.y) * t,
       };
 
-      if (inside(q) === aInside) lo = t;
-      else hi = t;
+      if (inside(candidate)) high = t;
+      else low = t;
     }
 
-    const t = (lo + hi) / 2;
     return {
-      x: a.x + (b.x - a.x) * t,
-      y: a.y + (b.y - a.y) * t,
+      x: outsidePoint.x + (insidePoint.x - outsidePoint.x) * low,
+      y: outsidePoint.y + (insidePoint.y - outsidePoint.y) * low,
     };
   };
 
   const runs: Array<Array<{ x: number; y: number }>> = [];
-  let run: Array<{ x: number; y: number }> = [];
+  let currentRun: Array<{ x: number; y: number }> = [];
+  let previous = points[0];
+  let previousInside = inside(previous);
 
-  for (let i = 0; i < points.length; i++) {
+  if (!previousInside) currentRun.push(previous);
+
+  for (let i = 1; i < points.length; i++) {
     const point = points[i];
-    const previous = points[i - 1];
     const pointInside = inside(point);
 
-    if (!previous) {
-      if (!pointInside) run = [point];
-      continue;
-    }
-
-    const previousInside = inside(previous);
-
     if (!previousInside && !pointInside) {
-      if (!run.length) run.push(previous);
-      run.push(point);
+      if (!currentRun.length) currentRun.push(previous);
+      currentRun.push(point);
     } else if (!previousInside && pointInside) {
-      if (!run.length) run.push(previous);
-      run.push(boundary(previous, point));
-      if (run.length > 1) runs.push(run);
-      run = [];
+      if (!currentRun.length) currentRun.push(previous);
+      const edge = findBoundary(previous, point);
+      currentRun.push(edge);
+      if (currentRun.length > 1) runs.push(currentRun);
+      currentRun = [];
     } else if (previousInside && !pointInside) {
-      run = [boundary(previous, point), point];
+      const edge = findBoundary(point, previous);
+      currentRun = [edge, point];
     } else {
-      if (run.length > 1) runs.push(run);
-      run = [];
+      // Both points are inside the eraser sweep.
+      currentRun = [];
     }
+
+    previous = point;
+    previousInside = pointInside;
   }
 
-  if (run.length > 1) runs.push(run);
+  if (currentRun.length > 1) runs.push(currentRun);
+
+  // Remove duplicate neighbouring points and suppress tiny fragments left
+  // around the eraser boundary. These fragments render as isolated dots/dashes
+  // because round line caps are visible even when only a few pixels remain.
+  // The threshold scales with the eraser size so a larger brush does not leave
+  // proportionally larger remnants.
+  const strokeWidth = Math.max(1, Number(path.strokeWidth ?? 1));
+  // Round line caps make even very short retained paths look like isolated
+  // dots. Keep only fragments long enough to read as an intentional stroke.
+  // Scale this threshold with both the eraser radius and the source stroke,
+  // rather than using a fixed pixel cutoff.
+  const minimumVisibleLength = Math.max(
+    strokeWidth * 4,
+    radius * 6,
+    24,
+  );
 
   return runs
-    .map((part) =>
-      part.filter(
-        (point, index) =>
-          index === 0 ||
+    .map((run) => {
+      const cleaned: Array<{ x: number; y: number }> = [];
+
+      for (const point of run) {
+        const previousPoint = cleaned[cleaned.length - 1];
+        if (
+          !previousPoint ||
           Math.hypot(
-            point.x - part[index - 1].x,
-            point.y - part[index - 1].y,
-          ) > 0.25,
-      ),
-    )
-    .filter((part) => part.length > 1);
+            point.x - previousPoint.x,
+            point.y - previousPoint.y,
+          ) > 0.35
+        ) {
+          cleaned.push(point);
+        }
+      }
+
+      return cleaned;
+    })
+    .filter((run) => {
+      if (run.length < 2) return false;
+
+      let length = 0;
+      for (let i = 1; i < run.length; i++) {
+        length += Math.hypot(
+          run[i].x - run[i - 1].x,
+          run[i].y - run[i - 1].y,
+        );
+      }
+
+      return length >= minimumVisibleLength;
+    });
 }
 
 function getStarPoints(points: number, outerRadius: number, innerRadius: number) {
@@ -741,8 +813,11 @@ export function FabricProvider({
 
   const eraserGestureSavedRef = useRef(false);
   const eraserPreviousPointRef = useRef<{ x: number; y: number } | null>(null);
+  const eraserPointerDownRef = useRef(false);
   const eraserCursorRef = useRef<HTMLDivElement | null>(null);
   const eraserCursorMoveRef = useRef<((event: PointerEvent) => void) | null>(null);
+  const eraserCursorEnterRef = useRef<(() => void) | null>(null);
+  const eraserCursorLeaveRef = useRef<(() => void) | null>(null);
 
   const drawingHistoryHandlerRef = useRef<((event: any) => void) | null>(null);
   const pathCreatedHandlerRef = useRef<((event: any) => void) | null>(null);
@@ -818,12 +893,15 @@ export function FabricProvider({
       const element: EditorElement = {
         id: item.elementId ?? crypto.randomUUID(),
         type,
-        // Keep the stored coordinates consistent with applyObjectControls()
-        // and FabricCanvas reconstruction, which both use originX/originY="left"/"top".
-        // Using getPointByOrigin here recalculates a visual bounding corner and can
-        // shift rotated/text/polygon objects when pages are switched or copied.
-        x: object.left ?? 0,
-        y: object.top ?? 0,
+        // Freehand Path objects are reconstructed around their center origin.
+        // Store that center point so eraser-created fragments keep the exact
+        // same position after page switching and page duplication.
+        x: item.isFreehand && object.type === "path"
+          ? object.getCenterPoint().x
+          : object.left ?? 0,
+        y: item.isFreehand && object.type === "path"
+          ? object.getCenterPoint().y
+          : object.top ?? 0,
         width: object.width ?? 0,
         height: object.height ?? 0,
         scaleX: object.scaleX ?? 1,
@@ -1269,26 +1347,39 @@ export function FabricProvider({
   }
 
   function setDrawingSettings(settings: Partial<DrawingSettings>) {
-    const next: DrawingSettings = {
-      ...drawingSettingsRef.current,
-      ...settings,
-    };
+  const next: DrawingSettings = {
+    ...drawingSettingsRef.current,
+    ...settings,
+  };
 
-    next.width = Number.isFinite(next.width)
-      ? Math.max(1, next.width)
-      : 5;
+  next.width = Number.isFinite(next.width)
+    ? Math.max(1, Math.min(50, next.width))
+    : 5;
 
-    next.opacity = normalizeOpacity(next.opacity);
+  next.opacity = normalizeOpacity(next.opacity);
 
-    drawingSettingsRef.current = next;
-    setDrawingSettingsState(next);
+  drawingSettingsRef.current = next;
+  setDrawingSettingsState(next);
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const canvas = canvasRef.current;
 
-    configureDrawingBrush(canvas, toolModeRef.current, next);
-    canvas.requestRenderAll();
+  if (!canvas) return;
+
+  configureDrawingBrush(canvas, toolModeRef.current, next);
+
+  // Update the visible eraser cursor immediately when its size changes.
+  if (toolModeRef.current === "eraser" && eraserCursorRef.current) {
+    const cursorSize = Math.max(
+      18,
+      Math.min(110, Math.round(next.width * 2 + 10)),
+    );
+
+    eraserCursorRef.current.style.width = `${cursorSize}px`;
+    eraserCursorRef.current.style.height = `${cursorSize}px`;
   }
+
+  canvas.requestRenderAll();
+}
 
   function handleFreehandPathCreated(event: any) {
     const canvas = canvasRef.current;
@@ -1334,25 +1425,47 @@ export function FabricProvider({
         object.type === "path",
       );
 
+    let canvasChanged = false;
+
     for (const target of freehandObjects) {
-      const bounds = target.getBoundingRect();
+      // Use the same scene-space points that the eraser uses for clipping.
+      // Fabric's getBoundingRect() can become stale/inconsistent after a
+      // replacement Path is created, causing the eraser to stop detecting
+      // the remaining pieces after the first pass.
+      const sampled = sampleFreehandPath(target);
+      if (sampled.length < 2) continue;
+
+      const bounds = sampled.reduce(
+        (result, point) => ({
+          minX: Math.min(result.minX, point.x),
+          minY: Math.min(result.minY, point.y),
+          maxX: Math.max(result.maxX, point.x),
+          maxY: Math.max(result.maxY, point.y),
+        }),
+        {
+          minX: Number.POSITIVE_INFINITY,
+          minY: Number.POSITIVE_INFINITY,
+          maxX: Number.NEGATIVE_INFINITY,
+          maxY: Number.NEGATIVE_INFINITY,
+        },
+      );
+
       const sweepMinX = Math.min(pointer.x, sweepStart.x) - radius;
       const sweepMaxX = Math.max(pointer.x, sweepStart.x) + radius;
       const sweepMinY = Math.min(pointer.y, sweepStart.y) - radius;
       const sweepMaxY = Math.max(pointer.y, sweepStart.y) + radius;
 
       if (
-        sweepMaxX < bounds.left ||
-        sweepMinX > bounds.left + bounds.width ||
-        sweepMaxY < bounds.top ||
-        sweepMinY > bounds.top + bounds.height
+        sweepMaxX < bounds.minX ||
+        sweepMinX > bounds.maxX ||
+        sweepMaxY < bounds.minY ||
+        sweepMinY > bounds.maxY
       ) {
         continue;
       }
 
       const item = target as typeof target & FabricObjectWithMeta;
       const runs = splitFreehandPath(target, pointer, radius, sweepStart);
-      const sampled = sampleFreehandPath(target);
       const threshold =
         radius + Math.max(1, ((target as any).strokeWidth ?? 1) / 2);
 
@@ -1374,6 +1487,19 @@ export function FabricProvider({
 
       if (!actuallyTouched) continue;
 
+      // If the pointer actually crossed this stroke and no visible retained
+      // segment remains, the stroke has been fully erased. Do not keep the
+      // original object: doing so leaves tiny caps/dots after repeated passes.
+      if (runs.length === 0) {
+        if (!eraserGestureSavedRef.current) {
+          saveCanvasState();
+          eraserGestureSavedRef.current = true;
+        }
+        canvas.remove(target);
+        canvasChanged = true;
+        continue;
+      }
+
       if (!eraserGestureSavedRef.current) {
         saveCanvasState();
         eraserGestureSavedRef.current = true;
@@ -1381,7 +1507,13 @@ export function FabricProvider({
 
       const replacements: Path[] = [];
 
-      for (const run of runs) {
+      for (const rawRun of runs) {
+        // The clipping pass samples densely for accuracy. Simplify only the
+        // retained geometry before building Fabric paths, preventing path
+        // command counts from growing on every mouse-move event.
+        const run = simplifyFreehandPoints(rawRun, 0.45);
+        if (run.length < 2) continue;
+
         const minX = Math.min(...run.map((point) => point.x));
         const minY = Math.min(...run.map((point) => point.y));
         const maxX = Math.max(...run.map((point) => point.x));
@@ -1390,13 +1522,36 @@ export function FabricProvider({
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
 
+        // Keep the remaining freehand stroke smooth after erasing.
+        // Using L for every sampled point turns curved pen/marker/highlighter
+        // strokes into visibly straight, angular segments.
+        const toLocal = (point: { x: number; y: number }) => ({
+          x: point.x - centerX,
+          y: point.y - centerY,
+        });
+        const firstPoint = toLocal(run[0]);
         const commands: (string | number)[][] = [
-          ["M", run[0].x - centerX, run[0].y - centerY],
-          ...run.slice(1).map(
-            (point) =>
-              ["L", point.x - centerX, point.y - centerY] as (string | number)[],
-          ),
+          ["M", firstPoint.x, firstPoint.y],
         ];
+
+        if (run.length === 2) {
+          const lastPoint = toLocal(run[1]);
+          commands.push(["L", lastPoint.x, lastPoint.y]);
+        } else {
+          // Quadratic curves through midpoints approximate the original
+          // freehand curve without changing the untouched portions' path.
+          for (let i = 1; i < run.length - 1; i++) {
+            const control = toLocal(run[i]);
+            const next = toLocal(run[i + 1]);
+            const midpoint = {
+              x: (control.x + next.x) / 2,
+              y: (control.y + next.y) / 2,
+            };
+            commands.push(["Q", control.x, control.y, midpoint.x, midpoint.y]);
+          }
+          const lastPoint = toLocal(run[run.length - 1]);
+          commands.push(["Q", lastPoint.x, lastPoint.y, lastPoint.x, lastPoint.y]);
+        }
 
         const replacement = new Path(commands as any, {
           left: centerX,
@@ -1428,9 +1583,23 @@ export function FabricProvider({
         replacements.push(replacement);
       }
 
+      // A touched stroke must not be restored when every retained fragment
+      // is below the visibility threshold. Remove the original in that case.
+      if (replacements.length === 0) {
+        canvas.remove(target);
+        canvasChanged = true;
+        continue;
+      }
+
       canvas.remove(target);
       replacements.forEach((replacement) => canvas.add(replacement));
+      canvasChanged = true;
+    }
+
+    if (canvasChanged) {
       canvas.requestRenderAll();
+      // Sync once per pointer event, not once per affected stroke. This keeps
+      // long erase gestures responsive when a page contains many strokes.
       syncCanvasToEditor();
     }
   }
@@ -1444,6 +1613,24 @@ export function FabricProvider({
 
     eraserHandlersRef.current = {};
     eraserPreviousPointRef.current = null;
+
+    if (eraserCursorEnterRef.current) {
+      canvas.upperCanvasEl.removeEventListener(
+        "pointerenter",
+        eraserCursorEnterRef.current,
+      );
+      eraserCursorEnterRef.current = null;
+    }
+
+    if (eraserCursorLeaveRef.current) {
+      canvas.upperCanvasEl.removeEventListener(
+        "pointerleave",
+        eraserCursorLeaveRef.current,
+      );
+      eraserCursorLeaveRef.current = null;
+    }
+
+    canvas.upperCanvasEl.style.cursor = "default";
 
     if (eraserCursorMoveRef.current) {
       window.removeEventListener(
@@ -1511,7 +1698,7 @@ export function FabricProvider({
       pathCreatedHandlerRef.current = pathHandler;
       canvas.on("path:created", pathHandler);
     } else if (mode === "eraser") {
-      canvas.upperCanvasEl.style.cursor = "none";
+      canvas.upperCanvasEl.style.cursor = "default";
 
       const cursorSize = Math.max(
         18,
@@ -1527,7 +1714,9 @@ export function FabricProvider({
       cursor.style.height = `${cursorSize}px`;
       cursor.style.boxSizing = "border-box";
       cursor.style.border = "1.5px solid #111827";
+      cursor.style.borderRadius = "0";
       cursor.style.background = "rgba(255,255,255,0.2)";
+      cursor.style.display = "none";
       cursor.style.pointerEvents = "none";
       cursor.style.zIndex = "2147483647";
       cursor.style.transform = "translate(-50%, -50%)";
@@ -1544,29 +1733,57 @@ export function FabricProvider({
       eraserCursorMoveRef.current = moveCursor;
       window.addEventListener("pointermove", moveCursor, true);
 
+      const showCursor = () => {
+        if (!eraserCursorRef.current) return;
+        eraserCursorRef.current.style.display = "block";
+        canvas.upperCanvasEl.style.cursor = "none";
+      };
+
+      const hideCursor = () => {
+        if (eraserCursorRef.current) {
+          eraserCursorRef.current.style.display = "none";
+        }
+        canvas.upperCanvasEl.style.cursor = "default";
+      };
+
+      eraserCursorEnterRef.current = showCursor;
+      eraserCursorLeaveRef.current = hideCursor;
+
+      canvas.upperCanvasEl.addEventListener("pointerenter", showCursor);
+      canvas.upperCanvasEl.addEventListener("pointerleave", hideCursor);
+
       canvas.isDrawingMode = false;
       canvas.selection = false;
       canvas.skipTargetFind = true;
 
       const downHandler = (event: any) => {
+        // Erasing starts only after an actual primary-button press inside canvas.
+        if (!event.e || (typeof event.e.button === "number" && event.e.button !== 0)) return;
+        eraserPointerDownRef.current = true;
         eraserGestureSavedRef.current = false;
-        eraserPreviousPointRef.current = event.e
-          ? canvas.getScenePoint(event.e)
-          : null;
-        eraseAtPointer(event);
+        const point = canvas.getScenePoint(event.e);
+        eraserPreviousPointRef.current = point;
+        const eraseEvent = {
+          ...event,
+          e: Object.assign(event.e, {
+            __eraserScenePoint: point,
+            __eraserPreviousScenePoint: point,
+          }),
+        };
+        eraseAtPointer(eraseEvent);
       };
 
       const moveHandler = (event: any) => {
-        if (!event.e) return;
+        // Moving/hovering the eraser must never modify the drawing.
+        if (!eraserPointerDownRef.current || !event.e) return;
 
         const current = canvas.getScenePoint(event.e);
-        const previous = eraserPreviousPointRef.current;
-
+        const previous = eraserPreviousPointRef.current ?? current;
         const eraseEvent = {
           ...event,
           e: Object.assign(event.e, {
             __eraserScenePoint: current,
-            __eraserPreviousScenePoint: previous ?? current,
+            __eraserPreviousScenePoint: previous,
           }),
         };
 
@@ -1575,6 +1792,7 @@ export function FabricProvider({
       };
 
       const upHandler = () => {
+        eraserPointerDownRef.current = false;
         eraserGestureSavedRef.current = false;
         eraserPreviousPointRef.current = null;
       };
@@ -2081,120 +2299,482 @@ export function FabricProvider({
       .toLowerCase();
   }
 
-  function downloadPNG() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  async function downloadPNG(pageIds?: string[]) {
+    const initialCanvas = canvasRef.current;
+    if (!initialCanvas) return;
 
-    const activeObject = canvas.getActiveObject();
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
+    // Save any text currently being edited before exporting.
+    const editingObject = initialCanvas.getActiveObject();
 
-    const dataUrl = canvas.toDataURL({
-      format: "png",
-      multiplier: 2,
-      quality: 1,
-    });
-
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `${getDownloadName()}.png`;
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    if (activeObject) {
-      canvas.setActiveObject(activeObject);
-      setSelectedObject(activeObject);
+    if (
+      (editingObject instanceof IText || editingObject instanceof Textbox) &&
+      editingObject.isEditing
+    ) {
+      editingObject.exitEditing();
+      initialCanvas.requestRenderAll();
     }
 
-    canvas.requestRenderAll();
-  }
-
-  async function downloadPDF() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Save current canvas content before changing pages so the latest edits
-    // are reflected in the page data held by EditorContext.
+    // Synchronize the currently visible page with EditorContext.
     syncCanvasToEditor();
 
-    const pageList = Array.isArray(pages) && pages.length > 0
-      ? pages
-      : [{
-          id: activePageId,
-          name: "Page 1",
-          elements: [],
-          backgroundColor: "#ffffff",
-          pageSize: "A4" as const,
-          orientation: "landscape" as const,
-        }];
+    const liveElements = convertCanvasToElements();
+
+    const sourcePages =
+      Array.isArray(pages) && pages.length > 0
+        ? pages
+        : [
+            {
+              id: activePageId,
+              name: "Page 1",
+              elements: [],
+              backgroundColor: String(
+                initialCanvas.backgroundColor || "#ffffff",
+              ),
+              pageSize: "A4" as const,
+              orientation: "landscape" as const,
+            },
+          ];
+
+    // Always use live canvas data for the currently active page.
+    const pageList = sourcePages.map((page) =>
+      page.id === activePageId
+        ? {
+            ...page,
+            elements: liveElements,
+            backgroundColor: String(
+              initialCanvas.backgroundColor ||
+                page.backgroundColor ||
+                "#ffffff",
+            ),
+          }
+        : page,
+    );
+
+    // If pageIds is undefined, export all pages.
+    // If an empty array is passed, export nothing.
+    const pagesToExport =
+      pageIds === undefined
+        ? pageList
+        : pageList.filter((page) => pageIds.includes(page.id));
+
+    if (pagesToExport.length === 0) {
+      console.warn("PNG export cancelled: no pages were selected.");
+      return;
+    }
 
     const originalPageId = activePageId;
+
+    const originalActiveObjectId = (
+      initialCanvas.getActiveObject() as any
+    )?.elementId as string | undefined;
+
     let currentPageId = activePageId;
-    const originalActiveObject = canvas.getActiveObject();
-    let pdf: jsPDF | null = null;
 
-    const waitForCanvasUpdate = () => new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
+    const waitFrame = () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
 
-    try {
-      for (let index = 0; index < pageList.length; index += 1) {
-        const page = pageList[index];
+    const pageIsRendered = (
+      page: (typeof pagesToExport)[number],
+    ) => {
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas) return false;
 
-        if (page.id && page.id !== currentPageId) {
-          selectPage(page.id);
-          currentPageId = page.id;
-          await waitForCanvasUpdate();
+      const actual = convertCanvasToElements();
+      const expected = page.elements ?? [];
+
+      if (expected.length !== actual.length) return false;
+
+      const normalizeColor = (value: unknown) => {
+        const color = String(value ?? "#ffffff")
+          .trim()
+          .toLowerCase();
+
+        if (/^#[0-9a-f]{3}$/.test(color)) {
+          return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
         }
 
-        const currentCanvas = canvasRef.current;
-        if (!currentCanvas) continue;
+        return color;
+      };
 
-        const activeObject = currentCanvas.getActiveObject();
+      if (
+        normalizeColor(page.backgroundColor) !==
+        normalizeColor(currentCanvas.backgroundColor)
+      ) {
+        return false;
+      }
+
+      const close = (
+        a: number | undefined,
+        b: number | undefined,
+      ) => Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
+
+      return expected.every((item, index) => {
+        const rendered = actual[index];
+
+        if (
+          !rendered ||
+          item.id !== rendered.id ||
+          item.type !== rendered.type
+        ) {
+          return false;
+        }
+
+        return (
+          close(item.x, rendered.x) &&
+          close(item.y, rendered.y)
+        );
+      });
+    };
+
+    const waitForPage = async (
+      page: (typeof pagesToExport)[number],
+    ) => {
+      const timeoutAt = Date.now() + 15000;
+      let matches = 0;
+
+      while (Date.now() < timeoutAt) {
+        await waitFrame();
+
+        if (pageIsRendered(page)) {
+          matches += 1;
+
+          if (matches >= 2) {
+            canvasRef.current?.requestRenderAll();
+            await waitFrame();
+            return;
+          }
+        } else {
+          matches = 0;
+        }
+      }
+
+      throw new Error(
+        `Page "${page.name}" did not finish rendering for PNG export.`,
+      );
+    };
+
+    try {
+      for (let index = 0; index < pagesToExport.length; index++) {
+        const page = pagesToExport[index];
+
+        // Switch to the page that needs to be exported.
+        if (page.id !== currentPageId) {
+          selectPage(page.id);
+          currentPageId = page.id;
+        }
+
+        // Wait until Fabric has loaded the correct page.
+        await waitForPage(page);
+
+        const currentCanvas = canvasRef.current;
+
+        if (!currentCanvas) {
+          throw new Error(
+            "The editor canvas is unavailable during PNG export.",
+          );
+        }
+
+        // Remove selection borders and controls from the exported image.
+        const active = currentCanvas.getActiveObject();
+
+        if (
+          (active instanceof IText || active instanceof Textbox) &&
+          active.isEditing
+        ) {
+          active.exitEditing();
+        }
+
         currentCanvas.discardActiveObject();
         currentCanvas.requestRenderAll();
-        await waitForCanvasUpdate();
 
-        const pageWidth = currentCanvas.getWidth();
-        const pageHeight = currentCanvas.getHeight();
+        await waitFrame();
+        await waitFrame();
+
+        // Capture this page as a separate PNG.
         const dataUrl = currentCanvas.toDataURL({
           format: "png",
           multiplier: 2,
           quality: 1,
         });
 
-        if (!pdf) {
-          pdf = new jsPDF({
-            orientation: pageWidth >= pageHeight ? "landscape" : "portrait",
-            unit: "px",
-            format: [pageWidth, pageHeight],
-          });
+        const safePageName = String(
+          page.name || `page-${index + 1}`,
+        )
+          .replace(/[^a-zA-Z0-9-_ ]/g, "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .toLowerCase();
+
+        const link = document.createElement("a");
+
+        link.href = dataUrl;
+        link.download = `${getDownloadName()}-${safePageName || `page-${index + 1}`}.png`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Give the browser time to start this download before
+        // triggering the next page's download.
+        await waitFrame();
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 250);
+        });
+      }
+    } catch (error) {
+      console.error("Failed to export PNG pages:", error);
+
+      window.alert(
+        "PNG download nahi ho paya. Please console error check karein aur dobara try karein.",
+      );
+    } finally {
+      // Restore the page that was open before exporting.
+      if (originalPageId && originalPageId !== currentPageId) {
+        selectPage(originalPageId);
+        currentPageId = originalPageId;
+
+        const originalPage = pageList.find(
+          (page) => page.id === originalPageId,
+        );
+
+        if (originalPage) {
+          try {
+            await waitForPage(originalPage);
+          } catch (restoreError) {
+            console.error(
+              "Unable to restore the original page after PNG export:",
+              restoreError,
+            );
+          }
+        }
+      }
+
+      // Restore the previously selected object.
+      const restoredCanvas = canvasRef.current;
+
+      if (restoredCanvas && originalActiveObjectId) {
+        const restoredObject = restoredCanvas
+          .getObjects()
+          .find(
+            (object: any) =>
+              object.elementId === originalActiveObjectId,
+          );
+
+        if (restoredObject) {
+          restoredCanvas.setActiveObject(restoredObject);
+          setSelectedObject(restoredObject);
+        }
+      }
+
+      restoredCanvas?.requestRenderAll();
+    }
+  }
+
+
+  async function downloadPDF(pageIds?: string[]) {
+    const initialCanvas = canvasRef.current;
+    if (!initialCanvas) return;
+
+    // Commit in-progress text editing before reading the page snapshot.
+    const editingObject = initialCanvas.getActiveObject();
+    if (
+      (editingObject instanceof IText || editingObject instanceof Textbox) &&
+      editingObject.isEditing
+    ) {
+      editingObject.exitEditing();
+      initialCanvas.requestRenderAll();
+    }
+
+    // This synchronously updates EditorContext's latest-elements ref before any
+    // page switch can occur. The current page is always taken from the live canvas.
+    syncCanvasToEditor();
+    const liveElements = convertCanvasToElements();
+
+    const sourcePages = Array.isArray(pages) && pages.length > 0
+      ? pages
+      : [{
+          id: activePageId,
+          name: "Page 1",
+          elements: [],
+          backgroundColor: String(initialCanvas.backgroundColor || "#ffffff"),
+          pageSize: "A4" as const,
+          orientation: "landscape" as const,
+        }];
+
+    // Do not use stale React page data for the page currently displayed.
+    const pageList = sourcePages.map((page) =>
+      page.id === activePageId
+        ? {
+            ...page,
+            elements: liveElements,
+            backgroundColor: String(initialCanvas.backgroundColor || page.backgroundColor || "#ffffff"),
+          }
+        : page,
+    );
+
+    // An explicitly empty selection means export nothing, not every page.
+    const pagesToExport = pageIds === undefined
+      ? pageList
+      : pageList.filter((page) => pageIds.includes(page.id));
+
+    if (pagesToExport.length === 0) {
+      console.warn("PDF export cancelled: no pages were selected.");
+      return;
+    }
+
+    const originalPageId = activePageId;
+    const originalActiveObjectId = (initialCanvas.getActiveObject() as any)?.elementId as string | undefined;
+    let currentPageId = activePageId;
+    let pdf: jsPDF | null = null;
+
+    const waitFrame = () => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+
+    const pageIsRendered = (page: (typeof pagesToExport)[number]) => {
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas) return false;
+
+      const actual = convertCanvasToElements();
+      const expected = page.elements ?? [];
+      if (expected.length !== actual.length) return false;
+
+      // Normalize common hex color forms so equivalent backgrounds compare equal.
+      const normalizeColor = (value: unknown) => {
+        const color = String(value ?? "#ffffff").trim().toLowerCase();
+        if (/^#[0-9a-f]{3}$/.test(color)) {
+          return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+        }
+        return color;
+      };
+      if (
+        normalizeColor(page.backgroundColor) !==
+        normalizeColor(currentCanvas.backgroundColor)
+      ) return false;
+
+      // Element IDs can be normalized while Fabric rebuilds a page. Match visible
+      // content and scene positions instead, so export waits for the target page.
+      const close = (a: number | undefined, b: number | undefined) =>
+        Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
+
+      return expected.every((item, index) => {
+        const rendered = actual[index];
+        if (!rendered || item.id !== rendered.id || item.type !== rendered.type) {
+          return false;
+        }
+        // Text is intentionally not used as a render-readiness signal: the
+        // React page snapshot may lag one render behind the live Fabric text.
+        // The synchronous EditorContext snapshot fix ensures page switches
+        // reload the latest text; coordinates still must match before capture.
+        return close(item.x, rendered.x) && close(item.y, rendered.y);
+      });
+    };
+
+    const waitForPage = async (page: (typeof pagesToExport)[number]) => {
+      const timeoutAt = Date.now() + 15000;
+      let matches = 0;
+
+      while (Date.now() < timeoutAt) {
+        await waitFrame();
+        if (pageIsRendered(page)) {
+          matches += 1;
+          if (matches >= 2) {
+            // Let Fabric complete the render after the target content is present.
+            canvasRef.current?.requestRenderAll();
+            await waitFrame();
+            return;
+          }
         } else {
-          pdf.addPage([pageWidth, pageHeight], pageWidth >= pageHeight ? "landscape" : "portrait");
+          matches = 0;
+        }
+      }
+
+      throw new Error(`Page "${page.name}" did not finish rendering for PDF export.`);
+    };
+
+    try {
+      for (const page of pagesToExport) {
+        if (page.id !== currentPageId) {
+          selectPage(page.id);
+          currentPageId = page.id;
         }
 
-        pdf.addImage(dataUrl, "PNG", 0, 0, pageWidth, pageHeight);
+        await waitForPage(page);
 
-        if (activeObject) currentCanvas.setActiveObject(activeObject);
+        const currentCanvas = canvasRef.current;
+        if (!currentCanvas) {
+          throw new Error("The editor canvas is unavailable during PDF export.");
+        }
+
+        // Exit active text editing and remove only selection controls. No object
+        // coordinates are recalculated or repositioned during export.
+        const active = currentCanvas.getActiveObject();
+        if ((active instanceof IText || active instanceof Textbox) && active.isEditing) {
+          active.exitEditing();
+        }
+        currentCanvas.discardActiveObject();
+        currentCanvas.requestRenderAll();
+        await waitFrame();
+        await waitFrame();
+
+        const width = currentCanvas.getWidth();
+        const height = currentCanvas.getHeight();
+        const dataUrl = currentCanvas.toDataURL({
+          format: "png",
+          multiplier: 2,
+          quality: 1,
+        });
+
+        const orientation = width >= height ? "landscape" : "portrait";
+        if (!pdf) {
+          pdf = new jsPDF({
+            orientation,
+            unit: "px",
+            format: [width, height],
+            compress: true,
+          });
+        } else {
+          pdf.addPage([width, height], orientation);
+        }
+
+        // The captured raster is the exact Fabric canvas, placed edge-to-edge.
+        // This preserves all visible text, images and object positions as drawn.
+        pdf.addImage(dataUrl, "PNG", 0, 0, width, height, undefined, "FAST");
+
+        // Keep the live page selection visually unchanged until the next page.
         currentCanvas.requestRenderAll();
       }
 
       if (pdf) pdf.save(`${getDownloadName()}.pdf`);
     } catch (error) {
-      console.error("Failed to export all pages to PDF:", error);
+      console.error("Failed to export PDF pages:", error);
+      window.alert("PDF download nahi ho paya. Please console error check karein aur dobara try karein.");
     } finally {
+      // Return to the page the user was editing before export.
       if (originalPageId && originalPageId !== currentPageId) {
         selectPage(originalPageId);
         currentPageId = originalPageId;
-        await waitForCanvasUpdate();
+        const originalPage = pageList.find((page) => page.id === originalPageId);
+        if (originalPage) {
+          try {
+            await waitForPage(originalPage);
+          } catch (restoreError) {
+            console.error("Unable to restore the original page after PDF export:", restoreError);
+          }
+        }
       }
 
       const restoredCanvas = canvasRef.current;
-      if (restoredCanvas && originalActiveObject) {
-        restoredCanvas.setActiveObject(originalActiveObject);
-        setSelectedObject(originalActiveObject);
+      if (restoredCanvas && originalActiveObjectId) {
+        const restoredObject = restoredCanvas.getObjects().find(
+          (object: any) => object.elementId === originalActiveObjectId,
+        );
+        if (restoredObject) {
+          restoredCanvas.setActiveObject(restoredObject);
+          setSelectedObject(restoredObject);
+        }
       }
       restoredCanvas?.requestRenderAll();
     }
