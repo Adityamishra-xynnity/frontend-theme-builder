@@ -99,8 +99,26 @@ export type ElementType =
   | "thought-bubble"
   | "rounded-bubble"
 
+  // Table
+  | "table"
+
   // Images
   | "image";
+
+// Individual table cell data
+export interface TableCellData {
+  text: string;
+  backgroundColor: string;
+}
+
+// Complete table data
+export interface TableData {
+  rows: number;
+  columns: number;
+  cells: TableCellData[][];
+  borderColor: string;
+  borderWidth: number;
+}
 
 export interface EditorElement {
   id: string;
@@ -148,4 +166,7 @@ export interface EditorElement {
   shapeSides?: number;
 
   pathData?: (string | number)[][];
+
+  // Table content and styling
+  tableData?: TableData;
 }

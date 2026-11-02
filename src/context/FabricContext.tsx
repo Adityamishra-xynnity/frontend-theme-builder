@@ -11,6 +11,7 @@ import {
   Line,
   Path,
   PencilBrush,
+  Group,
 } from "fabric";
 
 import {
@@ -52,6 +53,15 @@ type FabricObjectWithMeta = {
   isFreehand?: boolean;
   freehandScenePoints?: Array<{ x: number; y: number }>;
   backgroundColor?: string;
+  tableData?: {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string; textColor?: string; fontSize?: number }[][];
+    columnWidths?: number[];
+    rowHeights?: number[];
+    borderColor: string;
+    borderWidth: number;
+  };
 };
 
 type TextElementType = "heading" | "subheading" | "text";
@@ -120,6 +130,21 @@ interface FabricContextType {
   addStickyNote: () => void;
   addSignature: () => void;
   addTable: () => void;
+  activeTableCell: { row: number; column: number } | null;
+  setActiveTableCell: (cell: { row: number; column: number } | null) => void;
+  setTableCellText: (row: number, column: number, text: string) => void;
+  setTableCellTextColor: (row: number, column: number, color: string) => void;
+  setTableCellFontSize: (row: number, column: number, size: number) => void;
+  setTableColumnWidth: (column: number, width: number) => void;
+  setTableRowHeight: (row: number, height: number) => void;
+  setTableCellBackground: (row: number, column: number, color: string) => void;
+  setTableRowBackground: (row: number, color: string) => void;
+  setTableColumnBackground: (column: number, color: string) => void;
+  setTableBorder: (color: string, width: number) => void;
+  addTableRow: () => void;
+  deleteTableRow: (row: number) => void;
+  addTableColumn: () => void;
+  deleteTableColumn: (column: number) => void;
 
   saveCurrentDesign: (name: string) => Promise<void>;
  downloadPNG: (pageIds?: string[]) => Promise<void>;
@@ -157,6 +182,7 @@ const SERIALIZED_PROPERTIES = [
   "isFreehand",
   "backgroundColor",
   "freehandScenePoints",
+  "tableData",
 ];
 
 function normalizeOpacity(value: number): number {
@@ -783,6 +809,7 @@ export function FabricProvider({
   const canvasRef = useRef<FabricCanvas | null>(null);
 
   const [selectedObject, setSelectedObjectState] = useState<any>(null);
+  const [activeTableCell, setActiveTableCell] = useState<{ row: number; column: number } | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
 
@@ -994,6 +1021,10 @@ export function FabricProvider({
         element.src = item.imageSrc ?? "";
       }
 
+      if (item.elementType === "table" && item.tableData) {
+        element.tableData = JSON.parse(JSON.stringify(item.tableData));
+      }
+
       return element;
     });
   }
@@ -1026,12 +1057,58 @@ export function FabricProvider({
       originX: "left",
       originY: "top",
     });
+
+    // Keep Fabric's native rotation position and drag handler, but render
+    // the rotation handle as a polished circular button with a rotate arrow.
+    const rotateControl = object.controls?.mtr;
+    if (rotateControl) {
+      rotateControl.render = (
+        ctx: CanvasRenderingContext2D,
+        left: number,
+        top: number,
+      ) => {
+        ctx.save();
+        ctx.translate(left, top);
+
+        // Premium compact white handle
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = "#d1d5db";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Rotation icon: smooth circular arrow
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, -Math.PI * 0.65, Math.PI * 0.85);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // Arrow tip
+        ctx.beginPath();
+        ctx.moveTo(-3.1, -4.0);
+        ctx.lineTo(-4.8, -4.2);
+        ctx.lineTo(-4.2, -2.5);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        ctx.restore();
+      };
+
+      rotateControl.cornerSize = 22;
+    }
   }
 
   function attachMetadata(
     object: any,
     type: ElementType,
-    id = crypto.randomUUID(),
+    id: string = crypto.randomUUID(),
     extra?: {
       imageSrc?: string;
       shapeSides?: number;
@@ -1896,52 +1973,177 @@ export function FabricProvider({
     syncCanvasToEditor();
   }
 
+  type TableDataState = {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string; textColor?: string; fontSize?: number }[][];
+    columnWidths?: number[];
+    rowHeights?: number[];
+    borderColor: string;
+    borderWidth: number;
+  };
+
+  function createTableGroup(
+    data: TableDataState,
+    position: { left: number; top: number; scaleX?: number; scaleY?: number; angle?: number; opacity?: number; elementId?: string } = { left: 100, top: 100 },
+  ) {
+    const columnWidths = Array.from({ length: data.columns }, (_, i) => Math.max(70, data.columnWidths?.[i] ?? Math.max(70, 360 / Math.max(1, data.columns))));
+    const rowHeights = Array.from({ length: data.rows }, (_, i) => Math.max(36, data.rowHeights?.[i] ?? 52));
+    data.columnWidths = columnWidths;
+    data.rowHeights = rowHeights;
+    const width = columnWidths.reduce((sum, value) => sum + value, 0);
+    const height = rowHeights.reduce((sum, value) => sum + value, 0);
+    const columnOffsets = columnWidths.map((_, i) => columnWidths.slice(0, i).reduce((sum, value) => sum + value, 0));
+    const rowOffsets = rowHeights.map((_, i) => rowHeights.slice(0, i).reduce((sum, value) => sum + value, 0));
+    const children: any[] = [];
+
+    data.cells.forEach((rowCells, row) => {
+      rowCells.forEach((cell, column) => {
+        children.push(new Rect({
+          left: columnOffsets[column],
+          top: rowOffsets[row],
+          width: columnWidths[column],
+          height: rowHeights[row],
+          fill: cell.backgroundColor || "#ffffff",
+          stroke: data.borderColor,
+          strokeWidth: data.borderWidth,
+          selectable: false,
+          evented: false,
+          originX: "left",
+          originY: "top",
+        }));
+        children.push(new Textbox(cell.text ?? "", {
+          left: columnOffsets[column] + 8,
+          top: rowOffsets[row] + 7,
+          width: Math.max(10, columnWidths[column] - 16),
+          height: Math.max(10, rowHeights[row] - 14),
+          fontSize: Math.max(8, Math.min(48, cell.fontSize ?? 14)),
+          fontFamily: "Arial",
+          fontWeight: row === 0 ? "bold" : "normal",
+          fill: cell.textColor || (row === 0 ? "#ffffff" : "#1f2937"),
+          textAlign: "center",
+          editable: false,
+          selectable: false,
+          evented: false,
+          originX: "left",
+          originY: "top",
+        } as any));
+      });
+    });
+
+    const group = new Group(children, {
+      left: position.left,
+      top: position.top,
+      width,
+      height,
+      scaleX: position.scaleX ?? 1,
+      scaleY: position.scaleY ?? 1,
+      angle: position.angle ?? 0,
+      opacity: position.opacity ?? 1,
+      originX: "left",
+      originY: "top",
+      subTargetCheck: false,
+      interactive: false,
+      objectCaching: false,
+    } as any);
+    applyObjectControls(group);
+    attachMetadata(group, "table", position.elementId ?? crypto.randomUUID());
+    (group as any).tableData = JSON.parse(JSON.stringify(data));
+    return group;
+  }
+
+  function updateSelectedTable(update: (data: TableDataState) => void) {
+    const canvas = canvasRef.current;
+    const current = selectedObject as any;
+    if (!canvas || current?.elementType !== "table" || !current.tableData) return;
+
+    saveCanvasState();
+    const data: TableDataState = JSON.parse(JSON.stringify(current.tableData));
+    update(data);
+    data.rows = data.cells.length;
+    data.columns = data.cells[0]?.length ?? 0;
+    if (data.rows < 1 || data.columns < 1) return;
+
+    const replacement = createTableGroup(data, {
+      left: current.left ?? 100,
+      top: current.top ?? 100,
+      scaleX: current.scaleX ?? 1,
+      scaleY: current.scaleY ?? 1,
+      angle: current.angle ?? 0,
+      opacity: current.opacity ?? 1,
+      elementId: current.elementId,
+    });
+    canvas.remove(current);
+    canvas.add(replacement);
+    canvas.setActiveObject(replacement);
+    setSelectedObject(replacement);
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+  }
+
+  function setTableCellText(row: number, column: number, text: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].text = text; });
+  }
+  function setTableCellTextColor(row: number, column: number, color: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].textColor = color; });
+  }
+  function setTableCellFontSize(row: number, column: number, size: number) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].fontSize = Math.max(8, Math.min(48, size)); });
+  }
+  function setTableColumnWidth(column: number, width: number) {
+    updateSelectedTable((data) => { data.columnWidths ??= Array(data.columns).fill(120); if (column >= 0 && column < data.columns) data.columnWidths[column] = Math.max(70, Math.min(500, width)); });
+  }
+  function setTableRowHeight(row: number, height: number) {
+    updateSelectedTable((data) => { data.rowHeights ??= Array(data.rows).fill(52); if (row >= 0 && row < data.rows) data.rowHeights[row] = Math.max(36, Math.min(300, height)); });
+  }
+  function setTableCellBackground(row: number, column: number, color: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].backgroundColor = color; });
+  }
+  function setTableRowBackground(row: number, color: string) {
+    updateSelectedTable((data) => { data.cells[row]?.forEach((cell) => { cell.backgroundColor = color; }); });
+  }
+  function setTableColumnBackground(column: number, color: string) {
+    updateSelectedTable((data) => data.cells.forEach((row) => { if (row[column]) row[column].backgroundColor = color; }));
+  }
+  function setTableBorder(color: string, width: number) {
+    updateSelectedTable((data) => { data.borderColor = color; data.borderWidth = Math.max(0, Math.min(10, width)); });
+  }
+  function addTableRow() {
+    updateSelectedTable((data) => { data.cells.push(Array.from({ length: data.columns }, (_, i) => ({ text: `Cell ${data.rows + 1},${i + 1}`, backgroundColor: "#ffffff" }))); data.rowHeights ??= Array(data.rows).fill(52); data.rowHeights.push(52); });
+  }
+  function deleteTableRow(row: number) {
+    updateSelectedTable((data) => { if (data.rows > 1 && row >= 0 && row < data.rows) { data.cells.splice(row, 1); data.rowHeights?.splice(row, 1); } });
+  }
+  function addTableColumn() {
+    updateSelectedTable((data) => { data.cells.forEach((cells, i) => cells.push({ text: i === 0 ? `Header ${data.columns + 1}` : `Cell ${i + 1},${data.columns + 1}`, backgroundColor: i === 0 ? "#2563eb" : "#ffffff" })); data.columnWidths ??= Array(data.columns).fill(Math.max(70, 360 / Math.max(1, data.columns))); data.columnWidths.push(150); });
+  }
+  function deleteTableColumn(column: number) {
+    updateSelectedTable((data) => { if (data.columns > 1 && column >= 0 && column < data.columns) { data.cells.forEach((row) => row.splice(column, 1)); data.columnWidths?.splice(column, 1); } });
+  }
+
   function addTable() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     saveCanvasState();
-
-    const left = 100;
-    const top = 100;
-    const width = 360;
-    const height = 180;
-    const columns = 3;
     const rows = 4;
-    const objects: any[] = [];
-
-    for (let row = 0; row <= rows; row++) {
-      const y = (height / rows) * row;
-      const line = new Line([0, 0, width, 0], {
-        left,
-        top: top + y,
-        stroke: "#374151",
-        strokeWidth: 2,
-        selectable: true,
-        evented: true,
-      });
-
-      attachMetadata(line, "line");
-      objects.push(line);
-    }
-
-    for (let column = 0; column <= columns; column++) {
-      const x = (width / columns) * column;
-      const line = new Line([0, 0, 0, height], {
-        left: left + x,
-        top,
-        stroke: "#374151",
-        strokeWidth: 2,
-        selectable: true,
-        evented: true,
-      });
-
-      attachMetadata(line, "line");
-      objects.push(line);
-    }
-
-    objects.forEach((object) => canvas.add(object));
-    activateObject(objects[0]);
+    const columns = 3;
+    const data: TableDataState = {
+      rows,
+      columns,
+      borderColor: "#cbd5e1",
+      borderWidth: 1.5,
+      columnWidths: [150, 150, 150],
+      rowHeights: [56, 52, 52, 52],
+      cells: Array.from({ length: rows }, () => Array.from({ length: columns }, () => ({
+        text: "",
+        backgroundColor: "#ffffff",
+        textColor: "#1f2937",
+        fontSize: 14,
+      }))),
+    };
+    const table = createTableGroup(data);
+    canvas.add(table);
+    activateObject(table);
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -2826,6 +3028,21 @@ export function FabricProvider({
     addStickyNote,
     addSignature,
     addTable,
+    activeTableCell,
+    setActiveTableCell,
+    setTableCellText,
+    setTableCellTextColor,
+    setTableCellFontSize,
+    setTableColumnWidth,
+    setTableRowHeight,
+    setTableCellBackground,
+    setTableRowBackground,
+    setTableColumnBackground,
+    setTableBorder,
+    addTableRow,
+    deleteTableRow,
+    addTableColumn,
+    deleteTableColumn,
 
     saveCurrentDesign,
     downloadPNG,
