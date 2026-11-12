@@ -1,4 +1,5 @@
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -10,9 +11,108 @@ import {
   WandSparkles,
 } from "lucide-react";
 
-import { templates } from "../data/templates";
+import {
+  getTemplatesPage,
+  type CertificateTemplate,
+} from "../api/templateApi";
+
+const PAGE_SIZE = 20;
 
 export default function Templates() {
+  const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalTemplates, setTotalTemplates] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadingRef = useRef(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const loadTemplates = useCallback(async (pageNumber: number) => {
+    if (loadingRef.current) return;
+
+    loadingRef.current = true;
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await getTemplatesPage(pageNumber, PAGE_SIZE);
+
+      setTemplates((previous) => {
+        const combined =
+          pageNumber === 0
+            ? response.content
+            : [...previous, ...response.content];
+
+        const uniqueTemplates = new Map(
+          combined.map((template) => [
+            template.templateKey,
+            template,
+          ])
+        );
+
+        return Array.from(uniqueTemplates.values());
+      });
+
+      setTotalTemplates(response.totalElements);
+      setHasMore(
+        !response.last &&
+          pageNumber + 1 < response.totalPages
+      );
+    } catch (err) {
+      console.error("Template loading error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load templates."
+      );
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTemplates(page);
+  }, [page, loadTemplates]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+
+    if (!sentinel || !hasMore || loading || error) {
+      return;
+    }
+
+    observerRef.current?.disconnect();
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setPage((currentPage) => currentPage + 1);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "200px",
+        threshold: 0,
+      }
+    );
+
+    observerRef.current.observe(sentinel);
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, [hasMore, loading, error, templates.length]);
+
+  const retryLoading = () => {
+    if (loadingRef.current) return;
+    void loadTemplates(page);
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50">
@@ -76,206 +176,236 @@ export default function Templates() {
 
           <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm">
             <LayoutTemplate size={17} className="text-indigo-600" />
-            {templates.length}{" "}
-            {templates.length === 1 ? "Template" : "Templates"}
+            {totalTemplates}{" "}
+            {totalTemplates === 1 ? "Template" : "Templates"}
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-5 pb-16 pt-7 sm:px-8 lg:px-10">
-        {templates.length > 0 ? (
-          <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:gap-9">
-            {templates.map((template) => {
-              const heading = template.elements.find(
-                (element) => element.type === "heading"
-              );
+        {error && templates.length === 0 ? (
+          <div className="rounded-2xl border border-red-200 bg-white px-6 py-12 text-center">
+            <h3 className="text-xl font-bold text-slate-900">
+              Unable to load templates
+            </h3>
 
-              const mainColor =
-                heading?.type === "heading"
-                  ? heading.color
-                  : "#374151";
+            <p className="mt-2 text-sm text-slate-500">{error}</p>
 
-              return (
-                <article
-                  key={template.id}
-                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-100/40"
-                >
-                  <div className="relative overflow-hidden bg-slate-100 p-4 sm:p-7">
-                    <div
-                      className="relative aspect-[900/650] w-full overflow-hidden rounded-lg shadow-lg"
-                      style={{
-                        backgroundColor: template.backgroundColor,
-                      }}
-                    >
+            <button
+              onClick={retryLoading}
+              className="mt-5 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : templates.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:gap-9">
+              {templates.map((template) => {
+                const heading = template.elementsData.find(
+                  (element) => element.type === "heading"
+                );
+
+                const mainColor =
+                  heading?.type === "heading"
+                    ? heading.color
+                    : "#374151";
+
+                return (
+                  <article
+                    key={template.templateKey}
+                    className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-100/40"
+                  >
+                    <div className="relative overflow-hidden bg-slate-100 p-4 sm:p-7">
                       <div
-                        className="pointer-events-none absolute inset-[3%] border-2"
+                        className="relative aspect-[900/650] w-full overflow-hidden rounded-lg shadow-lg"
                         style={{
-                          borderColor: mainColor,
+                          backgroundColor: template.backgroundColor,
                         }}
-                      />
+                      >
+                        {template.elementsData.map((element) => {
+                          const left = (element.x / 900) * 100;
+                          const top = (element.y / 650) * 100;
+                          const width = (element.width / 900) * 100;
+                          const height = (element.height / 650) * 100;
 
-                      <div
-                        className="pointer-events-none absolute inset-[5%] border"
-                        style={{
-                          borderColor: `${mainColor}55`,
-                        }}
-                      />
+                          const baseStyle = {
+                            position: "absolute" as const,
+                            left: `${left}%`,
+                            top: `${top}%`,
+                            width: `${width}%`,
+                            height: `${height}%`,
+                          };
 
-                      {template.elements.map((element) => {
-                        const left = (element.x / 900) * 100;
-                        const top = (element.y / 650) * 100;
-                        const width = (element.width / 900) * 100;
-                        const height = (element.height / 650) * 100;
+                          if (element.type === "rectangle") {
+                            return (
+                              <div
+                                key={element.id}
+                                style={{
+                                  ...baseStyle,
+                                  backgroundColor:
+                                    element.backgroundColor ?? "transparent",
+                                  border:
+                                    element.color &&
+                                    element.backgroundColor === "transparent"
+                                      ? `1px solid ${element.color}`
+                                      : "none",
+                                }}
+                              />
+                            );
+                          }
 
-                        const baseStyle = {
-                          position: "absolute" as const,
-                          left: `${left}%`,
-                          top: `${top}%`,
-                          width: `${width}%`,
-                          height: `${height}%`,
-                        };
+                          if (element.type === "circle") {
+                            return (
+                              <div
+                                key={element.id}
+                                style={{
+                                  ...baseStyle,
+                                  backgroundColor:
+                                    element.backgroundColor ?? "transparent",
+                                  borderRadius: "50%",
+                                }}
+                              />
+                            );
+                          }
 
-                        if (element.type === "rectangle") {
+                          if (element.type === "triangle") {
+                            return (
+                              <div
+                                key={element.id}
+                                style={{
+                                  ...baseStyle,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: 0,
+                                    height: 0,
+                                    borderLeft: `${element.width / 2}px solid transparent`,
+                                    borderRight: `${element.width / 2}px solid transparent`,
+                                    borderBottom: `${element.height}px solid ${element.backgroundColor ?? element.color ?? "#000000"}`,
+                                    transform: "scale(0.45)",
+                                    transformOrigin: "center",
+                                  }}
+                                />
+                              </div>
+                            );
+                          }
+
                           return (
                             <div
                               key={element.id}
                               style={{
                                 ...baseStyle,
-                                backgroundColor: element.backgroundColor,
-                              }}
-                            />
-                          );
-                        }
-
-                        if (element.type === "circle") {
-                          return (
-                            <div
-                              key={element.id}
-                              style={{
-                                ...baseStyle,
-                                backgroundColor: element.backgroundColor,
-                                borderRadius: "50%",
-                              }}
-                            />
-                          );
-                        }
-
-                        if (element.type === "triangle") {
-                          return (
-                            <div
-                              key={element.id}
-                              style={{
-                                ...baseStyle,
+                                fontSize: `${Math.max(
+                                  6,
+                                  ((element.fontSize ?? 18) / 900) *
+                                    900 *
+                                    0.55
+                                )}px`,
+                                fontFamily: element.fontFamily,
+                                color: element.color,
+                                fontWeight: element.fontWeight,
+                                fontStyle:
+                                  "fontStyle" in element &&
+                                  element.fontStyle === "italic"
+                                    ? "italic"
+                                    : "normal",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
+                                textAlign: "center",
+                                lineHeight: "1.2",
+                                padding: "2px",
+                                overflow: "hidden",
+                                overflowWrap: "anywhere",
                               }}
                             >
-                              <div
-                                style={{
-                                  width: 0,
-                                  height: 0,
-                                  borderLeft: `${element.width / 2}px solid transparent`,
-                                  borderRight: `${element.width / 2}px solid transparent`,
-                                  borderBottom: `${element.height}px solid ${element.backgroundColor}`,
-                                  transform: "scale(0.45)",
-                                  transformOrigin: "center",
-                                }}
-                              />
+                              {"text" in element ? element.text : ""}
                             </div>
                           );
-                        }
+                        })}
 
-                        return (
-                          <div
-                            key={element.id}
-                            style={{
-                              ...baseStyle,
-                              fontSize: `${Math.max(
-                                6,
-                                ((element.fontSize ?? 18) / 900) *
-                                  900 *
-                                  0.55
-                              )}px`,
-                              fontFamily: element.fontFamily,
-                              color: element.color,
-                              fontWeight: element.fontWeight,
-                              fontStyle:
-                                "fontStyle" in element &&
-                                element.fontStyle === "italic"
-                                  ? "italic"
-                                  : "normal",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              textAlign: "center",
-                              lineHeight: "1.2",
-                              padding: "2px",
-                              overflow: "hidden",
-                              overflowWrap: "anywhere",
-                            }}
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100">
+                          <Link
+                            to={`/editor/${template.templateKey}`}
+                            className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900 shadow-xl transition-all duration-200 hover:scale-105 hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-white/50 sm:px-7 sm:text-base"
                           >
-                            {element.text}
-                          </div>
-                        );
-                      })}
+                            <Eye size={18} />
+                            Use This Template
+                            <ArrowRight size={17} />
+                          </Link>
+                        </div>
 
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <div className="absolute left-3 top-3 rounded-lg border border-white/70 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
+                          Certificate Preview
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-5 sm:p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-indigo-700 sm:text-xl">
+                            {template.name}
+                          </h3>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            {template.description}
+                          </p>
+                        </div>
+
+                        <div
+                          className="mt-1 h-9 w-9 shrink-0 rounded-full border-4 border-white shadow-md ring-1 ring-slate-100"
+                          style={{
+                            backgroundColor: mainColor,
+                          }}
+                          title="Template accent color"
+                        />
+                      </div>
+
+                      <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                        <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+                          <Palette size={15} className="text-indigo-500" />
+                          Customizable design
+                        </div>
+
                         <Link
-                          to={`/editor/${template.id}`}
-                          className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900 shadow-xl transition-all duration-200 hover:scale-105 hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-white/50 sm:px-7 sm:text-base"
+                          to={`/editor/${template.templateKey}`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                         >
-                          <Eye size={18} />
-                          Use This Template
-                          <ArrowRight size={17} />
+                          Customize
+                          <ArrowRight size={16} />
                         </Link>
                       </div>
-
-                      <div className="absolute left-3 top-3 rounded-lg border border-white/70 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
-                        Certificate Preview
-                      </div>
                     </div>
-                  </div>
+                  </article>
+                );
+              })}
+            </div>
 
-                  <div className="p-5 sm:p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-indigo-700 sm:text-xl">
-                          {template.name}
-                        </h3>
+            {error && templates.length > 0 && (
+              <div className="mt-8 text-center">
+                <p className="text-sm text-red-600">{error}</p>
 
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          {template.description}
-                        </p>
-                      </div>
-
-                      <div
-                        className="mt-1 h-9 w-9 shrink-0 rounded-full border-4 border-white shadow-md ring-1 ring-slate-100"
-                        style={{
-                          backgroundColor: mainColor,
-                        }}
-                        title="Template accent color"
-                      />
-                    </div>
-
-                    <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                      <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-500">
-                        <Palette size={15} className="text-indigo-500" />
-                        Customizable design
-                      </div>
-
-                      <Link
-                        to={`/editor/${template.id}`}
-                        className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100"
-                      >
-                        Customize
-                        <ArrowRight size={16} />
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                <button
+                  onClick={retryLoading}
+                  className="mt-3 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                >
+                  Retry Loading
+                </button>
+              </div>
+            )}
+          </>
+        ) : loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
+            <p className="mt-4 text-sm text-slate-500">
+              Loading templates...
+            </p>
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
@@ -300,6 +430,23 @@ export default function Templates() {
               <ArrowRight size={18} />
             </Link>
           </div>
+        )}
+
+        {loading && templates.length > 0 && (
+          <div className="flex items-center justify-center gap-3 py-10">
+            <div className="h-6 w-6 animate-spin rounded-full border-3 border-indigo-100 border-t-indigo-600" />
+            <span className="text-sm font-medium text-slate-500">
+              Loading more templates...
+            </span>
+          </div>
+        )}
+
+        <div ref={sentinelRef} className="h-2 w-full" />
+
+        {!hasMore && templates.length > 0 && (
+          <p className="py-6 text-center text-sm text-slate-400">
+            You have viewed all {totalTemplates} templates.
+          </p>
         )}
       </section>
 

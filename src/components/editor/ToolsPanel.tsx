@@ -19,6 +19,22 @@ import { useFabric } from "../../context/FabricContext";
 
 type DrawMode = "pen" | "marker" | "highlighter" | "eraser";
 
+const SIGNATURE_FONTS = [
+  "Great Vibes", "Allura", "Alex Brush", "Dancing Script",
+  "Sacramento", "Parisienne", "Pinyon Script", "Tangerine",
+  "Italianno", "Caveat", "Pacifico", "Satisfy", "Yellowtail",
+  "Marck Script", "Cedarville Cursive", "Petit Formal Script",
+  "Bad Script", "Bilbo", "Bonheur Royale", "Calligraffitti",
+  "Charm", "Clicker Script", "Courgette", "Damion",
+  "Euphoria Script", "Felipa", "Fleur De Leah", "Homemade Apple",
+  "Jim Nightshade", "La Belle Aurore", "Monsieur La Doulaise",
+  "Mr De Haviland", "Mrs Saint Delafield", "Nothing You Could Do",
+  "Norican", "Qwigley", "Rochester", "Rouge Script",
+  "Style Script", "WindSong", "Mea Culpa", "Birthstone",
+  "Birthstone Bounce", "Updock", "MonteCarlo", "Ballet",
+  "Mrs Sheppards", "The Nautigal", "Waterfall", "Zeyada",
+];
+
 export default function ToolsPanel() {
   const {
     selectedObject,
@@ -29,10 +45,6 @@ export default function ToolsPanel() {
     addTable,
     activeTableCell,
     setTableCellText,
-    setTableCellTextColor,
-    setTableCellFontSize,
-    setTableColumnWidth,
-    setTableRowHeight,
     setTableCellBackground,
     setTableRowBackground,
     setTableColumnBackground,
@@ -53,6 +65,11 @@ export default function ToolsPanel() {
   const [selectedRow, setSelectedRow] = useState(0);
   const [selectedColumn, setSelectedColumn] = useState(0);
   const [cellText, setCellText] = useState("");
+  const [showSignatureCreator, setShowSignatureCreator] = useState(false);
+  const [signatureText, setSignatureText] = useState("");
+  const [signatureFont, setSignatureFont] = useState("Great Vibes");
+  const [signatureFontSearch, setSignatureFontSearch] = useState("");
+  const [signatureColor, setSignatureColor] = useState("#111827");
 
   const tableData = selectedObject?.elementType === "table" ? selectedObject.tableData : null;
   const isTableSelected = Boolean(tableData);
@@ -193,13 +210,65 @@ export default function ToolsPanel() {
           <button type="button" onClick={() => { addStickyNote(); setActiveTool("sticky"); }} className={rowClass(activeTool === "sticky")}>
             <StickyNote size={20} strokeWidth={1.8} /><span>Sticky Notes</span>
           </button>
-          <button type="button" onClick={() => { addSignature(); setActiveTool("signature"); }} className={rowClass(activeTool === "signature")}>
+          <button type="button" onClick={() => { setShowSignatureCreator((value) => !value); setActiveTool("signature"); }} className={rowClass(activeTool === "signature")}>
             <PenTool size={20} strokeWidth={1.8} /><span>Signature</span>
+            {showSignatureCreator ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
           <button type="button" onClick={() => { addTable(); setActiveTool("table"); }} className={rowClass(activeTool === "table")}>
             <Table2 size={20} strokeWidth={1.8} /><span>Table</span>
           </button>
         </div>
+
+        {showSignatureCreator && (
+          <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Signature Creator</h3>
+              <button type="button" onClick={() => setShowSignatureCreator(false)} aria-label="Close signature creator" className="text-gray-500 hover:text-gray-900">✕</button>
+            </div>
+            <div>
+              <label htmlFor="signature-text" className="mb-1 block text-xs font-medium text-gray-600">Signature text</label>
+              <input id="signature-text" type="text" value={signatureText} onChange={(event) => setSignatureText(event.target.value)} placeholder="Enter your name" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-500" />
+            </div>
+            <div>
+              <label htmlFor="signature-font-search" className="mb-2 block text-xs font-medium text-gray-600">Handwriting fonts</label>
+              <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 focus-within:border-violet-500">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
+                </svg>
+                <input id="signature-font-search" type="search" value={signatureFontSearch} onChange={(event) => setSignatureFontSearch(event.target.value)} placeholder="Search handwriting fonts..." className="w-full border-0 bg-transparent text-sm outline-none placeholder:text-gray-400" />
+              </div>
+              <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                {SIGNATURE_FONTS.filter((font) => font.toLowerCase().includes(signatureFontSearch.trim().toLowerCase())).map((font) => (
+                  <button key={font} type="button" onClick={() => setSignatureFont(font)} className={`w-full rounded-lg border p-3 text-left transition ${signatureFont === font ? "border-violet-500 bg-violet-50" : "border-gray-200 hover:border-gray-400"}`}>
+                    <span className="block text-xs text-gray-500">{font}</span>
+                    <span className="block truncate text-2xl text-gray-900" style={{ fontFamily: `"${font}", cursive` }}>{signatureText || "Your Signature"}</span>
+                  </button>
+                ))}
+                {SIGNATURE_FONTS.filter((font) => font.toLowerCase().includes(signatureFontSearch.trim().toLowerCase())).length === 0 && (
+                  <p className="px-3 py-5 text-center text-xs text-gray-500">No matching fonts found.</p>
+                )}
+              </div>
+            </div>
+            <div>
+              <label htmlFor="signature-color" className="mb-2 block text-xs font-medium text-gray-600">Signature color</label>
+              <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-2">
+                <input id="signature-color" type="color" value={signatureColor} onChange={(event) => setSignatureColor(event.target.value)} className="h-9 w-12 cursor-pointer" />
+                <span className="text-xs uppercase text-gray-600">{signatureColor}</span>
+              </div>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="mb-2 text-xs font-medium text-gray-500">Preview</p>
+              <p className="break-words text-center text-3xl" style={{ fontFamily: `"${signatureFont}", cursive`, color: signatureColor }}>{signatureText || "Your Signature"}</p>
+            </div>
+            <button type="button" disabled={!signatureText.trim()} onClick={async () => {
+              try { await document.fonts.load(`36px "${signatureFont}"`); } catch { /* use browser fallback if font loading fails */ }
+              addSignature(signatureText.trim(), signatureFont, signatureColor);
+              setShowSignatureCreator(false);
+              setActiveTool("select");
+            }} className="w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Add Signature</button>
+          </section>
+        )}
 
         {isTableSelected && (
           <section className="space-y-4 border-t border-gray-200 pt-4">
@@ -234,30 +303,6 @@ export default function ToolsPanel() {
               <label htmlFor="table-cell-text" className="mb-1 block text-xs font-medium text-gray-600">Cell text (selected cell)</label>
               <textarea id="table-cell-text" rows={2} value={cellText} onChange={(event) => setCellText(event.target.value)} className="w-full resize-y rounded-lg border border-gray-200 p-2 text-sm" />
               <button type="button" onClick={updateCellText} className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Apply cell text</button>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-800">Cell text formatting</p>
-              <div>
-                <label htmlFor="table-cell-text-color" className="mb-1 block text-xs text-gray-600">Text color</label>
-                <input id="table-cell-text-color" aria-label="Cell text color" type="color" value={tableData.cells?.[selectedRow]?.[selectedColumn]?.textColor ?? (selectedRow === 0 ? "#ffffff" : "#1f2937")} onChange={(event) => setTableCellTextColor(selectedRow, selectedColumn, event.target.value)} className="h-9 w-full cursor-pointer rounded border border-gray-200" />
-              </div>
-              <div>
-                <div className="mb-1 flex justify-between text-xs text-gray-600"><label htmlFor="table-cell-font-size">Font size</label><span>{tableData.cells?.[selectedRow]?.[selectedColumn]?.fontSize ?? 14}px</span></div>
-                <input id="table-cell-font-size" type="range" min="8" max="48" value={tableData.cells?.[selectedRow]?.[selectedColumn]?.fontSize ?? 14} onChange={(event) => setTableCellFontSize(selectedRow, selectedColumn, Number(event.target.value))} className="w-full accent-blue-600" />
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-800">Cell dimensions</p>
-              <div>
-                <div className="mb-1 flex justify-between text-xs text-gray-600"><label htmlFor="table-column-width">Selected column width</label><span>{tableData.columnWidths?.[selectedColumn] ?? 120}px</span></div>
-                <input id="table-column-width" type="range" min="70" max="500" value={tableData.columnWidths?.[selectedColumn] ?? 120} onChange={(event) => setTableColumnWidth(selectedColumn, Number(event.target.value))} className="w-full accent-blue-600" />
-              </div>
-              <div>
-                <div className="mb-1 flex justify-between text-xs text-gray-600"><label htmlFor="table-row-height">Selected row height</label><span>{tableData.rowHeights?.[selectedRow] ?? 52}px</span></div>
-                <input id="table-row-height" type="range" min="36" max="300" value={tableData.rowHeights?.[selectedRow] ?? 52} onChange={(event) => setTableRowHeight(selectedRow, Number(event.target.value))} className="w-full accent-blue-600" />
-              </div>
             </div>
 
             <div className="space-y-2">

@@ -12,6 +12,8 @@ import {
   Line,
   Path,
   Group,
+  Shadow,
+  Pattern,
   type FabricObject,
 } from "fabric";
 
@@ -22,6 +24,97 @@ import type {
   EditorElement,
   ElementType,
 } from "../../../types/editor";
+
+
+function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
+  const tile = document.createElement("canvas");
+  tile.width = 24;
+  tile.height = 24;
+  const context = tile.getContext("2d");
+  if (context) {
+    context.fillStyle = baseColor;
+    context.fillRect(0, 0, tile.width, tile.height);
+    context.strokeStyle = stripeColor;
+    context.lineWidth = 4;
+    context.lineCap = "butt";
+    for (let offset = -24; offset < 48; offset += 9) {
+      context.beginPath();
+      context.moveTo(offset, 24);
+      context.lineTo(offset + 24, 0);
+      context.stroke();
+    }
+  }
+  return new Pattern({ source: tile, repeat: "repeat" });
+}
+
+function applyOutsideStripedTextEffect(
+  object: any,
+  stripeColor: string,
+): void {
+  if (!object || object.__outsideStripedRenderApplied) return;
+
+  const originalRender = object._render;
+  if (typeof originalRender !== "function") return;
+
+  object._render = function (
+    this: any,
+    ctx: CanvasRenderingContext2D,
+  ) {
+    const foregroundFill = this.fill;
+
+    // Stripe color always follows the current text color.
+    const currentStripeColor =
+      typeof foregroundFill === "string"
+        ? foregroundFill
+        : stripeColor;
+
+    // Rebuild the stripe pattern only when the text color changes.
+    if (
+      !this.__outsideStripedPattern ||
+      this.__outsideStripedColor !== currentStripeColor
+    ) {
+      const tile = document.createElement("canvas");
+      tile.width = 24;
+      tile.height = 24;
+
+      const patternContext = tile.getContext("2d");
+
+      if (patternContext) {
+        patternContext.strokeStyle = currentStripeColor;
+        patternContext.lineWidth = 3.5;
+        patternContext.lineCap = "butt";
+
+        for (let offset = -24; offset < 48; offset += 8) {
+          patternContext.beginPath();
+          patternContext.moveTo(offset, 24);
+          patternContext.lineTo(offset + 24, 0);
+          patternContext.stroke();
+        }
+      }
+
+      this.__outsideStripedPattern = new Pattern({
+        source: tile,
+        repeat: "repeat",
+      });
+
+      this.__outsideStripedColor = currentStripeColor;
+    }
+
+    ctx.save();
+    ctx.translate(7, 7);
+
+    this.fill = this.__outsideStripedPattern;
+    originalRender.call(this, ctx);
+
+    ctx.restore();
+
+    this.fill = foregroundFill;
+    originalRender.call(this, ctx);
+  };
+
+  object.__outsideStripedRenderApplied = true;
+  object.__outsideStripedColor = stripeColor;
+}
 
 interface FabricEditorCanvasProps {
   pageWidth: number;
@@ -67,6 +160,45 @@ function applyRotationCursor(object: FabricObject): void {
   }
 }
 
+/**
+ * Creates the local baseline used by Fabric's native editable text-on-path
+ * rendering. Positive values bend upward; negative values bend downward.
+ */
+function createTextBendPath(
+  width: number,
+  fontSize: number,
+  bend: number,
+): Path | undefined {
+  const amount = Math.max(-100, Math.min(100, Number(bend) || 0));
+
+  if (Math.abs(amount) < 0.5) return undefined;
+
+  const safeWidth = Math.max(40, width || 40);
+
+  // Stronger curve intensity
+  const intensity = Math.abs(amount) / 100;
+
+  // Maximum curve height increases significantly
+  const amplitude = Math.max(
+    fontSize * 2,
+    safeWidth * 0.45,
+  ) * intensity;
+
+  // Positive = upward curve, Negative = downward curve
+  const controlY = amount > 0 ? -2 * amplitude : 2 * amplitude;
+
+  return new Path(
+    `M 0 0 Q ${safeWidth / 2} ${controlY} ${safeWidth} 0`,
+    {
+      fill: "",
+      stroke: "",
+      strokeWidth: 0,
+      objectCaching: false,
+      selectable: false,
+      evented: false,
+    },
+  );
+}
 function getElementSignature(elements: EditorElement[]): string {
   return JSON.stringify(
     elements.map((element) => ({
@@ -90,6 +222,7 @@ function getElementSignature(elements: EditorElement[]): string {
       textAlign: element.textAlign ?? "left",
       lineHeight: element.lineHeight ?? 1.16,
       charSpacing: element.charSpacing ?? 0,
+      textBend: element.textBend ?? 0,
       strokeColor: element.strokeColor ?? "",
       strokeWidth: element.strokeWidth ?? 0,
       lineDash: element.lineDash ?? [],
@@ -109,6 +242,7 @@ function applyElementMetadata(
 
   meta.elementId = element.id;
   meta.elementType = element.type;
+  (meta as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
 
   if (element.type === "image" && element.src) {
     meta.imageSrc = element.src;
@@ -126,25 +260,35 @@ function applyElementMetadata(
   }
 }
 
+/**
+ * Restores the saved properties of a Fabric object.
+ * Polygon geometry is normalized before construction, so the saved dimensions
+ * remain stable without multiplying scale or changing stroke thickness.
+ */
 function applyCommonProperties(
   object: FabricObject,
   element: EditorElement,
 ): void {
   object.set({
-    // Freehand Path data is serialized around its center point. Keep that
-    // origin when rebuilding it; all other objects use top-left coordinates.
     originX: element.pathData?.length ? "center" : "left",
     originY: element.pathData?.length ? "center" : "top",
+
     left: element.x,
     top: element.y,
+
+    // Do not multiply polygon scale during page rebuild.
+    // Repeated multiplication was making the shape border thicker.
     scaleX: element.scaleX ?? 1,
     scaleY: element.scaleY ?? 1,
+
     angle: element.angle ?? 0,
     opacity: element.opacity ?? 1,
     selectable: true,
     evented: true,
     objectCaching: false,
   });
+
+  object.setCoords();
 
   applyElementMetadata(object, element);
 }
@@ -231,6 +375,40 @@ function createOrganicPoints(variant: number, width: number, height: number) {
   });
 }
 
+
+/**
+ * Fabric Polygon derives its width and height from the minimum and maximum
+ * coordinates in the supplied points. For shapes such as odd-sided polygons,
+ * stars, flowers and organic shapes, the generated points do not always touch
+ * all four requested edges. Fabric therefore reports a smaller base size.
+ *
+ * Normalize the points to the requested local bounds before constructing the
+ * Polygon. This keeps width/height stable when a page is serialized and rebuilt,
+ * without changing scaleX/scaleY (which would also scale the stroke).
+ */
+function normalizePolygonPoints(
+  points: { x: number; y: number }[],
+  width: number,
+  height: number,
+): { x: number; y: number }[] {
+  if (points.length === 0) return points;
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+
+  const sourceWidth = maxX - minX;
+  const sourceHeight = maxY - minY;
+
+  if (sourceWidth <= 0 || sourceHeight <= 0) return points;
+
+  return points.map((point) => ({
+    x: ((point.x - minX) / sourceWidth) * width,
+    y: ((point.y - minY) / sourceHeight) * height,
+  }));
+}
+
 function createElementObject(
   element: EditorElement,
 ): FabricObject | null {
@@ -258,6 +436,7 @@ function createElementObject(
           text: "",
           backgroundColor: "#ffffff",
         };
+
         children.push(
           new Rect({
             left: column * cellWidth,
@@ -316,12 +495,29 @@ function createElementObject(
       width,
       fontSize: element.fontSize ?? 32,
       fontFamily: element.fontFamily || "Arial",
-      fill: color,
+      fill: element.textEffect === "striped"
+        ? createStripedTextPattern(element.textStripeBaseColor ?? color, element.textStripeColor ?? "#FDBA74")
+        : color,
       fontWeight: element.fontWeight ?? "normal",
       fontStyle: element.fontStyle ?? "normal",
       textAlign: element.textAlign ?? "left",
       lineHeight: element.lineHeight ?? 1.16,
       charSpacing: element.charSpacing ?? 0,
+      path: createTextBendPath(width, element.fontSize ?? 32, element.textBend ?? 0),
+    pathSide: "left" as const,
+pathAlign: "center" as const,
+pathStartOffset: 0,
+      stroke: element.textStrokeColor,
+      strokeWidth: element.textStrokeWidth ?? 0,
+      paintFirst: "stroke" as const,
+      shadow: element.textShadow
+        ? new Shadow({
+            color: element.textShadow.color,
+            blur: element.textShadow.blur,
+            offsetX: element.textShadow.offsetX,
+            offsetY: element.textShadow.offsetY,
+          })
+        : undefined,
       // Match the padding used when text is first created in FabricContext.
       // Without this, a rebuilt body Textbox can appear offset after page copy.
       padding: 4,
@@ -342,6 +538,15 @@ function createElementObject(
                 : "Certificate Subheading"),
             textOptions,
           );
+    (object as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
+    (object as any).textEffect = element.textEffect ?? "none";
+    (object as any).textStripeColor = element.textStripeColor ?? "#FDBA74";
+    (object as any).textStripeBaseColor = element.textStripeBaseColor ?? color;
+    if (element.textEffect === "outside-striped") {
+      applyOutsideStripedTextEffect(object, element.textStripeColor ?? color);
+    }
+    (object as any).textStrokeColor = element.textStrokeColor;
+    (object as any).textStrokeWidth = element.textStrokeWidth ?? 0;
   } else if (
     element.type === "rectangle" ||
     element.type === "square"
@@ -382,11 +587,15 @@ function createElementObject(
     const isOutline = element.type === "star-outline";
 
     object = new Polygon(
-      createStarPoints(
-        points,
+      normalizePolygonPoints(
+        createStarPoints(
+          points,
+          width,
+          height,
+          isSquareStar ? 0.7 : 0.42,
+        ),
         width,
         height,
-        isSquareStar ? 0.7 : 0.42,
       ),
       {
         fill: isOutline
@@ -416,7 +625,11 @@ function createElementObject(
               : 6);
 
     object = new Polygon(
-      createPolygonPoints(sides, width, height),
+      normalizePolygonPoints(
+        createPolygonPoints(sides, width, height),
+        width,
+        height,
+      ),
       {
         fill: element.backgroundColor || color,
         stroke: strokeColor,
@@ -529,17 +742,29 @@ function createElementObject(
 
     if (cog) {
       object = new Polygon(
-        createCogPoints(Number(cog[1]), width, height),
+        normalizePolygonPoints(
+          createCogPoints(Number(cog[1]), width, height),
+          width,
+          height,
+        ),
         outline,
       );
     } else if (flowerMap[type]) {
       object = new Polygon(
-        createFlowerPoints(flowerMap[type], width, height),
+        normalizePolygonPoints(
+          createFlowerPoints(flowerMap[type], width, height),
+          width,
+          height,
+        ),
         outline,
       );
     } else if (organicMap[type]) {
       object = new Polygon(
-        createOrganicPoints(organicMap[type], width, height),
+        normalizePolygonPoints(
+          createOrganicPoints(organicMap[type], width, height),
+          width,
+          height,
+        ),
         outline,
       );
     } else {
@@ -551,7 +776,16 @@ function createElementObject(
         "leaf-pointed": `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.7} ${height * 0.8} 0 ${height} Z`,
         "leaf-pair": `M 0 ${height * 0.5} Q ${width * 0.1} 0 ${width * 0.5} 0 Q ${width * 0.5} ${height * 0.5} 0 ${height * 0.5} Z M ${width * 0.5} ${height} Q ${width * 0.55} ${height * 0.3} ${width} ${height * 0.3} Q ${width * 0.95} ${height} ${width * 0.5} ${height} Z`,
         vine: `M 0 ${height} Q ${width * 0.25} ${height * 0.8} ${width * 0.2} ${height * 0.5} T ${width * 0.5} ${height * 0.2} T ${width} 0`,
-        "flow-document": `M 0 0 L ${width} 0 L ${width} ${height * 0.8} Q ${width * 0.75} ${height * 1.1} ${width * 0.5} ${height * 0.85} Q ${width * 0.25} ${height * 0.65} 0 ${height * 0.85} Z`,
+        "flow-document": (() => {
+          // Fabric includes the path stroke in its reported width/height.
+          // Subtract it from the path coordinates so rebuilding this shape
+          // does not add the stroke size again on every page switch.
+          const documentStrokeWidth = strokeWidth || 2;
+          const pathWidth = Math.max(1, width - documentStrokeWidth);
+          const pathHeight = Math.max(1, height - documentStrokeWidth);
+
+          return `M 0 0 L ${pathWidth} 0 L ${pathWidth} ${pathHeight * 0.8} Q ${pathWidth * 0.75} ${pathHeight * (1 + Math.sqrt(3) / 10)} ${pathWidth * 0.5} ${pathHeight * 0.85} Q ${pathWidth * 0.25} ${pathHeight * 0.65} 0 ${pathHeight * 0.85} Z`;
+        })(),
         "speech-bubble": `M 0 0 L ${width} 0 L ${width} ${height * 0.8} L ${width * 0.3} ${height * 0.8} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.8} L 0 ${height * 0.8} Z`,
         "chat-bubble": `M ${width * 0.1} 0 L ${width * 0.9} 0 Q ${width} 0 ${width} ${height * 0.15} L ${width} ${height * 0.7} Q ${width} ${height * 0.85} ${width * 0.85} ${height * 0.85} L ${width * 0.3} ${height * 0.85} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.85} L ${width * 0.1} ${height * 0.85} Q 0 ${height * 0.85} 0 ${height * 0.7} L 0 ${height * 0.15} Q 0 0 ${width * 0.1} 0 Z`,
         "thought-bubble": `M ${width * 0.2} ${height * 0.2} C 0 ${height * 0.1} 0 ${height * 0.5} ${width * 0.15} ${height * 0.6} C 0 ${height} ${width * 0.5} ${height} ${width * 0.6} ${height * 0.8} C ${width} ${height} ${width} ${height * 0.4} ${width * 0.8} ${height * 0.3} C ${width * 0.7} 0 ${width * 0.3} 0 ${width * 0.2} ${height * 0.2} Z`,
@@ -582,44 +816,60 @@ function createElementObject(
         });
       } else if (type === "flow-decision") {
         object = new Polygon(
-          [
-            { x: width / 2, y: 0 },
-            { x: width, y: height / 2 },
-            { x: width / 2, y: height },
-            { x: 0, y: height / 2 },
-          ],
+          normalizePolygonPoints(
+            [
+              { x: width / 2, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width / 2, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
           outline,
         );
       } else if (type === "flow-io") {
         object = new Polygon(
-          [
-            { x: width * 0.2, y: 0 },
-            { x: width, y: 0 },
-            { x: width * 0.8, y: height },
-            { x: 0, y: height },
-          ],
+          normalizePolygonPoints(
+            [
+              { x: width * 0.2, y: 0 },
+              { x: width, y: 0 },
+              { x: width * 0.8, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
           outline,
         );
       } else if (type === "flow-preparation") {
         object = new Polygon(
-          [
-            { x: width * 0.25, y: 0 },
-            { x: width * 0.75, y: 0 },
-            { x: width, y: height / 2 },
-            { x: width * 0.75, y: height },
-            { x: width * 0.25, y: height },
-            { x: 0, y: height / 2 },
-          ],
+          normalizePolygonPoints(
+            [
+              { x: width * 0.25, y: 0 },
+              { x: width * 0.75, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width * 0.75, y: height },
+              { x: width * 0.25, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
           outline,
         );
       } else if (type === "flow-manual-input") {
         object = new Polygon(
-          [
-            { x: 0, y: height * 0.25 },
-            { x: width, y: 0 },
-            { x: width, y: height },
-            { x: 0, y: height },
-          ],
+          normalizePolygonPoints(
+            [
+              { x: 0, y: height * 0.25 },
+              { x: width, y: 0 },
+              { x: width, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
           outline,
         );
       }
@@ -628,6 +878,23 @@ function createElementObject(
 
   if (object) {
     applyCommonProperties(object, element);
+
+    // Flow-document is a Fabric Path whose calculated bounds can differ
+    // slightly from the dimensions saved on the page (stroke + Bézier bounds).
+    // Keep its rendered size equal to the saved rendered size on every rebuild.
+    // This is intentionally limited to this one shape type.
+    if (element.type === "flow-document") {
+      const savedScaleX = element.scaleX ?? 1;
+      const savedScaleY = element.scaleY ?? 1;
+      const rebuiltWidth = Math.max(1, object.width ?? width);
+      const rebuiltHeight = Math.max(1, object.height ?? height);
+
+      object.set({
+        scaleX: (width * savedScaleX) / rebuiltWidth,
+        scaleY: (height * savedScaleY) / rebuiltHeight,
+      });
+      object.setCoords();
+    }
   }
 
   return object;
@@ -642,6 +909,7 @@ export default function FabricEditorCanvas({
 
   const [canvasScale, setCanvasScale] = useState(1);
   const [zoomPercent, setZoomPercent] = useState(100);
+
   const [inlineTableEditor, setInlineTableEditor] = useState<{
     row: number;
     column: number;
@@ -650,6 +918,7 @@ export default function FabricEditorCanvas({
     height: number;
     matrix: [number, number, number, number, number, number];
   } | null>(null);
+
   const inlineTableEditorRef = useRef<HTMLTextAreaElement | null>(null);
 
   const userZoomRef = useRef(1);
@@ -669,6 +938,7 @@ export default function FabricEditorCanvas({
   const lastSyncedSignatureRef = useRef("");
   const canvasPageIdRef = useRef(activePageId);
   const latestSyncRef = useRef(syncElementsFromCanvas);
+
   latestSyncRef.current = syncElementsFromCanvas;
 
   const {
@@ -690,11 +960,15 @@ export default function FabricEditorCanvas({
   const inlineTableEditorColumn = inlineTableEditor?.column;
 
   useEffect(() => {
-    if (inlineTableEditorRow === undefined || inlineTableEditorColumn === undefined) {
+    if (
+      inlineTableEditorRow === undefined ||
+      inlineTableEditorColumn === undefined
+    ) {
       return;
     }
 
     const input = inlineTableEditorRef.current;
+
     if (!input) return;
 
     input.focus();
@@ -703,7 +977,9 @@ export default function FabricEditorCanvas({
 
   function commitInlineTableEdit() {
     if (!inlineTableEditor) return;
+
     const { row, column, text } = inlineTableEditor;
+
     setInlineTableEditor(null);
     setTableCellText(row, column, text);
   }
@@ -734,6 +1010,7 @@ export default function FabricEditorCanvas({
       getElementSignature(converted);
 
     internalChangeRef.current = true;
+
     latestSyncRef.current(converted, canvasPageIdRef.current);
   }
 
@@ -742,22 +1019,31 @@ export default function FabricEditorCanvas({
   useEffect(() => {
     registerCanvasSnapshotProvider(() => {
       const canvas = canvasRef.current;
+
       if (!canvas) return convertCanvasToElements();
 
       const activeObject = canvas.getActiveObject();
 
-      if (activeObject instanceof IText || activeObject instanceof Textbox) {
+      if (
+        activeObject instanceof IText ||
+        activeObject instanceof Textbox
+      ) {
         if (activeObject.isEditing) {
           activeObject.exitEditing();
         }
       }
 
       canvas.requestRenderAll();
+
       return convertCanvasToElements();
     });
 
     return () => registerCanvasSnapshotProvider(null);
-  }, [registerCanvasSnapshotProvider, canvasRef, convertCanvasToElements]);
+  }, [
+    registerCanvasSnapshotProvider,
+    canvasRef,
+    convertCanvasToElements,
+  ]);
 
   function applyZoom(nextZoom: number) {
     const clampedZoom = Math.max(
@@ -860,81 +1146,91 @@ export default function FabricEditorCanvas({
       setSelectedObject(canvas.getActiveObject() ?? null);
     };
 
-   const handleDoubleClick = (event: any) => {
-  const target = event.target as FabricObjectWithMeta | undefined;
+    const handleDoubleClick = (event: any) => {
+      const target = event.target as
+        | FabricObjectWithMeta
+        | undefined;
 
-  // Double-clicking a table selects the exact cell.
-  if (target?.elementType === "table" && target.tableData) {
-    const pointer = event.scenePoint ?? canvas.getScenePoint(event.e);
+      // Double-clicking a table selects the exact cell.
+      if (target?.elementType === "table" && target.tableData) {
+        const pointer =
+          event.scenePoint ?? canvas.getScenePoint(event.e);
 
-    // Convert scene coordinates into the table's local coordinates.
-    const matrix = target.calcTransformMatrix();
+        // Convert scene coordinates into the table's local coordinates.
+        const matrix = target.calcTransformMatrix();
 
-    const [a, b, c, d, e, f] = matrix;
+        const [a, b, c, d, e, f] = matrix;
 
-    const determinant = a * d - b * c;
+        const determinant = a * d - b * c;
 
-    if (!determinant) return;
+        if (!determinant) return;
 
-    const dx = pointer.x - e;
-    const dy = pointer.y - f;
+        const dx = pointer.x - e;
+        const dy = pointer.y - f;
 
-    const localX = (d * dx - c * dy) / determinant;
-    const localY = (-b * dx + a * dy) / determinant;
+        const localX = (d * dx - c * dy) / determinant;
+        const localY = (-b * dx + a * dy) / determinant;
 
-    const x = localX + (target.width ?? 0) / 2;
-    const y = localY + (target.height ?? 0) / 2;
+        const x = localX + (target.width ?? 0) / 2;
+        const y = localY + (target.height ?? 0) / 2;
 
-    const rows = Math.max(1, target.tableData.rows);
-    const columns = Math.max(1, target.tableData.columns);
+        const rows = Math.max(1, target.tableData.rows);
+        const columns = Math.max(1, target.tableData.columns);
 
-    const cellWidth = (target.width ?? 1) / columns;
-    const cellHeight = (target.height ?? 1) / rows;
+        const cellWidth = (target.width ?? 1) / columns;
+        const cellHeight = (target.height ?? 1) / rows;
 
-    const row = Math.max(
-      0,
-      Math.min(rows - 1, Math.floor(y / cellHeight))
-    );
+        const row = Math.max(
+          0,
+          Math.min(rows - 1, Math.floor(y / cellHeight)),
+        );
 
-    const column = Math.max(
-      0,
-      Math.min(columns - 1, Math.floor(x / cellWidth))
-    );
+        const column = Math.max(
+          0,
+          Math.min(columns - 1, Math.floor(x / cellWidth)),
+        );
 
-    canvas.setActiveObject(target);
-    setSelectedObject(target);
-    setActiveTableCell({ row, column });
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        setActiveTableCell({ row, column });
 
-    // Place a real textarea over the selected cell. The table stays a single
-    // Fabric Group, so its move/rotate/resize behaviour remains unchanged.
-    const cellLeft = -((target.width ?? 1) / 2) + column * cellWidth;
-    const cellTop = -((target.height ?? 1) / 2) + row * cellHeight;
-    const left = a * cellLeft + c * cellTop + e;
-    const top = b * cellLeft + d * cellTop + f;
-    const existingText = target.tableData.cells?.[row]?.[column]?.text ?? "";
+        // Place a real textarea over the selected cell. The table stays a single
+        // Fabric Group, so its move/rotate/resize behaviour remains unchanged.
+        const cellLeft =
+          -(target.width ?? 1) / 2 + column * cellWidth;
 
-    setInlineTableEditor({
-      row,
-      column,
-      text: existingText,
-      width: cellWidth,
-      height: cellHeight,
-      matrix: [a, b, c, d, left, top],
-    });
+        const cellTop =
+          -(target.height ?? 1) / 2 + row * cellHeight;
 
-    canvas.requestRenderAll();
-    return;
-  }
+        const left = a * cellLeft + c * cellTop + e;
+        const top = b * cellLeft + d * cellTop + f;
 
-  // Preserve existing text double-click editing.
-  if (target instanceof IText || target instanceof Textbox) {
-    canvas.setActiveObject(target);
-    setSelectedObject(target);
-    target.enterEditing();
-    target.selectAll();
-    canvas.requestRenderAll();
-  }
-};
+        const existingText =
+          target.tableData.cells?.[row]?.[column]?.text ?? "";
+
+        setInlineTableEditor({
+          row,
+          column,
+          text: existingText,
+          width: cellWidth,
+          height: cellHeight,
+          matrix: [a, b, c, d, left, top],
+        });
+
+        canvas.requestRenderAll();
+
+        return;
+      }
+
+      // Preserve existing text double-click editing.
+      if (target instanceof IText || target instanceof Textbox) {
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        target.enterEditing();
+        target.selectAll();
+        canvas.requestRenderAll();
+      }
+    };
 
     canvas.on("selection:created", handleSelection);
     canvas.on("selection:updated", handleSelection);
@@ -998,6 +1294,7 @@ export default function FabricEditorCanvas({
     if (!canvas) return;
 
     const incomingSignature = getElementSignature(elements);
+
     const currentSignature = getElementSignature(
       convertCanvasToElements(),
     );
@@ -1061,10 +1358,14 @@ export default function FabricEditorCanvas({
                 top: element.y,
                 scaleX:
                   element.scaleX ??
-                  (element.width ? element.width / imageWidth : 1),
+                  (element.width
+                    ? element.width / imageWidth
+                    : 1),
                 scaleY:
                   element.scaleY ??
-                  (element.height ? element.height / imageHeight : 1),
+                  (element.height
+                    ? element.height / imageHeight
+                    : 1),
                 angle: element.angle ?? 0,
                 opacity: element.opacity ?? 1,
                 selectable: true,
@@ -1076,7 +1377,10 @@ export default function FabricEditorCanvas({
               canvas.add(image);
             } catch (error) {
               if (isCurrentRebuild()) {
-                console.error("Unable to load canvas image:", error);
+                console.error(
+                  "Unable to load canvas image:",
+                  error,
+                );
               }
             }
 
@@ -1123,7 +1427,11 @@ export default function FabricEditorCanvas({
     return () => {
       cancelled = true;
     };
-  }, [elements, backgroundColor, activePageId]);
+  }, [
+    elements,
+    backgroundColor,
+    activePageId,
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1148,7 +1456,10 @@ export default function FabricEditorCanvas({
         getObjectMeta(object).elementId === selectedMeta.elementId,
     );
 
-    if (matchingObject && canvas.getActiveObject() !== matchingObject) {
+    if (
+      matchingObject &&
+      canvas.getActiveObject() !== matchingObject
+    ) {
       canvas.setActiveObject(matchingObject);
       canvas.requestRenderAll();
     }
@@ -1160,8 +1471,15 @@ export default function FabricEditorCanvas({
     if (!viewport) return;
 
     const updateFitScale = () => {
-      const availableWidth = Math.max(1, viewport.clientWidth - 48);
-      const availableHeight = Math.max(1, viewport.clientHeight - 24);
+      const availableWidth = Math.max(
+        1,
+        viewport.clientWidth - 48,
+      );
+
+      const availableHeight = Math.max(
+        1,
+        viewport.clientHeight - 24,
+      );
 
       const nextScale = Math.min(
         1,
@@ -1175,6 +1493,7 @@ export default function FabricEditorCanvas({
     updateFitScale();
 
     const observer = new ResizeObserver(updateFitScale);
+
     observer.observe(viewport);
 
     window.addEventListener("resize", updateFitScale);
@@ -1253,6 +1572,7 @@ export default function FabricEditorCanvas({
               ref={htmlCanvasRef}
               aria-label="Certificate editor canvas"
             />
+
             {inlineTableEditor && (
               <textarea
                 ref={inlineTableEditorRef}
@@ -1260,7 +1580,12 @@ export default function FabricEditorCanvas({
                 value={inlineTableEditor.text}
                 onChange={(event) =>
                   setInlineTableEditor((current) =>
-                    current ? { ...current, text: event.target.value } : current,
+                    current
+                      ? {
+                          ...current,
+                          text: event.target.value,
+                        }
+                      : current,
                   )
                 }
                 onBlur={commitInlineTableEdit}
@@ -1268,7 +1593,10 @@ export default function FabricEditorCanvas({
                   if (event.key === "Escape") {
                     event.preventDefault();
                     cancelInlineTableEdit();
-                  } else if (event.key === "Enter" && !event.shiftKey) {
+                  } else if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                  ) {
                     event.preventDefault();
                     commitInlineTableEdit();
                   }

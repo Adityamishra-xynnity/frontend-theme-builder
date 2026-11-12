@@ -12,6 +12,8 @@ import {
   Path,
   PencilBrush,
   Group,
+  Shadow,
+  Pattern,
 } from "fabric";
 
 import {
@@ -53,6 +55,7 @@ type FabricObjectWithMeta = {
   isFreehand?: boolean;
   freehandScenePoints?: Array<{ x: number; y: number }>;
   backgroundColor?: string;
+  textBend?: number;
   tableData?: {
     rows: number;
     columns: number;
@@ -64,7 +67,141 @@ type FabricObjectWithMeta = {
   };
 };
 
+
+function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
+  const tile = document.createElement("canvas");
+  tile.width = 24;
+  tile.height = 24;
+  const context = tile.getContext("2d");
+  if (context) {
+    context.fillStyle = baseColor;
+    context.fillRect(0, 0, tile.width, tile.height);
+    context.strokeStyle = stripeColor;
+    context.lineWidth = 4;
+    context.lineCap = "butt";
+    for (let offset = -24; offset < 48; offset += 9) {
+      context.beginPath();
+      context.moveTo(offset, 24);
+      context.lineTo(offset + 24, 0);
+      context.stroke();
+    }
+  }
+  return new Pattern({ source: tile, repeat: "repeat" });
+}
+
+// Draw a second, diagonally striped copy behind the live text object.
+// The foreground remains the original editable Fabric Textbox/IText.
+function applyOutsideStripedTextEffect(
+  object: any,
+  stripeColor: string,
+): void {
+  if (!object || object.__outsideStripedRenderApplied) return;
+
+  const originalRender = object._render;
+  if (typeof originalRender !== "function") return;
+
+  object._render = function (
+    this: any,
+    ctx: CanvasRenderingContext2D,
+  ) {
+    const foregroundFill = this.fill;
+
+    // Stripe color always follows the current text color.
+    const currentStripeColor =
+      typeof foregroundFill === "string"
+        ? foregroundFill
+        : stripeColor;
+
+    // Rebuild the stripe pattern only when the text color changes.
+    if (
+      !this.__outsideStripedPattern ||
+      this.__outsideStripedColor !== currentStripeColor
+    ) {
+      const tile = document.createElement("canvas");
+      tile.width = 24;
+      tile.height = 24;
+
+      const patternContext = tile.getContext("2d");
+
+      if (patternContext) {
+        patternContext.strokeStyle = currentStripeColor;
+        patternContext.lineWidth = 3.5;
+        patternContext.lineCap = "butt";
+
+        for (let offset = -24; offset < 48; offset += 8) {
+          patternContext.beginPath();
+          patternContext.moveTo(offset, 24);
+          patternContext.lineTo(offset + 24, 0);
+          patternContext.stroke();
+        }
+      }
+
+      this.__outsideStripedPattern = new Pattern({
+        source: tile,
+        repeat: "repeat",
+      });
+
+      this.__outsideStripedColor = currentStripeColor;
+    }
+
+    ctx.save();
+    ctx.translate(7, 7);
+
+    this.fill = this.__outsideStripedPattern;
+    originalRender.call(this, ctx);
+
+    ctx.restore();
+
+    this.fill = foregroundFill;
+    originalRender.call(this, ctx);
+  };
+
+  object.__outsideStripedRenderApplied = true;
+  object.__outsideStripedColor = stripeColor;
+}
+
 type TextElementType = "heading" | "subheading" | "text";
+
+/**
+ * Creates the local baseline used by Fabric's native editable text-on-path
+ * rendering. Positive values bend upward; negative values bend downward.
+ */
+function createTextBendPath(
+  width: number,
+  fontSize: number,
+  bend: number,
+): Path | undefined {
+  const amount = Math.max(-100, Math.min(100, Number(bend) || 0));
+
+  if (Math.abs(amount) < 0.5) return undefined;
+
+  const safeWidth = Math.max(40, width || 40);
+
+  // Stronger curve intensity
+  const intensity = Math.abs(amount) / 100;
+
+  // Maximum curve height increases significantly
+  const amplitude = Math.max(
+    fontSize * 2,
+    safeWidth * 0.45,
+  ) * intensity;
+
+  // Positive = upward curve, Negative = downward curve
+  const controlY = amount > 0 ? -2 * amplitude : 2 * amplitude;
+
+  return new Path(
+    `M 0 0 Q ${safeWidth / 2} ${controlY} ${safeWidth} 0`,
+    {
+      fill: "",
+      stroke: "",
+      strokeWidth: 0,
+      objectCaching: false,
+      selectable: false,
+      evented: false,
+    },
+  );
+}
+
 
 export type ShapeElementType =
   | "rectangle" | "circle" | "triangle" | "square" | "polygon"
@@ -88,6 +225,21 @@ interface FabricContextType {
   selectObjectById: (id: string) => void;
 
   addText: (type?: TextElementType) => void;
+  addTextCombination: (items: Array<{
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fill: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    charSpacing?: number;
+    textAlign?: "left" | "center" | "right";
+    textEffect?: "none" | "neon" | "outline" | "3d" | "retro" | "striped" | "outside-striped";
+    textStripeColor?: string;
+    textStripeBaseColor?: string;
+    textStrokeColor?: string;
+    textStrokeWidth?: number;
+  }>) => void;
   addShape: (type: ShapeElementType) => void;
   addImage: (dataUrl: string) => void;
 
@@ -98,12 +250,14 @@ interface FabricContextType {
   decreaseFontSize: () => void;
   setFontSize: (size: number) => void;
   setTextColor: (color: string) => void;
+  setTextShadow: (amount: number, side: "all" | "top" | "bottom" | "left" | "right", color: string) => void;
   setShapeColor: (color: string) => void;
   setFontFamily: (fontFamily: string) => void;
   toggleBold: () => void;
   toggleItalic: () => void;
   setLineSpacing: (value: number) => void;
   setLetterSpacing: (value: number) => void;
+  setTextBend: (value: number) => void;
 
   alignObject: (
     alignment: "left" | "center" | "right" | "justify"
@@ -128,7 +282,7 @@ interface FabricContextType {
   ) => void;
 
   addStickyNote: () => void;
-  addSignature: () => void;
+  addSignature: (text?: string, fontFamily?: string, color?: string) => void;
   addTable: () => void;
   activeTableCell: { row: number; column: number } | null;
   setActiveTableCell: (cell: { row: number; column: number } | null) => void;
@@ -183,6 +337,15 @@ const SERIALIZED_PROPERTIES = [
   "backgroundColor",
   "freehandScenePoints",
   "tableData",
+  "textEffect",
+  "textStripeColor",
+  "textStripeBaseColor",
+  "textStrokeColor",
+  "textStrokeWidth",
+  "textBend",
+  "pathSide",
+  "pathAlign",
+  "pathStartOffset",
 ];
 
 function normalizeOpacity(value: number): number {
@@ -917,6 +1080,15 @@ export function FabricProvider({
         }
       }
 
+      // Text combinations are created with a center origin. Convert their
+      // position to the top-left origin expected by the page reconstruction
+      // code, so copied pages keep the exact same text position.
+      const isTextObject =
+        object.type === "i-text" || object.type === "textbox";
+      const textTopLeft = isTextObject
+        ? object.getPointByOrigin("left", "top")
+        : null;
+
       const element: EditorElement = {
         id: item.elementId ?? crypto.randomUUID(),
         type,
@@ -925,10 +1097,10 @@ export function FabricProvider({
         // same position after page switching and page duplication.
         x: item.isFreehand && object.type === "path"
           ? object.getCenterPoint().x
-          : object.left ?? 0,
+          : textTopLeft?.x ?? object.left ?? 0,
         y: item.isFreehand && object.type === "path"
           ? object.getCenterPoint().y
-          : object.top ?? 0,
+          : textTopLeft?.y ?? object.top ?? 0,
         width: object.width ?? 0,
         height: object.height ?? 0,
         scaleX: object.scaleX ?? 1,
@@ -944,9 +1116,11 @@ export function FabricProvider({
         element.fontSize = textObject.fontSize ?? 18;
         element.fontFamily = textObject.fontFamily ?? "Arial";
         element.color =
-          typeof textObject.fill === "string"
-            ? textObject.fill
-            : "#111827";
+          (textObject as any).textEffect === "striped"
+            ? (textObject as any).textStripeBaseColor ?? "#DC2626"
+            : typeof textObject.fill === "string"
+              ? textObject.fill
+              : "#111827";
 
         element.fontWeight =
           textObject.fontWeight === "bold" ? "bold" : "normal";
@@ -963,6 +1137,22 @@ export function FabricProvider({
               textAlign?: "left" | "center" | "right" | "justify";
             }
           ).textAlign ?? "left";
+        element.textEffect = (textObject as any).textEffect ?? "none";
+        element.textBend = Math.max(-100, Math.min(100, Number((textObject as any).textBend) || 0));
+        element.textStripeColor = (textObject as any).textStripeColor;
+        element.textStrokeColor = (textObject as any).textStrokeColor ??
+          (typeof (textObject as any).stroke === "string" ? (textObject as any).stroke : undefined);
+        element.textStrokeWidth = (textObject as any).textStrokeWidth ??
+          ((textObject as any).strokeWidth || 0);
+        const textShadow = (textObject as any).shadow;
+        if (textShadow) {
+          element.textShadow = {
+            color: textShadow.color ?? "#000000",
+            blur: textShadow.blur ?? 0,
+            offsetX: textShadow.offsetX ?? 0,
+            offsetY: textShadow.offsetY ?? 0,
+          };
+        }
 
         const backgroundColor = (
           textObject as IText & { backgroundColor?: string }
@@ -1193,6 +1383,105 @@ export function FabricProvider({
 
     canvas.add(textObject);
     activateObject(textObject);
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+  }
+
+  function addTextCombination(items: Array<{
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fill: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    charSpacing?: number;
+    textAlign?: "left" | "center" | "right";
+    textEffect?: "none" | "neon" | "outline" | "3d" | "retro" | "striped" | "outside-striped";
+    textStripeColor?: string;
+    textStripeBaseColor?: string;
+    textStrokeColor?: string;
+    textStrokeWidth?: number;
+  }>) {
+    const canvas = canvasRef.current;
+    if (!canvas || !items.length) return;
+
+    saveCanvasState();
+
+    // Use Fabric's canvas center rather than a fixed top/left offset so the
+    // complete combination starts in the visible center of the certificate.
+    const center = canvas.getCenterPoint();
+    const textObjects: any[] = [];
+    const gap = 3;
+
+    items.forEach((item) => {
+      const effect = item.textEffect ?? "none";
+      const strokeColor = item.textStrokeColor ?? item.fill;
+      const strokeWidth = item.textStrokeWidth ?? (effect === "outline" ? 2.5 : effect === "retro" ? 1.5 : 0);
+      const effectShadow =
+        effect === "striped"
+          ? new Shadow({ color: "#9A3412", blur: 0, offsetX: 4, offsetY: 4 })
+          : effect === "neon"
+          ? new Shadow({ color: item.fill, blur: 22, offsetX: 0, offsetY: 0 })
+          : effect === "3d"
+            ? new Shadow({ color: "#581C87", blur: 0, offsetX: 5, offsetY: 6 })
+            : effect === "retro"
+              ? new Shadow({ color: "#F97316", blur: 0, offsetX: 3, offsetY: 3 })
+              : undefined;
+
+      const object = new Textbox(item.text, {
+        left: center.x,
+        top: 0,
+        width: Math.min(canvas.getWidth() - 100, 650),
+        originX: "center",
+        originY: "top",
+        fontSize: item.fontSize,
+        fontFamily: item.fontFamily,
+        fill: effect === "striped"
+          ? createStripedTextPattern(item.fill, item.textStripeColor ?? "#FDBA74")
+          : effect === "outline" ? "rgba(0,0,0,0)" : item.fill,
+        stroke: effect === "outline" || effect === "retro" ? strokeColor : undefined,
+        strokeWidth: effect === "outline" || effect === "retro" ? strokeWidth : 0,
+        paintFirst: "stroke",
+        shadow: effectShadow,
+        fontWeight: item.fontWeight ?? "normal",
+        fontStyle: item.fontStyle === "italic" ? "italic" : "normal",
+        charSpacing: item.charSpacing ?? 0,
+        textAlign: item.textAlign ?? "center",
+        lineHeight: 1.16,
+        editable: true,
+        selectable: true,
+        evented: true,
+        padding: 4,
+        splitByGrapheme: false,
+      });
+
+      (object as any).textEffect = effect;
+      (object as any).textStripeColor = item.textStripeColor ?? "#FDBA74";
+      (object as any).textStripeBaseColor = item.fill;
+      if (effect === "outside-striped") {
+        applyOutsideStripedTextEffect(object, item.textStripeColor ?? item.fill);
+      }
+      (object as any).textStrokeColor = strokeColor;
+      (object as any).textStrokeWidth = strokeWidth;
+      applyObjectControls(object);
+      attachMetadata(object, "text");
+      textObjects.push(object);
+    });
+
+    const totalHeight = textObjects.reduce((sum, object) => sum + object.getScaledHeight(), 0)
+      + gap * Math.max(0, textObjects.length - 1);
+    let currentTop = center.y - totalHeight / 2;
+
+    textObjects.forEach((object) => {
+      object.set({ left: center.x, top: currentTop, originX: "center", originY: "top" });
+      object.setCoords();
+      canvas.add(object);
+      currentTop += object.getScaledHeight() + gap;
+    });
+
+    // Keep every line independently selectable/editable; select the first line
+    // so the newly added design is immediately easy to drag or format.
+    if (textObjects.length) activateObject(textObjects[0]);
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -1949,19 +2238,23 @@ export function FabricProvider({
     syncCanvasToEditor();
   }
 
-  function addSignature() {
+  function addSignature(
+    text = "Your Signature",
+    fontFamily = "cursive",
+    color = "#111827",
+  ) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     saveCanvasState();
 
-    const signature = new IText("Your Signature", {
+    const signature = new IText(text, {
       left: 120,
       top: 120,
       fontSize: 36,
-      fontFamily: "cursive",
+      fontFamily,
       fontStyle: "italic",
-      fill: "#111827",
+      fill: color,
       editable: true,
     });
 
@@ -2258,6 +2551,35 @@ export function FabricProvider({
     updateSelectedText({ fill: color });
   }
 
+  function setTextShadow(
+    amount: number,
+    side: "all" | "top" | "bottom" | "left" | "right",
+    color: string,
+  ) {
+    if (!isTextSelected()) return;
+    const strength = Math.max(0, Math.min(50, Number(amount) || 0));
+    if (strength === 0) {
+      updateSelectedText({ shadow: null });
+      return;
+    }
+    const distance = Math.max(1, strength * 0.0 + Math.round(strength / 2));
+    const offsets = {
+      all: { x: 0, y: 0 },
+      top: { x: 0, y: -distance },
+      bottom: { x: 0, y: distance },
+      left: { x: -distance, y: 0 },
+      right: { x: distance, y: 0 },
+    }[side];
+    updateSelectedText({
+      shadow: new Shadow({
+        color,
+        blur: strength,
+        offsetX: offsets.x,
+        offsetY: offsets.y,
+      }),
+    });
+  }
+
   function setShapeColor(color: string) {
     const canvas = canvasRef.current;
     if (!canvas || !selectedObject) return;
@@ -2335,6 +2657,48 @@ export function FabricProvider({
       },
       true,
     );
+  }
+
+  function setTextBend(value: number) {
+    if (!isTextSelected() || !Number.isFinite(value)) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const amount = Math.max(-100, Math.min(100, Math.round(value)));
+    const object = selectedObject as IText & {
+      textBend?: number;
+      path?: Path | null;
+      setPositionByOrigin?: (point: any, originX: any, originY: any) => void;
+    };
+
+    // Keep the same visual top-left anchor while the path changes the text bounds.
+    const anchor = object.getPointByOrigin("left", "top");
+    saveCanvasState();
+
+    const nextPath = createTextBendPath(
+      Math.max(40, object.width || 40),
+      object.fontSize || 18,
+      amount,
+    );
+
+    object.set({
+      path: nextPath ?? null,
+      pathSide: "left",
+      pathAlign: "center",
+      pathStartOffset: 0,
+      textBend: amount,
+    } as any);
+
+    object.initDimensions();
+    if (typeof object.setPositionByOrigin === "function") {
+      object.setPositionByOrigin(anchor, "left", "top");
+    } else {
+      object.set({ left: anchor.x, top: anchor.y });
+    }
+    object.setCoords();
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
   }
 
   // UPDATED: justify alignment is now supported.
@@ -2991,6 +3355,7 @@ export function FabricProvider({
     selectObjectById,
 
     addText,
+    addTextCombination,
     addShape,
     addImage,
 
@@ -3001,12 +3366,14 @@ export function FabricProvider({
     decreaseFontSize,
     setFontSize,
     setTextColor,
+    setTextShadow,
     setShapeColor,
     setFontFamily,
     toggleBold,
     toggleItalic,
     setLineSpacing,
     setLetterSpacing,
+    setTextBend,
 
     alignObject,
     rotateSelected,

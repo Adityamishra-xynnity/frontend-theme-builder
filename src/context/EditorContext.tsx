@@ -13,6 +13,7 @@ import type { EditorElement } from "../types/editor";
 
 import {
   getDesigns,
+  getDesignsPage,
   createDesign,
   updateDesign,
   deleteDesign,
@@ -97,14 +98,30 @@ interface EditorContextType {
   ) => Promise<void>;
 
   loadSavedDesign: (design: SavedDesign) => void;
+
   getSavedDesigns: () => Promise<SavedDesign[]>;
+
+  getSavedDesignsPage: (
+    page: number,
+    size?: number
+  ) => Promise<{
+    designs: SavedDesign[];
+    totalPages: number;
+    totalElements: number;
+    currentPage: number;
+    last: boolean;
+  }>;
+
   deleteSavedDesign: (id: number) => Promise<void>;
 
   syncElementsFromCanvas: (
     elements: EditorElement[],
     sourcePageId?: string
   ) => void;
-  registerCanvasSnapshotProvider: (provider: (() => EditorElement[]) | null) => void;
+
+  registerCanvasSnapshotProvider: (
+    provider: (() => EditorElement[]) | null
+  ) => void;
 }
 
 const EditorContext =
@@ -147,9 +164,12 @@ export function EditorProvider({
   const [elements, setElements] =
     useState<EditorElement[]>([]);
 
-  // Synchronous snapshot used by page actions so they never copy stale state.
+  // Synchronous snapshot used by page actions.
   const latestElementsRef = useRef<EditorElement[]>([]);
-  const canvasSnapshotProviderRef = useRef<(() => EditorElement[]) | null>(null);
+
+  const canvasSnapshotProviderRef = useRef<
+    (() => EditorElement[]) | null
+  >(null);
 
   const registerCanvasSnapshotProvider = useCallback(
     (provider: (() => EditorElement[]) | null) => {
@@ -192,6 +212,7 @@ export function EditorProvider({
       orientation: DEFAULT_ORIENTATION,
     },
   ]);
+
   const pagesRef = useRef(pages);
 
   useEffect(() => {
@@ -200,12 +221,9 @@ export function EditorProvider({
 
   const [activePageId, setActivePageId] =
     useState<string>(initialPageId);
-  // Synchronous active-page identity prevents stale selectPage callbacks
-  // (such as a multi-page PDF export) from repeatedly saving into the first page.
+
   const activePageIdRef = useRef(activePageId);
 
-  // Prevent the previous page's state from overwriting
-  // the newly selected page during a page switch.
   const previousActivePageIdRef = useRef(activePageId);
 
   useEffect(() => {
@@ -266,7 +284,6 @@ export function EditorProvider({
     latestElementsRef.current = [];
     activePageIdRef.current = newPage.id;
     setActivePageId(newPage.id);
-    latestElementsRef.current = [];
     setElements([]);
     setBackgroundColorState(DEFAULT_BACKGROUND);
     setSelectedId(null);
@@ -284,15 +301,15 @@ export function EditorProvider({
   ]);
 
   const copyPage = useCallback(() => {
-    // Ask Fabric for a synchronous snapshot at the exact moment Copy Page is
-    // clicked. This includes text currently being edited and the latest object
-    // transforms, instead of relying only on potentially stale React state.
     const canvasSnapshot = canvasSnapshotProviderRef.current?.();
-    const sourceElements = canvasSnapshot ?? latestElementsRef.current;
-    const elementsToCopy = sourceElements.length ? sourceElements : elements;
 
-    // Clone each element and nested path data so both pages are identical but
-    // independently editable.
+    const sourceElements =
+      canvasSnapshot ?? latestElementsRef.current;
+
+    const elementsToCopy = sourceElements.length
+      ? sourceElements
+      : elements;
+
     const copiedElements = elementsToCopy.map((element) => ({
       ...element,
       id: createId(),
@@ -343,7 +360,6 @@ export function EditorProvider({
     backgroundColor,
     pageSize,
     orientation,
-    elements,
   ]);
 
   const deletePage = useCallback(() => {
@@ -380,18 +396,21 @@ export function EditorProvider({
   const selectPage = useCallback(
     (id: string) => {
       const currentActivePageId = activePageIdRef.current;
+
       if (id === currentActivePageId) return;
 
-      const target = pagesRef.current.find((page) => page.id === id);
+      const target = pagesRef.current.find(
+        (page) => page.id === id
+      );
+
       if (!target) return;
 
-      // Capture the currently rendered Fabric canvas synchronously before
-      // switching pages. React state can lag behind the most recent text edit
-      // or object movement, especially during PDF export/page switching.
-      const canvasSnapshot = canvasSnapshotProviderRef.current?.();
-      const currentElements = canvasSnapshot ?? latestElementsRef.current;
+      const canvasSnapshot =
+        canvasSnapshotProviderRef.current?.();
 
-      // Keep the synchronous snapshot in step with the page being saved.
+      const currentElements =
+        canvasSnapshot ?? latestElementsRef.current;
+
       latestElementsRef.current = currentElements;
 
       const nextPages = pagesRef.current.map((page) =>
@@ -405,6 +424,7 @@ export function EditorProvider({
             }
           : page
       );
+
       pagesRef.current = nextPages;
       setPages(nextPages);
 
@@ -422,9 +442,6 @@ export function EditorProvider({
       setCurrentDesignName("");
     },
     [
-      activePageId,
-      pages,
-      elements,
       backgroundColor,
       pageSize,
       orientation,
@@ -455,13 +472,18 @@ export function EditorProvider({
       ...previous,
       createSnapshot(),
     ]);
+
     setFuture([]);
   }, [createSnapshot]);
 
   const addElement = (element: EditorElement) => {
     addHistory();
 
-    latestElementsRef.current = [...latestElementsRef.current, element];
+    latestElementsRef.current = [
+      ...latestElementsRef.current,
+      element,
+    ];
+
     setElements((previous) => [
       ...previous,
       element,
@@ -480,9 +502,13 @@ export function EditorProvider({
   ) => {
     addHistory();
 
-    const updatedElements = latestElementsRef.current.map((element) =>
-      element.id === id ? { ...element, ...updates } : element
+    const updatedElements = latestElementsRef.current.map(
+      (element) =>
+        element.id === id
+          ? { ...element, ...updates }
+          : element
     );
+
     latestElementsRef.current = updatedElements;
     setElements(updatedElements);
   };
@@ -490,7 +516,11 @@ export function EditorProvider({
   const deleteElement = (id: string) => {
     addHistory();
 
-    const updatedElements = latestElementsRef.current.filter((element) => element.id !== id);
+    const updatedElements =
+      latestElementsRef.current.filter(
+        (element) => element.id !== id
+      );
+
     latestElementsRef.current = updatedElements;
     setElements(updatedElements);
 
@@ -516,7 +546,11 @@ export function EditorProvider({
       y: element.y + 30,
     };
 
-    latestElementsRef.current = [...latestElementsRef.current, duplicate];
+    latestElementsRef.current = [
+      ...latestElementsRef.current,
+      duplicate,
+    ];
+
     setElements((previous) => [
       ...previous,
       duplicate,
@@ -566,7 +600,6 @@ export function EditorProvider({
       ]);
 
       activePageIdRef.current = pageId;
-
       setActivePageId(pageId);
     },
     []
@@ -576,6 +609,7 @@ export function EditorProvider({
     setHistory([]);
     setFuture([]);
     setElements([]);
+    latestElementsRef.current = [];
     setBackgroundColorState(DEFAULT_BACKGROUND);
     setCurrentDesignId(null);
     setCurrentDesignName("");
@@ -597,7 +631,6 @@ export function EditorProvider({
     ]);
 
     activePageIdRef.current = pageId;
-
     setActivePageId(pageId);
   }, []);
 
@@ -614,6 +647,7 @@ export function EditorProvider({
 
     setFuture((items) => [current, ...items]);
     setHistory((items) => items.slice(0, -1));
+
     latestElementsRef.current = previous.elements;
     setElements(previous.elements);
     setBackgroundColorState(previous.backgroundColor);
@@ -628,6 +662,7 @@ export function EditorProvider({
 
     setHistory((items) => [...items, current]);
     setFuture((items) => items.slice(1));
+
     latestElementsRef.current = next.elements;
     setElements(next.elements);
     setBackgroundColorState(next.backgroundColor);
@@ -656,6 +691,7 @@ export function EditorProvider({
       : DEFAULT_ORIENTATION,
   });
 
+  // Existing non-paginated method retained for other components.
   const getSavedDesigns =
     async (): Promise<SavedDesign[]> => {
       try {
@@ -666,6 +702,22 @@ export function EditorProvider({
         return [];
       }
     };
+
+  // New paginated method for Saved Designs infinite scrolling.
+  const getSavedDesignsPage = async (
+    page: number,
+    size = 20
+  ) => {
+    const result = await getDesignsPage(page, size);
+
+    return {
+      designs: result.content.map(convertDesign),
+      totalPages: result.totalPages,
+      totalElements: result.totalElements,
+      currentPage: result.number,
+      last: result.last,
+    };
+  };
 
   const saveDesign = async (
     name?: string,
@@ -689,7 +741,8 @@ export function EditorProvider({
         : backgroundColor;
 
     const finalPageSize = pageSizeOverride ?? pageSize;
-    const finalOrientation = orientationOverride ?? orientation;
+    const finalOrientation =
+      orientationOverride ?? orientation;
 
     const designData = {
       name: safeName,
@@ -721,8 +774,12 @@ export function EditorProvider({
       latestElementsRef.current = converted.elements;
       setElements(converted.elements);
       setBackgroundColorState(converted.backgroundColor);
-      setPageSize(converted.pageSize ?? DEFAULT_PAGE_SIZE);
-      setOrientation(converted.orientation ?? DEFAULT_ORIENTATION);
+      setPageSize(
+        converted.pageSize ?? DEFAULT_PAGE_SIZE
+      );
+      setOrientation(
+        converted.orientation ?? DEFAULT_ORIENTATION
+      );
     } catch (error) {
       console.error("Failed to save design:", error);
       throw error;
@@ -745,7 +802,9 @@ export function EditorProvider({
         ? design.pageSize
         : DEFAULT_PAGE_SIZE;
 
-      const designOrientation = isOrientation(design.orientation)
+      const designOrientation = isOrientation(
+        design.orientation
+      )
         ? design.orientation
         : DEFAULT_ORIENTATION;
 
@@ -753,7 +812,9 @@ export function EditorProvider({
       setElements(designElements);
       setBackgroundColorState(designBackground);
       setCurrentDesignId(design.id);
-      setCurrentDesignName(design.name || "My Certificate");
+      setCurrentDesignName(
+        design.name || "My Certificate"
+      );
       setSelectedId(null);
       setPageSize(designPageSize);
       setOrientation(designOrientation);
@@ -772,7 +833,6 @@ export function EditorProvider({
       ]);
 
       activePageIdRef.current = pageId;
-
       setActivePageId(pageId);
     },
     []
@@ -796,18 +856,19 @@ export function EditorProvider({
     canvasElements: EditorElement[],
     sourcePageId?: string
   ) => {
-    // Ignore late events from a canvas belonging to another page.
-    if (sourcePageId && sourcePageId !== activePageIdRef.current) {
+    if (
+      sourcePageId &&
+      sourcePageId !== activePageIdRef.current
+    ) {
       return;
     }
 
     latestElementsRef.current = canvasElements;
     setElements(canvasElements);
 
-    // Update the synchronous page snapshot as well as React state. PDF export
-    // can start before the next React effect runs; without this, selectPage()
-    // may reload an older text value (for example the original "Subheading").
-    const syncedPageId = sourcePageId ?? activePageIdRef.current;
+    const syncedPageId =
+      sourcePageId ?? activePageIdRef.current;
+
     const nextPages = pagesRef.current.map((page) =>
       page.id === syncedPageId
         ? {
@@ -819,6 +880,7 @@ export function EditorProvider({
           }
         : page
     );
+
     pagesRef.current = nextPages;
     setPages(nextPages);
   };
@@ -860,7 +922,9 @@ export function EditorProvider({
         saveDesign,
         loadSavedDesign,
         getSavedDesigns,
+        getSavedDesignsPage,
         deleteSavedDesign,
+
         syncElementsFromCanvas,
         registerCanvasSnapshotProvider,
       }}

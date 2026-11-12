@@ -4,13 +4,19 @@ import { useLocation, useParams } from "react-router-dom";
 
 import Toolbar from "../components/editor/Toolbar";
 import FabricEditorCanvas from "../components/editor/fabric/FabricCanvas";
-import { templates } from "../data/templates";
+
 import {
   useEditor,
   type SavedDesign,
   type PaperSize,
   type PageOrientation,
 } from "../context/EditorContext";
+
+import {
+  getTemplateByKey,
+  type CertificateTemplate,
+} from "../api/templateApi";
+
 import EditorSidebar from "../components/editor/EditorSidebar";
 import EditorPanel from "../components/editor/EditorPanel";
 
@@ -59,6 +65,12 @@ export default function Editor() {
 
   const [activePanel, setActivePanel] = useState("elements");
 
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<CertificateTemplate | null>(null);
+
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateError, setTemplateError] = useState("");
+
   const {
     pageSize,
     orientation,
@@ -77,8 +89,15 @@ export default function Editor() {
   const locationState = location.state as EditorLocationState | null;
   const savedDesign = locationState?.savedDesign;
 
+  // Load saved design or fetch a template from PostgreSQL.
   useEffect(() => {
+    let cancelled = false;
+
     if (savedDesign) {
+      setSelectedTemplate(null);
+      setTemplateError("");
+      setTemplateLoading(false);
+
       loadSavedDesign(savedDesign);
 
       setPageSettings(
@@ -86,24 +105,73 @@ export default function Editor() {
         savedDesign.orientation ?? "landscape",
       );
 
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (id) {
-      const template = templates.find((item) => item.id === id);
+      setSelectedTemplate(null);
+      setTemplateError("");
+      setTemplateLoading(true);
 
-      if (template) {
-        loadTemplate(template);
-      } else {
-        clearCanvas();
-      }
-
+      // Clear the previous canvas while the requested template loads.
+      clearCanvas();
       setPageSettings("A4", "landscape");
-      return;
+
+      getTemplateByKey(id)
+        .then((template) => {
+          if (cancelled) return;
+
+          setSelectedTemplate(template);
+
+          // Convert backend template response into the existing
+          // EditorContext loadTemplate() format.
+          loadTemplate({
+            id: template.templateKey,
+            name: template.name,
+            backgroundColor: template.backgroundColor,
+            elements: Array.isArray(template.elementsData)
+              ? template.elementsData
+              : [],
+          });
+
+          setPageSettings("A4", "landscape");
+        })
+        .catch((error) => {
+          if (cancelled) return;
+
+          console.error("Failed to load template:", error);
+
+          setSelectedTemplate(null);
+          setTemplateError(
+            "Unable to load this template. Please try again.",
+          );
+
+          clearCanvas();
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setTemplateLoading(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
+
+    // /editor opens a fresh blank canvas.
+    setSelectedTemplate(null);
+    setTemplateError("");
+    setTemplateLoading(false);
 
     clearCanvas();
     setPageSettings("A4", "landscape");
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     id,
     savedDesign,
@@ -112,8 +180,6 @@ export default function Editor() {
     clearCanvas,
     setPageSettings,
   ]);
-
-  const selectedTemplate = templates.find((item) => item.id === id);
 
   const handlePanelChange = (panel: string) => {
     setActivePanel((current) =>
@@ -175,9 +241,13 @@ export default function Editor() {
                 <p className="mt-0.5 truncate text-sm text-slate-500">
                   {savedDesign
                     ? `Editing: ${savedDesign.name}`
-                    : selectedTemplate
-                      ? `Editing: ${selectedTemplate.name}`
-                      : "Create your certificate from a blank canvas."}
+                    : templateLoading
+                      ? "Loading template..."
+                      : selectedTemplate
+                        ? `Editing: ${selectedTemplate.name}`
+                        : templateError
+                          ? templateError
+                          : "Create your certificate from a blank canvas."}
                 </p>
               </div>
 
