@@ -1,6 +1,12 @@
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import {
   ArrowRight,
   Award,
@@ -18,31 +24,79 @@ import {
   type SavedDesign,
 } from "../context/EditorContext";
 
+const PAGE_SIZE = 20;
+
 export default function SavedDesigns() {
   const navigate = useNavigate();
 
-  const { getSavedDesigns, deleteSavedDesign } = useEditor();
+  const {
+    getSavedDesignsPage,
+    deleteSavedDesign,
+  } = useEditor();
 
   const [designs, setDesigns] = useState<SavedDesign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [loadError, setLoadError] = useState("");
 
+  const [loadError, setLoadError] = useState("");
+  const [loadMoreError, setLoadMoreError] = useState("");
+
+  const [hasMore, setHasMore] = useState(true);
+  const [totalElements, setTotalElements] = useState(0);
+  const [initialRetry, setInitialRetry] = useState(0);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Refs prevent duplicate API requests during rapid scrolling.
+  const loadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const currentPageRef = useRef(0);
+
+  // Initial page loading.
   useEffect(() => {
     let active = true;
 
-    const loadDesigns = async () => {
+    const loadFirstPage = async () => {
+      loadingRef.current = true;
+      hasMoreRef.current = true;
+      currentPageRef.current = 0;
+
+      setLoading(true);
+      setLoadingMore(false);
+      setLoadError("");
+      setLoadMoreError("");
+      setHasMore(true);
+      setDesigns([]);
+      setTotalElements(0);
+
       try {
-        setLoading(true);
-        setLoadError("");
+        const result = await getSavedDesignsPage(0, PAGE_SIZE);
 
-        const saved = await getSavedDesigns();
+        if (!active) return;
 
-        if (active) {
-          setDesigns(saved);
-        }
+        // Remove duplicate IDs even if the backend returns duplicates.
+        const uniqueDesigns = Array.from(
+          new Map(
+            result.designs.map((design) => [
+              design.id,
+              design,
+            ])
+          ).values()
+        );
+
+        setDesigns(uniqueDesigns);
+        setTotalElements(result.totalElements);
+
+        currentPageRef.current = result.currentPage;
+        hasMoreRef.current = !result.last;
+
+        setHasMore(!result.last);
       } catch (error) {
-        console.error("Failed to load saved designs:", error);
+        console.error(
+          "Failed to load saved designs:",
+          error
+        );
 
         if (active) {
           setLoadError(
@@ -51,17 +105,100 @@ export default function SavedDesigns() {
         }
       } finally {
         if (active) {
+          loadingRef.current = false;
           setLoading(false);
         }
       }
     };
 
-    void loadDesigns();
+    void loadFirstPage();
 
     return () => {
       active = false;
     };
-  }, [getSavedDesigns]);
+  }, [getSavedDesignsPage, initialRetry]);
+
+  // Load the next page when the user scrolls near the bottom.
+  const loadNextPageRef = useRef<() => Promise<void>>(
+    async () => {}
+  );
+
+  loadNextPageRef.current = async () => {
+    if (loadingRef.current || !hasMoreRef.current) {
+      return;
+    }
+
+    loadingRef.current = true;
+
+    setLoadingMore(true);
+    setLoadMoreError("");
+
+    const nextPage = currentPageRef.current + 1;
+
+    try {
+      const result = await getSavedDesignsPage(
+        nextPage,
+        PAGE_SIZE
+      );
+
+      setDesigns((previous) => {
+        const existingIds = new Set(
+          previous.map((design) => design.id)
+        );
+
+        const newDesigns = result.designs.filter(
+          (design) => !existingIds.has(design.id)
+        );
+
+        return [...previous, ...newDesigns];
+      });
+
+      setTotalElements(result.totalElements);
+
+      currentPageRef.current = result.currentPage;
+      hasMoreRef.current = !result.last;
+
+      setHasMore(!result.last);
+    } catch (error) {
+      console.error(
+        "Failed to load more saved designs:",
+        error
+      );
+
+      setLoadMoreError(
+        "More designs could not be loaded. Please try again."
+      );
+    } finally {
+      loadingRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  // Observe the bottom sentinel.
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadNextPageRef.current();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "300px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const handleEdit = (design: SavedDesign) => {
     navigate("/editor", {
@@ -87,6 +224,10 @@ export default function SavedDesigns() {
 
       setDesigns((previous) =>
         previous.filter((design) => design.id !== id)
+      );
+
+      setTotalElements((previous) =>
+        Math.max(0, previous - 1)
       );
     } catch (error) {
       console.error("Failed to delete design:", error);
@@ -151,8 +292,10 @@ export default function SavedDesigns() {
 
               {!loading && !loadError && (
                 <p className="mt-4 text-sm font-medium text-slate-500">
-                  {designs.length}{" "}
-                  {designs.length === 1 ? "design" : "designs"} saved
+                  {totalElements}{" "}
+                  {totalElements === 1 ? "design" : "designs"} saved
+                  {" · "}
+                  {designs.length} loaded
                 </p>
               )}
             </div>
@@ -172,7 +315,7 @@ export default function SavedDesigns() {
 
       {/* Main Content */}
       <section className="mx-auto max-w-7xl px-5 py-9 sm:px-8 sm:py-12 lg:px-10">
-        {/* Loading State */}
+        {/* Initial Loading State */}
         {loading && (
           <div
             className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
@@ -195,7 +338,7 @@ export default function SavedDesigns() {
           </div>
         )}
 
-        {/* Load Error */}
+        {/* Initial Load Error */}
         {!loading && loadError && (
           <div
             role="alert"
@@ -205,11 +348,13 @@ export default function SavedDesigns() {
               Unable to load designs
             </h2>
 
-            <p className="mt-3 text-sm text-slate-600">{loadError}</p>
+            <p className="mt-3 text-sm text-slate-600">
+              {loadError}
+            </p>
 
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => setInitialRetry((previous) => previous + 1)}
               className="mt-6 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-indigo-600"
             >
               Try Again
@@ -382,10 +527,44 @@ export default function SavedDesigns() {
                 );
               })}
             </div>
+
+            {/* Infinite Scroll Sentinel */}
+            <div
+              ref={sentinelRef}
+              className="flex min-h-24 items-center justify-center py-8"
+            >
+              {loadingMore && (
+                <div className="flex items-center gap-3 text-sm font-medium text-slate-500">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                  Loading more designs...
+                </div>
+              )}
+
+              {!loadingMore && loadMoreError && (
+                <div className="text-center">
+                  <p className="text-sm text-red-600">
+                    {loadMoreError}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => void loadNextPageRef.current()}
+                    className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                  >
+                    Retry Loading
+                  </button>
+                </div>
+              )}
+
+              {!loadingMore && !loadMoreError && !hasMore && (
+                <p className="text-sm font-medium text-slate-400">
+                  You have reached the end of your saved designs.
+                </p>
+              )}
+            </div>
           </>
         )}
       </section>
     </main>
   );
 }
-
