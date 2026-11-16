@@ -11,6 +11,9 @@ import {
   Line,
   Path,
   PencilBrush,
+  Group,
+  Shadow,
+  Pattern,
 } from "fabric";
 
 import {
@@ -52,9 +55,153 @@ type FabricObjectWithMeta = {
   isFreehand?: boolean;
   freehandScenePoints?: Array<{ x: number; y: number }>;
   backgroundColor?: string;
+  textBend?: number;
+  tableData?: {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string; textColor?: string; fontSize?: number }[][];
+    columnWidths?: number[];
+    rowHeights?: number[];
+    borderColor: string;
+    borderWidth: number;
+  };
 };
 
+
+function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
+  const tile = document.createElement("canvas");
+  tile.width = 24;
+  tile.height = 24;
+  const context = tile.getContext("2d");
+  if (context) {
+    context.fillStyle = baseColor;
+    context.fillRect(0, 0, tile.width, tile.height);
+    context.strokeStyle = stripeColor;
+    context.lineWidth = 4;
+    context.lineCap = "butt";
+    for (let offset = -24; offset < 48; offset += 9) {
+      context.beginPath();
+      context.moveTo(offset, 24);
+      context.lineTo(offset + 24, 0);
+      context.stroke();
+    }
+  }
+  return new Pattern({ source: tile, repeat: "repeat" });
+}
+
+// Draw a second, diagonally striped copy behind the live text object.
+// The foreground remains the original editable Fabric Textbox/IText.
+function applyOutsideStripedTextEffect(
+  object: any,
+  stripeColor: string,
+): void {
+  if (!object || object.__outsideStripedRenderApplied) return;
+
+  const originalRender = object._render;
+  if (typeof originalRender !== "function") return;
+
+  object._render = function (
+    this: any,
+    ctx: CanvasRenderingContext2D,
+  ) {
+    const foregroundFill = this.fill;
+
+    // Stripe color always follows the current text color.
+    const currentStripeColor =
+      typeof foregroundFill === "string"
+        ? foregroundFill
+        : stripeColor;
+
+    // Rebuild the stripe pattern only when the text color changes.
+    if (
+      !this.__outsideStripedPattern ||
+      this.__outsideStripedColor !== currentStripeColor
+    ) {
+      const tile = document.createElement("canvas");
+      tile.width = 24;
+      tile.height = 24;
+
+      const patternContext = tile.getContext("2d");
+
+      if (patternContext) {
+        patternContext.strokeStyle = currentStripeColor;
+        patternContext.lineWidth = 3.5;
+        patternContext.lineCap = "butt";
+
+        for (let offset = -24; offset < 48; offset += 8) {
+          patternContext.beginPath();
+          patternContext.moveTo(offset, 24);
+          patternContext.lineTo(offset + 24, 0);
+          patternContext.stroke();
+        }
+      }
+
+      this.__outsideStripedPattern = new Pattern({
+        source: tile,
+        repeat: "repeat",
+      });
+
+      this.__outsideStripedColor = currentStripeColor;
+    }
+
+    ctx.save();
+    ctx.translate(7, 7);
+
+    this.fill = this.__outsideStripedPattern;
+    originalRender.call(this, ctx);
+
+    ctx.restore();
+
+    this.fill = foregroundFill;
+    originalRender.call(this, ctx);
+  };
+
+  object.__outsideStripedRenderApplied = true;
+  object.__outsideStripedColor = stripeColor;
+}
+
 type TextElementType = "heading" | "subheading" | "text";
+
+/**
+ * Creates the local baseline used by Fabric's native editable text-on-path
+ * rendering. Positive values bend upward; negative values bend downward.
+ */
+function createTextBendPath(
+  width: number,
+  fontSize: number,
+  bend: number,
+): Path | undefined {
+  const amount = Math.max(-100, Math.min(100, Number(bend) || 0));
+
+  if (Math.abs(amount) < 0.5) return undefined;
+
+  const safeWidth = Math.max(40, width || 40);
+
+  // Stronger curve intensity
+  const intensity = Math.abs(amount) / 100;
+
+  // Maximum curve height increases significantly
+  const amplitude = Math.max(
+    fontSize * 2,
+    safeWidth * 0.45,
+  ) * intensity;
+
+  // Positive = upward curve, Negative = downward curve
+  const controlY = amount > 0 ? -2 * amplitude : 2 * amplitude;
+
+  return new Path(
+    `M 0 0 Q ${safeWidth / 2} ${controlY} ${safeWidth} 0`,
+    {
+      fill: "",
+      stroke: "",
+      strokeWidth: 0,
+      objectCaching: false,
+      selectable: false,
+      evented: false,
+    },
+  );
+}
+
 
 export type ShapeElementType =
   | "rectangle" | "circle" | "triangle" | "square" | "polygon"
@@ -78,6 +225,21 @@ interface FabricContextType {
   selectObjectById: (id: string) => void;
 
   addText: (type?: TextElementType) => void;
+  addTextCombination: (items: Array<{
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fill: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    charSpacing?: number;
+    textAlign?: "left" | "center" | "right";
+    textEffect?: "none" | "neon" | "outline" | "3d" | "retro" | "striped" | "outside-striped";
+    textStripeColor?: string;
+    textStripeBaseColor?: string;
+    textStrokeColor?: string;
+    textStrokeWidth?: number;
+  }>) => void;
   addShape: (type: ShapeElementType) => void;
   addImage: (dataUrl: string) => void;
 
@@ -88,12 +250,14 @@ interface FabricContextType {
   decreaseFontSize: () => void;
   setFontSize: (size: number) => void;
   setTextColor: (color: string) => void;
+  setTextShadow: (amount: number, side: "all" | "top" | "bottom" | "left" | "right", color: string) => void;
   setShapeColor: (color: string) => void;
   setFontFamily: (fontFamily: string) => void;
   toggleBold: () => void;
   toggleItalic: () => void;
   setLineSpacing: (value: number) => void;
   setLetterSpacing: (value: number) => void;
+  setTextBend: (value: number) => void;
 
   alignObject: (
     alignment: "left" | "center" | "right" | "justify"
@@ -118,8 +282,23 @@ interface FabricContextType {
   ) => void;
 
   addStickyNote: () => void;
-  addSignature: () => void;
+  addSignature: (text?: string, fontFamily?: string, color?: string) => void;
   addTable: () => void;
+  activeTableCell: { row: number; column: number } | null;
+  setActiveTableCell: (cell: { row: number; column: number } | null) => void;
+  setTableCellText: (row: number, column: number, text: string) => void;
+  setTableCellTextColor: (row: number, column: number, color: string) => void;
+  setTableCellFontSize: (row: number, column: number, size: number) => void;
+  setTableColumnWidth: (column: number, width: number) => void;
+  setTableRowHeight: (row: number, height: number) => void;
+  setTableCellBackground: (row: number, column: number, color: string) => void;
+  setTableRowBackground: (row: number, color: string) => void;
+  setTableColumnBackground: (column: number, color: string) => void;
+  setTableBorder: (color: string, width: number) => void;
+  addTableRow: () => void;
+  deleteTableRow: (row: number) => void;
+  addTableColumn: () => void;
+  deleteTableColumn: (column: number) => void;
 
   saveCurrentDesign: (name: string) => Promise<void>;
  downloadPNG: (pageIds?: string[]) => Promise<void>;
@@ -157,6 +336,16 @@ const SERIALIZED_PROPERTIES = [
   "isFreehand",
   "backgroundColor",
   "freehandScenePoints",
+  "tableData",
+  "textEffect",
+  "textStripeColor",
+  "textStripeBaseColor",
+  "textStrokeColor",
+  "textStrokeWidth",
+  "textBend",
+  "pathSide",
+  "pathAlign",
+  "pathStartOffset",
 ];
 
 function normalizeOpacity(value: number): number {
@@ -783,6 +972,7 @@ export function FabricProvider({
   const canvasRef = useRef<FabricCanvas | null>(null);
 
   const [selectedObject, setSelectedObjectState] = useState<any>(null);
+  const [activeTableCell, setActiveTableCell] = useState<{ row: number; column: number } | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
 
@@ -890,6 +1080,15 @@ export function FabricProvider({
         }
       }
 
+      // Text combinations are created with a center origin. Convert their
+      // position to the top-left origin expected by the page reconstruction
+      // code, so copied pages keep the exact same text position.
+      const isTextObject =
+        object.type === "i-text" || object.type === "textbox";
+      const textTopLeft = isTextObject
+        ? object.getPointByOrigin("left", "top")
+        : null;
+
       const element: EditorElement = {
         id: item.elementId ?? crypto.randomUUID(),
         type,
@@ -898,10 +1097,10 @@ export function FabricProvider({
         // same position after page switching and page duplication.
         x: item.isFreehand && object.type === "path"
           ? object.getCenterPoint().x
-          : object.left ?? 0,
+          : textTopLeft?.x ?? object.left ?? 0,
         y: item.isFreehand && object.type === "path"
           ? object.getCenterPoint().y
-          : object.top ?? 0,
+          : textTopLeft?.y ?? object.top ?? 0,
         width: object.width ?? 0,
         height: object.height ?? 0,
         scaleX: object.scaleX ?? 1,
@@ -917,9 +1116,11 @@ export function FabricProvider({
         element.fontSize = textObject.fontSize ?? 18;
         element.fontFamily = textObject.fontFamily ?? "Arial";
         element.color =
-          typeof textObject.fill === "string"
-            ? textObject.fill
-            : "#111827";
+          (textObject as any).textEffect === "striped"
+            ? (textObject as any).textStripeBaseColor ?? "#DC2626"
+            : typeof textObject.fill === "string"
+              ? textObject.fill
+              : "#111827";
 
         element.fontWeight =
           textObject.fontWeight === "bold" ? "bold" : "normal";
@@ -936,6 +1137,22 @@ export function FabricProvider({
               textAlign?: "left" | "center" | "right" | "justify";
             }
           ).textAlign ?? "left";
+        element.textEffect = (textObject as any).textEffect ?? "none";
+        element.textBend = Math.max(-100, Math.min(100, Number((textObject as any).textBend) || 0));
+        element.textStripeColor = (textObject as any).textStripeColor;
+        element.textStrokeColor = (textObject as any).textStrokeColor ??
+          (typeof (textObject as any).stroke === "string" ? (textObject as any).stroke : undefined);
+        element.textStrokeWidth = (textObject as any).textStrokeWidth ??
+          ((textObject as any).strokeWidth || 0);
+        const textShadow = (textObject as any).shadow;
+        if (textShadow) {
+          element.textShadow = {
+            color: textShadow.color ?? "#000000",
+            blur: textShadow.blur ?? 0,
+            offsetX: textShadow.offsetX ?? 0,
+            offsetY: textShadow.offsetY ?? 0,
+          };
+        }
 
         const backgroundColor = (
           textObject as IText & { backgroundColor?: string }
@@ -994,6 +1211,10 @@ export function FabricProvider({
         element.src = item.imageSrc ?? "";
       }
 
+      if (item.elementType === "table" && item.tableData) {
+        element.tableData = JSON.parse(JSON.stringify(item.tableData));
+      }
+
       return element;
     });
   }
@@ -1026,12 +1247,58 @@ export function FabricProvider({
       originX: "left",
       originY: "top",
     });
+
+    // Keep Fabric's native rotation position and drag handler, but render
+    // the rotation handle as a polished circular button with a rotate arrow.
+    const rotateControl = object.controls?.mtr;
+    if (rotateControl) {
+      rotateControl.render = (
+        ctx: CanvasRenderingContext2D,
+        left: number,
+        top: number,
+      ) => {
+        ctx.save();
+        ctx.translate(left, top);
+
+        // Premium compact white handle
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = "#d1d5db";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Rotation icon: smooth circular arrow
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, -Math.PI * 0.65, Math.PI * 0.85);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // Arrow tip
+        ctx.beginPath();
+        ctx.moveTo(-3.1, -4.0);
+        ctx.lineTo(-4.8, -4.2);
+        ctx.lineTo(-4.2, -2.5);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        ctx.restore();
+      };
+
+      rotateControl.cornerSize = 22;
+    }
   }
 
   function attachMetadata(
     object: any,
     type: ElementType,
-    id = crypto.randomUUID(),
+    id: string = crypto.randomUUID(),
     extra?: {
       imageSrc?: string;
       shapeSides?: number;
@@ -1116,6 +1383,105 @@ export function FabricProvider({
 
     canvas.add(textObject);
     activateObject(textObject);
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+  }
+
+  function addTextCombination(items: Array<{
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fill: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    charSpacing?: number;
+    textAlign?: "left" | "center" | "right";
+    textEffect?: "none" | "neon" | "outline" | "3d" | "retro" | "striped" | "outside-striped";
+    textStripeColor?: string;
+    textStripeBaseColor?: string;
+    textStrokeColor?: string;
+    textStrokeWidth?: number;
+  }>) {
+    const canvas = canvasRef.current;
+    if (!canvas || !items.length) return;
+
+    saveCanvasState();
+
+    // Use Fabric's canvas center rather than a fixed top/left offset so the
+    // complete combination starts in the visible center of the certificate.
+    const center = canvas.getCenterPoint();
+    const textObjects: any[] = [];
+    const gap = 3;
+
+    items.forEach((item) => {
+      const effect = item.textEffect ?? "none";
+      const strokeColor = item.textStrokeColor ?? item.fill;
+      const strokeWidth = item.textStrokeWidth ?? (effect === "outline" ? 2.5 : effect === "retro" ? 1.5 : 0);
+      const effectShadow =
+        effect === "striped"
+          ? new Shadow({ color: "#9A3412", blur: 0, offsetX: 4, offsetY: 4 })
+          : effect === "neon"
+          ? new Shadow({ color: item.fill, blur: 22, offsetX: 0, offsetY: 0 })
+          : effect === "3d"
+            ? new Shadow({ color: "#581C87", blur: 0, offsetX: 5, offsetY: 6 })
+            : effect === "retro"
+              ? new Shadow({ color: "#F97316", blur: 0, offsetX: 3, offsetY: 3 })
+              : undefined;
+
+      const object = new Textbox(item.text, {
+        left: center.x,
+        top: 0,
+        width: Math.min(canvas.getWidth() - 100, 650),
+        originX: "center",
+        originY: "top",
+        fontSize: item.fontSize,
+        fontFamily: item.fontFamily,
+        fill: effect === "striped"
+          ? createStripedTextPattern(item.fill, item.textStripeColor ?? "#FDBA74")
+          : effect === "outline" ? "rgba(0,0,0,0)" : item.fill,
+        stroke: effect === "outline" || effect === "retro" ? strokeColor : undefined,
+        strokeWidth: effect === "outline" || effect === "retro" ? strokeWidth : 0,
+        paintFirst: "stroke",
+        shadow: effectShadow,
+        fontWeight: item.fontWeight ?? "normal",
+        fontStyle: item.fontStyle === "italic" ? "italic" : "normal",
+        charSpacing: item.charSpacing ?? 0,
+        textAlign: item.textAlign ?? "center",
+        lineHeight: 1.16,
+        editable: true,
+        selectable: true,
+        evented: true,
+        padding: 4,
+        splitByGrapheme: false,
+      });
+
+      (object as any).textEffect = effect;
+      (object as any).textStripeColor = item.textStripeColor ?? "#FDBA74";
+      (object as any).textStripeBaseColor = item.fill;
+      if (effect === "outside-striped") {
+        applyOutsideStripedTextEffect(object, item.textStripeColor ?? item.fill);
+      }
+      (object as any).textStrokeColor = strokeColor;
+      (object as any).textStrokeWidth = strokeWidth;
+      applyObjectControls(object);
+      attachMetadata(object, "text");
+      textObjects.push(object);
+    });
+
+    const totalHeight = textObjects.reduce((sum, object) => sum + object.getScaledHeight(), 0)
+      + gap * Math.max(0, textObjects.length - 1);
+    let currentTop = center.y - totalHeight / 2;
+
+    textObjects.forEach((object) => {
+      object.set({ left: center.x, top: currentTop, originX: "center", originY: "top" });
+      object.setCoords();
+      canvas.add(object);
+      currentTop += object.getScaledHeight() + gap;
+    });
+
+    // Keep every line independently selectable/editable; select the first line
+    // so the newly added design is immediately easy to drag or format.
+    if (textObjects.length) activateObject(textObjects[0]);
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -1872,19 +2238,23 @@ export function FabricProvider({
     syncCanvasToEditor();
   }
 
-  function addSignature() {
+  function addSignature(
+    text = "Your Signature",
+    fontFamily = "cursive",
+    color = "#111827",
+  ) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     saveCanvasState();
 
-    const signature = new IText("Your Signature", {
+    const signature = new IText(text, {
       left: 120,
       top: 120,
       fontSize: 36,
-      fontFamily: "cursive",
+      fontFamily,
       fontStyle: "italic",
-      fill: "#111827",
+      fill: color,
       editable: true,
     });
 
@@ -1896,52 +2266,177 @@ export function FabricProvider({
     syncCanvasToEditor();
   }
 
+  type TableDataState = {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string; textColor?: string; fontSize?: number }[][];
+    columnWidths?: number[];
+    rowHeights?: number[];
+    borderColor: string;
+    borderWidth: number;
+  };
+
+  function createTableGroup(
+    data: TableDataState,
+    position: { left: number; top: number; scaleX?: number; scaleY?: number; angle?: number; opacity?: number; elementId?: string } = { left: 100, top: 100 },
+  ) {
+    const columnWidths = Array.from({ length: data.columns }, (_, i) => Math.max(70, data.columnWidths?.[i] ?? Math.max(70, 360 / Math.max(1, data.columns))));
+    const rowHeights = Array.from({ length: data.rows }, (_, i) => Math.max(36, data.rowHeights?.[i] ?? 52));
+    data.columnWidths = columnWidths;
+    data.rowHeights = rowHeights;
+    const width = columnWidths.reduce((sum, value) => sum + value, 0);
+    const height = rowHeights.reduce((sum, value) => sum + value, 0);
+    const columnOffsets = columnWidths.map((_, i) => columnWidths.slice(0, i).reduce((sum, value) => sum + value, 0));
+    const rowOffsets = rowHeights.map((_, i) => rowHeights.slice(0, i).reduce((sum, value) => sum + value, 0));
+    const children: any[] = [];
+
+    data.cells.forEach((rowCells, row) => {
+      rowCells.forEach((cell, column) => {
+        children.push(new Rect({
+          left: columnOffsets[column],
+          top: rowOffsets[row],
+          width: columnWidths[column],
+          height: rowHeights[row],
+          fill: cell.backgroundColor || "#ffffff",
+          stroke: data.borderColor,
+          strokeWidth: data.borderWidth,
+          selectable: false,
+          evented: false,
+          originX: "left",
+          originY: "top",
+        }));
+        children.push(new Textbox(cell.text ?? "", {
+          left: columnOffsets[column] + 8,
+          top: rowOffsets[row] + 7,
+          width: Math.max(10, columnWidths[column] - 16),
+          height: Math.max(10, rowHeights[row] - 14),
+          fontSize: Math.max(8, Math.min(48, cell.fontSize ?? 14)),
+          fontFamily: "Arial",
+          fontWeight: row === 0 ? "bold" : "normal",
+          fill: cell.textColor || (row === 0 ? "#ffffff" : "#1f2937"),
+          textAlign: "center",
+          editable: false,
+          selectable: false,
+          evented: false,
+          originX: "left",
+          originY: "top",
+        } as any));
+      });
+    });
+
+    const group = new Group(children, {
+      left: position.left,
+      top: position.top,
+      width,
+      height,
+      scaleX: position.scaleX ?? 1,
+      scaleY: position.scaleY ?? 1,
+      angle: position.angle ?? 0,
+      opacity: position.opacity ?? 1,
+      originX: "left",
+      originY: "top",
+      subTargetCheck: false,
+      interactive: false,
+      objectCaching: false,
+    } as any);
+    applyObjectControls(group);
+    attachMetadata(group, "table", position.elementId ?? crypto.randomUUID());
+    (group as any).tableData = JSON.parse(JSON.stringify(data));
+    return group;
+  }
+
+  function updateSelectedTable(update: (data: TableDataState) => void) {
+    const canvas = canvasRef.current;
+    const current = selectedObject as any;
+    if (!canvas || current?.elementType !== "table" || !current.tableData) return;
+
+    saveCanvasState();
+    const data: TableDataState = JSON.parse(JSON.stringify(current.tableData));
+    update(data);
+    data.rows = data.cells.length;
+    data.columns = data.cells[0]?.length ?? 0;
+    if (data.rows < 1 || data.columns < 1) return;
+
+    const replacement = createTableGroup(data, {
+      left: current.left ?? 100,
+      top: current.top ?? 100,
+      scaleX: current.scaleX ?? 1,
+      scaleY: current.scaleY ?? 1,
+      angle: current.angle ?? 0,
+      opacity: current.opacity ?? 1,
+      elementId: current.elementId,
+    });
+    canvas.remove(current);
+    canvas.add(replacement);
+    canvas.setActiveObject(replacement);
+    setSelectedObject(replacement);
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+  }
+
+  function setTableCellText(row: number, column: number, text: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].text = text; });
+  }
+  function setTableCellTextColor(row: number, column: number, color: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].textColor = color; });
+  }
+  function setTableCellFontSize(row: number, column: number, size: number) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].fontSize = Math.max(8, Math.min(48, size)); });
+  }
+  function setTableColumnWidth(column: number, width: number) {
+    updateSelectedTable((data) => { data.columnWidths ??= Array(data.columns).fill(120); if (column >= 0 && column < data.columns) data.columnWidths[column] = Math.max(70, Math.min(500, width)); });
+  }
+  function setTableRowHeight(row: number, height: number) {
+    updateSelectedTable((data) => { data.rowHeights ??= Array(data.rows).fill(52); if (row >= 0 && row < data.rows) data.rowHeights[row] = Math.max(36, Math.min(300, height)); });
+  }
+  function setTableCellBackground(row: number, column: number, color: string) {
+    updateSelectedTable((data) => { if (data.cells[row]?.[column]) data.cells[row][column].backgroundColor = color; });
+  }
+  function setTableRowBackground(row: number, color: string) {
+    updateSelectedTable((data) => { data.cells[row]?.forEach((cell) => { cell.backgroundColor = color; }); });
+  }
+  function setTableColumnBackground(column: number, color: string) {
+    updateSelectedTable((data) => data.cells.forEach((row) => { if (row[column]) row[column].backgroundColor = color; }));
+  }
+  function setTableBorder(color: string, width: number) {
+    updateSelectedTable((data) => { data.borderColor = color; data.borderWidth = Math.max(0, Math.min(10, width)); });
+  }
+  function addTableRow() {
+    updateSelectedTable((data) => { data.cells.push(Array.from({ length: data.columns }, (_, i) => ({ text: `Cell ${data.rows + 1},${i + 1}`, backgroundColor: "#ffffff" }))); data.rowHeights ??= Array(data.rows).fill(52); data.rowHeights.push(52); });
+  }
+  function deleteTableRow(row: number) {
+    updateSelectedTable((data) => { if (data.rows > 1 && row >= 0 && row < data.rows) { data.cells.splice(row, 1); data.rowHeights?.splice(row, 1); } });
+  }
+  function addTableColumn() {
+    updateSelectedTable((data) => { data.cells.forEach((cells, i) => cells.push({ text: i === 0 ? `Header ${data.columns + 1}` : `Cell ${i + 1},${data.columns + 1}`, backgroundColor: i === 0 ? "#2563eb" : "#ffffff" })); data.columnWidths ??= Array(data.columns).fill(Math.max(70, 360 / Math.max(1, data.columns))); data.columnWidths.push(150); });
+  }
+  function deleteTableColumn(column: number) {
+    updateSelectedTable((data) => { if (data.columns > 1 && column >= 0 && column < data.columns) { data.cells.forEach((row) => row.splice(column, 1)); data.columnWidths?.splice(column, 1); } });
+  }
+
   function addTable() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     saveCanvasState();
-
-    const left = 100;
-    const top = 100;
-    const width = 360;
-    const height = 180;
-    const columns = 3;
     const rows = 4;
-    const objects: any[] = [];
-
-    for (let row = 0; row <= rows; row++) {
-      const y = (height / rows) * row;
-      const line = new Line([0, 0, width, 0], {
-        left,
-        top: top + y,
-        stroke: "#374151",
-        strokeWidth: 2,
-        selectable: true,
-        evented: true,
-      });
-
-      attachMetadata(line, "line");
-      objects.push(line);
-    }
-
-    for (let column = 0; column <= columns; column++) {
-      const x = (width / columns) * column;
-      const line = new Line([0, 0, 0, height], {
-        left: left + x,
-        top,
-        stroke: "#374151",
-        strokeWidth: 2,
-        selectable: true,
-        evented: true,
-      });
-
-      attachMetadata(line, "line");
-      objects.push(line);
-    }
-
-    objects.forEach((object) => canvas.add(object));
-    activateObject(objects[0]);
+    const columns = 3;
+    const data: TableDataState = {
+      rows,
+      columns,
+      borderColor: "#cbd5e1",
+      borderWidth: 1.5,
+      columnWidths: [150, 150, 150],
+      rowHeights: [56, 52, 52, 52],
+      cells: Array.from({ length: rows }, () => Array.from({ length: columns }, () => ({
+        text: "",
+        backgroundColor: "#ffffff",
+        textColor: "#1f2937",
+        fontSize: 14,
+      }))),
+    };
+    const table = createTableGroup(data);
+    canvas.add(table);
+    activateObject(table);
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -2056,6 +2551,35 @@ export function FabricProvider({
     updateSelectedText({ fill: color });
   }
 
+  function setTextShadow(
+    amount: number,
+    side: "all" | "top" | "bottom" | "left" | "right",
+    color: string,
+  ) {
+    if (!isTextSelected()) return;
+    const strength = Math.max(0, Math.min(50, Number(amount) || 0));
+    if (strength === 0) {
+      updateSelectedText({ shadow: null });
+      return;
+    }
+    const distance = Math.max(1, strength * 0.0 + Math.round(strength / 2));
+    const offsets = {
+      all: { x: 0, y: 0 },
+      top: { x: 0, y: -distance },
+      bottom: { x: 0, y: distance },
+      left: { x: -distance, y: 0 },
+      right: { x: distance, y: 0 },
+    }[side];
+    updateSelectedText({
+      shadow: new Shadow({
+        color,
+        blur: strength,
+        offsetX: offsets.x,
+        offsetY: offsets.y,
+      }),
+    });
+  }
+
   function setShapeColor(color: string) {
     const canvas = canvasRef.current;
     if (!canvas || !selectedObject) return;
@@ -2133,6 +2657,48 @@ export function FabricProvider({
       },
       true,
     );
+  }
+
+  function setTextBend(value: number) {
+    if (!isTextSelected() || !Number.isFinite(value)) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const amount = Math.max(-100, Math.min(100, Math.round(value)));
+    const object = selectedObject as IText & {
+      textBend?: number;
+      path?: Path | null;
+      setPositionByOrigin?: (point: any, originX: any, originY: any) => void;
+    };
+
+    // Keep the same visual top-left anchor while the path changes the text bounds.
+    const anchor = object.getPointByOrigin("left", "top");
+    saveCanvasState();
+
+    const nextPath = createTextBendPath(
+      Math.max(40, object.width || 40),
+      object.fontSize || 18,
+      amount,
+    );
+
+    object.set({
+      path: nextPath ?? null,
+      pathSide: "left",
+      pathAlign: "center",
+      pathStartOffset: 0,
+      textBend: amount,
+    } as any);
+
+    object.initDimensions();
+    if (typeof object.setPositionByOrigin === "function") {
+      object.setPositionByOrigin(anchor, "left", "top");
+    } else {
+      object.set({ left: anchor.x, top: anchor.y });
+    }
+    object.setCoords();
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
   }
 
   // UPDATED: justify alignment is now supported.
@@ -2789,6 +3355,7 @@ export function FabricProvider({
     selectObjectById,
 
     addText,
+    addTextCombination,
     addShape,
     addImage,
 
@@ -2799,12 +3366,14 @@ export function FabricProvider({
     decreaseFontSize,
     setFontSize,
     setTextColor,
+    setTextShadow,
     setShapeColor,
     setFontFamily,
     toggleBold,
     toggleItalic,
     setLineSpacing,
     setLetterSpacing,
+    setTextBend,
 
     alignObject,
     rotateSelected,
@@ -2826,6 +3395,21 @@ export function FabricProvider({
     addStickyNote,
     addSignature,
     addTable,
+    activeTableCell,
+    setActiveTableCell,
+    setTableCellText,
+    setTableCellTextColor,
+    setTableCellFontSize,
+    setTableColumnWidth,
+    setTableRowHeight,
+    setTableCellBackground,
+    setTableRowBackground,
+    setTableColumnBackground,
+    setTableBorder,
+    addTableRow,
+    deleteTableRow,
+    addTableColumn,
+    deleteTableColumn,
 
     saveCurrentDesign,
     downloadPNG,

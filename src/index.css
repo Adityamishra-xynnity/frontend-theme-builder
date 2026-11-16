@@ -1,7 +1,7 @@
 
+@import url("https://fonts.googleapis.com/css2?family=Alex%20Brush&family=Allura&family=Bad%20Script&family=Ballet&family=Bilbo&family=Birthstone&family=Birthstone%20Bounce&family=Bonheur%20Royale&family=Calligraffitti&family=Caveat&family=Cedarville%20Cursive&family=Charm&family=Clicker%20Script&family=Courgette&family=Damion&family=Dancing%20Script&family=Euphoria%20Script&family=Felipa&family=Fleur%20De%20Leah&family=Great%20Vibes&family=Homemade%20Apple&family=Italianno&family=Jim%20Nightshade&family=La%20Belle%20Aurore&family=Marck%20Script&family=Mea%20Culpa&family=MonteCarlo&family=Monsieur%20La%20Doulaise&family=Mr%20De%20Haviland&family=Mrs%20Saint%20Delafield&family=Mrs%20Sheppards&family=Nothing%20You%20Could%20Do&family=Norican&family=Pacifico&family=Parisienne&family=Petit%20Formal%20Script&family=Pinyon%20Script&family=Qwigley&family=Rochester&family=Rouge%20Script&family=Sacramento&family=Satisfy&family=Style%20Script&family=Tangerine&family=The%20Nautigal&family=Updock&family=Waterfall&family=WindSong&family=Yellowtail&family=Zeyada&display=swap");
+
 @import "tailwindcss";
-
-
 
 * {
   box-sizing: border-box;
@@ -46,13 +46,9 @@ a {
   text-decoration: none;
 }
 
-
-
 canvas {
   display: block;
 }
-
-
 
 .toolbar-button {
   min-width: 38px;
@@ -162,8 +158,6 @@ canvas {
   font-style: italic;
 }
 
-
-
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -173,13 +167,10 @@ textarea:focus-visible {
   outline-offset: 3px;
 }
 
-
 ::selection {
   background: #c7d2fe;
   color: #1e1b4b;
 }
-
-
 
 * {
   scrollbar-width: thin;
@@ -204,8 +195,6 @@ textarea:focus-visible {
   background: #94a3b8;
 }
 
-
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -216,4 +205,3 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
-

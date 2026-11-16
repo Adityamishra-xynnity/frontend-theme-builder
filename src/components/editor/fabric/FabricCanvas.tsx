@@ -11,6 +11,9 @@ import {
   Polygon,
   Line,
   Path,
+  Group,
+  Shadow,
+  Pattern,
   type FabricObject,
 } from "fabric";
 
@@ -21,6 +24,97 @@ import type {
   EditorElement,
   ElementType,
 } from "../../../types/editor";
+
+
+function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
+  const tile = document.createElement("canvas");
+  tile.width = 24;
+  tile.height = 24;
+  const context = tile.getContext("2d");
+  if (context) {
+    context.fillStyle = baseColor;
+    context.fillRect(0, 0, tile.width, tile.height);
+    context.strokeStyle = stripeColor;
+    context.lineWidth = 4;
+    context.lineCap = "butt";
+    for (let offset = -24; offset < 48; offset += 9) {
+      context.beginPath();
+      context.moveTo(offset, 24);
+      context.lineTo(offset + 24, 0);
+      context.stroke();
+    }
+  }
+  return new Pattern({ source: tile, repeat: "repeat" });
+}
+
+function applyOutsideStripedTextEffect(
+  object: any,
+  stripeColor: string,
+): void {
+  if (!object || object.__outsideStripedRenderApplied) return;
+
+  const originalRender = object._render;
+  if (typeof originalRender !== "function") return;
+
+  object._render = function (
+    this: any,
+    ctx: CanvasRenderingContext2D,
+  ) {
+    const foregroundFill = this.fill;
+
+    // Stripe color always follows the current text color.
+    const currentStripeColor =
+      typeof foregroundFill === "string"
+        ? foregroundFill
+        : stripeColor;
+
+    // Rebuild the stripe pattern only when the text color changes.
+    if (
+      !this.__outsideStripedPattern ||
+      this.__outsideStripedColor !== currentStripeColor
+    ) {
+      const tile = document.createElement("canvas");
+      tile.width = 24;
+      tile.height = 24;
+
+      const patternContext = tile.getContext("2d");
+
+      if (patternContext) {
+        patternContext.strokeStyle = currentStripeColor;
+        patternContext.lineWidth = 3.5;
+        patternContext.lineCap = "butt";
+
+        for (let offset = -24; offset < 48; offset += 8) {
+          patternContext.beginPath();
+          patternContext.moveTo(offset, 24);
+          patternContext.lineTo(offset + 24, 0);
+          patternContext.stroke();
+        }
+      }
+
+      this.__outsideStripedPattern = new Pattern({
+        source: tile,
+        repeat: "repeat",
+      });
+
+      this.__outsideStripedColor = currentStripeColor;
+    }
+
+    ctx.save();
+    ctx.translate(7, 7);
+
+    this.fill = this.__outsideStripedPattern;
+    originalRender.call(this, ctx);
+
+    ctx.restore();
+
+    this.fill = foregroundFill;
+    originalRender.call(this, ctx);
+  };
+
+  object.__outsideStripedRenderApplied = true;
+  object.__outsideStripedColor = stripeColor;
+}
 
 interface FabricEditorCanvasProps {
   pageWidth: number;
@@ -33,6 +127,13 @@ type FabricObjectWithMeta = FabricObject & {
   imageSrc?: string;
   shapeSides?: number;
   isFreehand?: boolean;
+  tableData?: {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string }[][];
+    borderColor: string;
+    borderWidth: number;
+  };
 };
 
 const DEFAULT_WIDTH = 1400;
@@ -46,6 +147,58 @@ function getObjectMeta(object: FabricObject): FabricObjectWithMeta {
   return object as FabricObjectWithMeta;
 }
 
+// Circular rotate-arrow cursor for Fabric rotation handle.
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M25 13A11 11 0 1 0 26 19" fill="none" stroke="#111111" stroke-width="2.8" stroke-linecap="round"/><path d="M20 5L27 12L18 14" fill="none" stroke="#111111" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)}") 16 16, auto`;
+
+function applyRotationCursor(object: FabricObject): void {
+  const rotationControl = object.controls?.mtr;
+
+  if (rotationControl) {
+    rotationControl.cursorStyle = ROTATE_CURSOR;
+  }
+}
+
+/**
+ * Creates the local baseline used by Fabric's native editable text-on-path
+ * rendering. Positive values bend upward; negative values bend downward.
+ */
+function createTextBendPath(
+  width: number,
+  fontSize: number,
+  bend: number,
+): Path | undefined {
+  const amount = Math.max(-100, Math.min(100, Number(bend) || 0));
+
+  if (Math.abs(amount) < 0.5) return undefined;
+
+  const safeWidth = Math.max(40, width || 40);
+
+  // Stronger curve intensity
+  const intensity = Math.abs(amount) / 100;
+
+  // Maximum curve height increases significantly
+  const amplitude = Math.max(
+    fontSize * 2,
+    safeWidth * 0.45,
+  ) * intensity;
+
+  // Positive = upward curve, Negative = downward curve
+  const controlY = amount > 0 ? -2 * amplitude : 2 * amplitude;
+
+  return new Path(
+    `M 0 0 Q ${safeWidth / 2} ${controlY} ${safeWidth} 0`,
+    {
+      fill: "",
+      stroke: "",
+      strokeWidth: 0,
+      objectCaching: false,
+      selectable: false,
+      evented: false,
+    },
+  );
+}
 function getElementSignature(elements: EditorElement[]): string {
   return JSON.stringify(
     elements.map((element) => ({
@@ -69,12 +222,14 @@ function getElementSignature(elements: EditorElement[]): string {
       textAlign: element.textAlign ?? "left",
       lineHeight: element.lineHeight ?? 1.16,
       charSpacing: element.charSpacing ?? 0,
+      textBend: element.textBend ?? 0,
       strokeColor: element.strokeColor ?? "",
       strokeWidth: element.strokeWidth ?? 0,
       lineDash: element.lineDash ?? [],
       shapeSides: element.shapeSides ?? 0,
       src: element.src ?? "",
       pathData: element.pathData ?? [],
+      tableData: element.tableData ?? null,
     })),
   );
 }
@@ -87,6 +242,7 @@ function applyElementMetadata(
 
   meta.elementId = element.id;
   meta.elementType = element.type;
+  (meta as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
 
   if (element.type === "image" && element.src) {
     meta.imageSrc = element.src;
@@ -98,27 +254,41 @@ function applyElementMetadata(
 
   // Keep freehand paths identifiable after a page rebuild.
   meta.isFreehand = Boolean(element.pathData?.length);
+
+  if (element.tableData) {
+    meta.tableData = JSON.parse(JSON.stringify(element.tableData));
+  }
 }
 
+/**
+ * Restores the saved properties of a Fabric object.
+ * Polygon geometry is normalized before construction, so the saved dimensions
+ * remain stable without multiplying scale or changing stroke thickness.
+ */
 function applyCommonProperties(
   object: FabricObject,
   element: EditorElement,
 ): void {
   object.set({
-    // Freehand Path data is serialized around its center point. Keep that
-    // origin when rebuilding it; all other objects use top-left coordinates.
     originX: element.pathData?.length ? "center" : "left",
     originY: element.pathData?.length ? "center" : "top",
+
     left: element.x,
     top: element.y,
+
+    // Do not multiply polygon scale during page rebuild.
+    // Repeated multiplication was making the shape border thicker.
     scaleX: element.scaleX ?? 1,
     scaleY: element.scaleY ?? 1,
+
     angle: element.angle ?? 0,
     opacity: element.opacity ?? 1,
     selectable: true,
     evented: true,
     objectCaching: false,
   });
+
+  object.setCoords();
 
   applyElementMetadata(object, element);
 }
@@ -163,30 +333,80 @@ function createStarPoints(
 
 function createCogPoints(teeth: number, width: number, height: number) {
   const count = Math.max(4, Math.min(24, teeth)) * 4;
+
   return Array.from({ length: count }, (_, i) => {
     const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
     const step = i % 4;
     const r = step === 0 || step === 3 ? 1 : 0.78;
-    return { x: width / 2 + Math.cos(angle) * width / 2 * r, y: height / 2 + Math.sin(angle) * height / 2 * r };
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
   });
 }
 
 function createFlowerPoints(petals: number, width: number, height: number) {
   const count = Math.max(4, Math.min(16, petals)) * 24;
+
   return Array.from({ length: count }, (_, i) => {
     const angle = (Math.PI * 2 * i) / count;
     const r = 0.68 + 0.32 * Math.cos(petals * angle);
-    return { x: width / 2 + Math.cos(angle) * width / 2 * r, y: height / 2 + Math.sin(angle) * height / 2 * r };
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
   });
 }
 
 function createOrganicPoints(variant: number, width: number, height: number) {
   return Array.from({ length: 80 }, (_, i) => {
     const angle = (i / 80) * Math.PI * 2;
-    const wave = Math.sin(angle * (variant + 2)) * 0.09 + Math.cos(angle * (variant + 3)) * 0.06;
+    const wave =
+      Math.sin(angle * (variant + 2)) * 0.09 +
+      Math.cos(angle * (variant + 3)) * 0.06;
     const r = 0.83 + wave;
-    return { x: width / 2 + Math.cos(angle) * width / 2 * r, y: height / 2 + Math.sin(angle) * height / 2 * r };
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
   });
+}
+
+
+/**
+ * Fabric Polygon derives its width and height from the minimum and maximum
+ * coordinates in the supplied points. For shapes such as odd-sided polygons,
+ * stars, flowers and organic shapes, the generated points do not always touch
+ * all four requested edges. Fabric therefore reports a smaller base size.
+ *
+ * Normalize the points to the requested local bounds before constructing the
+ * Polygon. This keeps width/height stable when a page is serialized and rebuilt,
+ * without changing scaleX/scaleY (which would also scale the stroke).
+ */
+function normalizePolygonPoints(
+  points: { x: number; y: number }[],
+  width: number,
+  height: number,
+): { x: number; y: number }[] {
+  if (points.length === 0) return points;
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+
+  const sourceWidth = maxX - minX;
+  const sourceHeight = maxY - minY;
+
+  if (sourceWidth <= 0 || sourceHeight <= 0) return points;
+
+  return points.map((point) => ({
+    x: ((point.x - minX) / sourceWidth) * width,
+    y: ((point.y - minY) / sourceHeight) * height,
+  }));
 }
 
 function createElementObject(
@@ -200,7 +420,71 @@ function createElementObject(
 
   let object: FabricObject | null = null;
 
-  if (
+  if (element.type === "table" && element.tableData) {
+    const tableData = element.tableData;
+    const rows = Math.max(1, tableData.rows);
+    const columns = Math.max(1, tableData.columns);
+    const cellWidth = width / columns;
+    const cellHeight = height / rows;
+    const borderColor = tableData.borderColor || "#cbd5e1";
+    const borderWidth = tableData.borderWidth ?? 1.5;
+    const children: FabricObject[] = [];
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const cell = tableData.cells?.[row]?.[column] ?? {
+          text: "",
+          backgroundColor: "#ffffff",
+        };
+
+        children.push(
+          new Rect({
+            left: column * cellWidth,
+            top: row * cellHeight,
+            width: cellWidth,
+            height: cellHeight,
+            fill: cell.backgroundColor || "#ffffff",
+            stroke: borderColor,
+            strokeWidth: borderWidth,
+            selectable: false,
+            evented: false,
+            originX: "left",
+            originY: "top",
+          }),
+          new Textbox(cell.text || "", {
+            left: column * cellWidth + 8,
+            top: row * cellHeight + 8,
+            width: Math.max(1, cellWidth - 16),
+            height: Math.max(1, cellHeight - 16),
+            fontSize: 14,
+            fontFamily: "Arial",
+            fontWeight: row === 0 ? "bold" : "normal",
+            fill: row === 0 ? "#ffffff" : "#1f2937",
+            textAlign: "center",
+            verticalAlign: "middle",
+            editable: false,
+            selectable: false,
+            evented: false,
+            splitByGrapheme: false,
+            originX: "left",
+            originY: "top",
+          } as any),
+        );
+      }
+    }
+
+    object = new Group(children, {
+      left: element.x,
+      top: element.y,
+      width,
+      height,
+      originX: "left",
+      originY: "top",
+      subTargetCheck: false,
+      interactive: false,
+      objectCaching: false,
+    } as any);
+  } else if (
     element.type === "heading" ||
     element.type === "subheading" ||
     element.type === "text"
@@ -211,12 +495,29 @@ function createElementObject(
       width,
       fontSize: element.fontSize ?? 32,
       fontFamily: element.fontFamily || "Arial",
-      fill: color,
+      fill: element.textEffect === "striped"
+        ? createStripedTextPattern(element.textStripeBaseColor ?? color, element.textStripeColor ?? "#FDBA74")
+        : color,
       fontWeight: element.fontWeight ?? "normal",
       fontStyle: element.fontStyle ?? "normal",
       textAlign: element.textAlign ?? "left",
       lineHeight: element.lineHeight ?? 1.16,
       charSpacing: element.charSpacing ?? 0,
+      path: createTextBendPath(width, element.fontSize ?? 32, element.textBend ?? 0),
+    pathSide: "left" as const,
+pathAlign: "center" as const,
+pathStartOffset: 0,
+      stroke: element.textStrokeColor,
+      strokeWidth: element.textStrokeWidth ?? 0,
+      paintFirst: "stroke" as const,
+      shadow: element.textShadow
+        ? new Shadow({
+            color: element.textShadow.color,
+            blur: element.textShadow.blur,
+            offsetX: element.textShadow.offsetX,
+            offsetY: element.textShadow.offsetY,
+          })
+        : undefined,
       // Match the padding used when text is first created in FabricContext.
       // Without this, a rebuilt body Textbox can appear offset after page copy.
       padding: 4,
@@ -237,6 +538,15 @@ function createElementObject(
                 : "Certificate Subheading"),
             textOptions,
           );
+    (object as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
+    (object as any).textEffect = element.textEffect ?? "none";
+    (object as any).textStripeColor = element.textStripeColor ?? "#FDBA74";
+    (object as any).textStripeBaseColor = element.textStripeBaseColor ?? color;
+    if (element.textEffect === "outside-striped") {
+      applyOutsideStripedTextEffect(object, element.textStripeColor ?? color);
+    }
+    (object as any).textStrokeColor = element.textStrokeColor;
+    (object as any).textStrokeWidth = element.textStrokeWidth ?? 0;
   } else if (
     element.type === "rectangle" ||
     element.type === "square"
@@ -277,11 +587,15 @@ function createElementObject(
     const isOutline = element.type === "star-outline";
 
     object = new Polygon(
-      createStarPoints(
-        points,
+      normalizePolygonPoints(
+        createStarPoints(
+          points,
+          width,
+          height,
+          isSquareStar ? 0.7 : 0.42,
+        ),
         width,
         height,
-        isSquareStar ? 0.7 : 0.42,
       ),
       {
         fill: isOutline
@@ -311,7 +625,11 @@ function createElementObject(
               : 6);
 
     object = new Polygon(
-      createPolygonPoints(sides, width, height),
+      normalizePolygonPoints(
+        createPolygonPoints(sides, width, height),
+        width,
+        height,
+      ),
       {
         fill: element.backgroundColor || color,
         stroke: strokeColor,
@@ -381,45 +699,202 @@ function createElementObject(
         originY: "top",
       });
     }
-  }
-
-  else {
+  } else {
     const type = element.type as string;
     const cog = type.match(/^cog-(4|6|8|10|12|16|20|24)$/);
-    const flowerMap: Record<string, number> = { flower: 6, "flower-5": 5, "flower-6": 6, "flower-8": 8, "flower-12": 12, "flower-daisy": 12, "flower-sunflower": 16, "flower-rose": 10, "flower-lotus": 8, "flower-lily": 6, "flower-tulip": 5, "flower-hibiscus": 5, "flower-cherry-blossom": 5, petal: 5, "petal-rounded": 6, "petal-pointed": 4 };
-    const organicMap: Record<string, number> = { "organic-blob": 1, "organic-blob-2": 2, "organic-blob-3": 3, "organic-cloud": 4, "organic-splash": 5, "organic-pebble": 6 };
+
+    const flowerMap: Record<string, number> = {
+      flower: 6,
+      "flower-5": 5,
+      "flower-6": 6,
+      "flower-8": 8,
+      "flower-12": 12,
+      "flower-daisy": 12,
+      "flower-sunflower": 16,
+      "flower-rose": 10,
+      "flower-lotus": 8,
+      "flower-lily": 6,
+      "flower-tulip": 5,
+      "flower-hibiscus": 5,
+      "flower-cherry-blossom": 5,
+      petal: 5,
+      "petal-rounded": 6,
+      "petal-pointed": 4,
+    };
+
+    const organicMap: Record<string, number> = {
+      "organic-blob": 1,
+      "organic-blob-2": 2,
+      "organic-blob-3": 3,
+      "organic-cloud": 4,
+      "organic-splash": 5,
+      "organic-pebble": 6,
+    };
+
     const fill = element.backgroundColor || color;
-    const outline = { fill, stroke: strokeColor, strokeWidth: strokeWidth || 2, objectCaching: false };
-    if (cog) object = new Polygon(createCogPoints(Number(cog[1]), width, height), outline);
-    else if (flowerMap[type]) object = new Polygon(createFlowerPoints(flowerMap[type], width, height), outline);
-    else if (organicMap[type]) object = new Polygon(createOrganicPoints(organicMap[type], width, height), outline);
-    else {
+
+    const outline = {
+      fill,
+      stroke: strokeColor,
+      strokeWidth: strokeWidth || 2,
+      objectCaching: false,
+    };
+
+    if (cog) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createCogPoints(Number(cog[1]), width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else if (flowerMap[type]) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createFlowerPoints(flowerMap[type], width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else if (organicMap[type]) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createOrganicPoints(organicMap[type], width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else {
       const paths: Record<string, string> = {
-        "organic-wave": `M 0 ${height*.39} Q ${width*.25} 0 ${width*.5} ${height*.39} T ${width} ${height*.39} L ${width} ${height} L 0 ${height} Z`,
-        "organic-wave-2": `M 0 ${height*.5} C ${width*.17} 0 ${width*.33} ${height} ${width*.5} ${height*.5} S ${width*.83} 0 ${width} ${height*.5} L ${width} ${height} L 0 ${height} Z`,
-        leaf: `M 0 ${height} Q ${width*.2} 0 ${width} 0 Q ${width*.9} ${height*.8} 0 ${height} Z`,
-        "leaf-rounded": `M 0 ${height} Q ${width*.1} 0 ${width} 0 Q ${width} ${height} 0 ${height} Z`,
-        "leaf-pointed": `M 0 ${height} Q ${width*.2} 0 ${width} 0 Q ${width*.7} ${height*.8} 0 ${height} Z`,
-        "leaf-pair": `M 0 ${height*.5} Q ${width*.1} 0 ${width*.5} 0 Q ${width*.5} ${height*.5} 0 ${height*.5} Z M ${width*.5} ${height} Q ${width*.55} ${height*.3} ${width} ${height*.3} Q ${width*.95} ${height} ${width*.5} ${height} Z`,
-        vine: `M 0 ${height} Q ${width*.25} ${height*.8} ${width*.2} ${height*.5} T ${width*.5} ${height*.2} T ${width} 0`,
-        "flow-document": `M 0 0 L ${width} 0 L ${width} ${height*.8} Q ${width*.75} ${height*1.1} ${width*.5} ${height*.85} Q ${width*.25} ${height*.65} 0 ${height*.85} Z`,
-        "speech-bubble": `M 0 0 L ${width} 0 L ${width} ${height*.8} L ${width*.3} ${height*.8} L ${width*.15} ${height} L ${width*.18} ${height*.8} L 0 ${height*.8} Z`,
-        "chat-bubble": `M ${width*.1} 0 L ${width*.9} 0 Q ${width} 0 ${width} ${height*.15} L ${width} ${height*.7} Q ${width} ${height*.85} ${width*.85} ${height*.85} L ${width*.3} ${height*.85} L ${width*.15} ${height} L ${width*.18} ${height*.85} L ${width*.1} ${height*.85} Q 0 ${height*.85} 0 ${height*.7} L 0 ${height*.15} Q 0 0 ${width*.1} 0 Z`,
-        "thought-bubble": `M ${width*.2} ${height*.2} C 0 ${height*.1} 0 ${height*.5} ${width*.15} ${height*.6} C 0 ${height} ${width*.5} ${height} ${width*.6} ${height*.8} C ${width} ${height} ${width} ${height*.4} ${width*.8} ${height*.3} C ${width*.7} 0 ${width*.3} 0 ${width*.2} ${height*.2} Z`,
+        "organic-wave": `M 0 ${height * 0.39} Q ${width * 0.25} 0 ${width * 0.5} ${height * 0.39} T ${width} ${height * 0.39} L ${width} ${height} L 0 ${height} Z`,
+        "organic-wave-2": `M 0 ${height * 0.5} C ${width * 0.17} 0 ${width * 0.33} ${height} ${width * 0.5} ${height * 0.5} S ${width * 0.83} 0 ${width} ${height * 0.5} L ${width} ${height} L 0 ${height} Z`,
+        leaf: `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.9} ${height * 0.8} 0 ${height} Z`,
+        "leaf-rounded": `M 0 ${height} Q ${width * 0.1} 0 ${width} 0 Q ${width} ${height} 0 ${height} Z`,
+        "leaf-pointed": `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.7} ${height * 0.8} 0 ${height} Z`,
+        "leaf-pair": `M 0 ${height * 0.5} Q ${width * 0.1} 0 ${width * 0.5} 0 Q ${width * 0.5} ${height * 0.5} 0 ${height * 0.5} Z M ${width * 0.5} ${height} Q ${width * 0.55} ${height * 0.3} ${width} ${height * 0.3} Q ${width * 0.95} ${height} ${width * 0.5} ${height} Z`,
+        vine: `M 0 ${height} Q ${width * 0.25} ${height * 0.8} ${width * 0.2} ${height * 0.5} T ${width * 0.5} ${height * 0.2} T ${width} 0`,
+        "flow-document": (() => {
+          // Fabric includes the path stroke in its reported width/height.
+          // Subtract it from the path coordinates so rebuilding this shape
+          // does not add the stroke size again on every page switch.
+          const documentStrokeWidth = strokeWidth || 2;
+          const pathWidth = Math.max(1, width - documentStrokeWidth);
+          const pathHeight = Math.max(1, height - documentStrokeWidth);
+
+          return `M 0 0 L ${pathWidth} 0 L ${pathWidth} ${pathHeight * 0.8} Q ${pathWidth * 0.75} ${pathHeight * (1 + Math.sqrt(3) / 10)} ${pathWidth * 0.5} ${pathHeight * 0.85} Q ${pathWidth * 0.25} ${pathHeight * 0.65} 0 ${pathHeight * 0.85} Z`;
+        })(),
+        "speech-bubble": `M 0 0 L ${width} 0 L ${width} ${height * 0.8} L ${width * 0.3} ${height * 0.8} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.8} L 0 ${height * 0.8} Z`,
+        "chat-bubble": `M ${width * 0.1} 0 L ${width * 0.9} 0 Q ${width} 0 ${width} ${height * 0.15} L ${width} ${height * 0.7} Q ${width} ${height * 0.85} ${width * 0.85} ${height * 0.85} L ${width * 0.3} ${height * 0.85} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.85} L ${width * 0.1} ${height * 0.85} Q 0 ${height * 0.85} 0 ${height * 0.7} L 0 ${height * 0.15} Q 0 0 ${width * 0.1} 0 Z`,
+        "thought-bubble": `M ${width * 0.2} ${height * 0.2} C 0 ${height * 0.1} 0 ${height * 0.5} ${width * 0.15} ${height * 0.6} C 0 ${height} ${width * 0.5} ${height} ${width * 0.6} ${height * 0.8} C ${width} ${height} ${width} ${height * 0.4} ${width * 0.8} ${height * 0.3} C ${width * 0.7} 0 ${width * 0.3} 0 ${width * 0.2} ${height * 0.2} Z`,
       };
-      if (paths[type]) object = new Path(paths[type], { ...outline, fill: type === "vine" ? "" : fill });
-      else if (type === "flow-process") object = new Rect({ width, height, ...outline });
-      else if (type === "flow-terminator" || type === "rounded-bubble") object = new Rect({ width, height, rx: Math.min(width, height) / 3, ry: Math.min(width, height) / 3, ...outline });
-      else if (type === "flow-connector") object = new Circle({ radius: Math.min(width, height) / 2, ...outline });
-      else if (type === "flow-decision") object = new Polygon([{x:width/2,y:0},{x:width,y:height/2},{x:width/2,y:height},{x:0,y:height/2}], outline);
-      else if (type === "flow-io") object = new Polygon([{x:width*.2,y:0},{x:width,y:0},{x:width*.8,y:height},{x:0,y:height}], outline);
-      else if (type === "flow-preparation") object = new Polygon([{x:width*.25,y:0},{x:width*.75,y:0},{x:width,y:height/2},{x:width*.75,y:height},{x:width*.25,y:height},{x:0,y:height/2}], outline);
-      else if (type === "flow-manual-input") object = new Polygon([{x:0,y:height*.25},{x:width,y:0},{x:width,y:height},{x:0,y:height}], outline);
+
+      if (paths[type]) {
+        object = new Path(paths[type], {
+          ...outline,
+          fill: type === "vine" ? "" : fill,
+        });
+      } else if (type === "flow-process") {
+        object = new Rect({ width, height, ...outline });
+      } else if (
+        type === "flow-terminator" ||
+        type === "rounded-bubble"
+      ) {
+        object = new Rect({
+          width,
+          height,
+          rx: Math.min(width, height) / 3,
+          ry: Math.min(width, height) / 3,
+          ...outline,
+        });
+      } else if (type === "flow-connector") {
+        object = new Circle({
+          radius: Math.min(width, height) / 2,
+          ...outline,
+        });
+      } else if (type === "flow-decision") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width / 2, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width / 2, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-io") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width * 0.2, y: 0 },
+              { x: width, y: 0 },
+              { x: width * 0.8, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-preparation") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width * 0.25, y: 0 },
+              { x: width * 0.75, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width * 0.75, y: height },
+              { x: width * 0.25, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-manual-input") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: 0, y: height * 0.25 },
+              { x: width, y: 0 },
+              { x: width, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      }
     }
   }
 
   if (object) {
     applyCommonProperties(object, element);
+
+    // Flow-document is a Fabric Path whose calculated bounds can differ
+    // slightly from the dimensions saved on the page (stroke + Bézier bounds).
+    // Keep its rendered size equal to the saved rendered size on every rebuild.
+    // This is intentionally limited to this one shape type.
+    if (element.type === "flow-document") {
+      const savedScaleX = element.scaleX ?? 1;
+      const savedScaleY = element.scaleY ?? 1;
+      const rebuiltWidth = Math.max(1, object.width ?? width);
+      const rebuiltHeight = Math.max(1, object.height ?? height);
+
+      object.set({
+        scaleX: (width * savedScaleX) / rebuiltWidth,
+        scaleY: (height * savedScaleY) / rebuiltHeight,
+      });
+      object.setCoords();
+    }
   }
 
   return object;
@@ -435,11 +910,23 @@ export default function FabricEditorCanvas({
   const [canvasScale, setCanvasScale] = useState(1);
   const [zoomPercent, setZoomPercent] = useState(100);
 
+  const [inlineTableEditor, setInlineTableEditor] = useState<{
+    row: number;
+    column: number;
+    text: string;
+    width: number;
+    height: number;
+    matrix: [number, number, number, number, number, number];
+  } | null>(null);
+
+  const inlineTableEditorRef = useRef<HTMLTextAreaElement | null>(null);
+
   const userZoomRef = useRef(1);
   const internalChangeRef = useRef(false);
   const mountedRef = useRef(false);
   const rebuildingCanvasRef = useRef(false);
   const imageLoadTokenRef = useRef(0);
+
   const {
     elements,
     backgroundColor,
@@ -451,17 +938,55 @@ export default function FabricEditorCanvas({
   const lastSyncedSignatureRef = useRef("");
   const canvasPageIdRef = useRef(activePageId);
   const latestSyncRef = useRef(syncElementsFromCanvas);
+
   latestSyncRef.current = syncElementsFromCanvas;
 
   const {
     canvasRef,
     selectedObject,
     setSelectedObject,
+    setActiveTableCell,
+    setTableCellText,
     convertCanvasToElements,
   } = useFabric();
 
   const safeWidth = Math.max(1, pageWidth || DEFAULT_WIDTH);
   const safeHeight = Math.max(1, pageHeight || DEFAULT_HEIGHT);
+
+  // Focus/select only when a cell editor is opened or the active cell changes.
+  // Do not depend on the whole editor state: that object also changes on every
+  // keystroke, and re-selecting the textarea then replaces the previous letter.
+  const inlineTableEditorRow = inlineTableEditor?.row;
+  const inlineTableEditorColumn = inlineTableEditor?.column;
+
+  useEffect(() => {
+    if (
+      inlineTableEditorRow === undefined ||
+      inlineTableEditorColumn === undefined
+    ) {
+      return;
+    }
+
+    const input = inlineTableEditorRef.current;
+
+    if (!input) return;
+
+    input.focus();
+    input.select();
+  }, [inlineTableEditorRow, inlineTableEditorColumn]);
+
+  function commitInlineTableEdit() {
+    if (!inlineTableEditor) return;
+
+    const { row, column, text } = inlineTableEditor;
+
+    setInlineTableEditor(null);
+    setTableCellText(row, column, text);
+  }
+
+  function cancelInlineTableEdit() {
+    setInlineTableEditor(null);
+  }
 
   function syncCanvasToEditor() {
     const canvas = canvasRef.current;
@@ -485,6 +1010,7 @@ export default function FabricEditorCanvas({
       getElementSignature(converted);
 
     internalChangeRef.current = true;
+
     latestSyncRef.current(converted, canvasPageIdRef.current);
   }
 
@@ -493,21 +1019,31 @@ export default function FabricEditorCanvas({
   useEffect(() => {
     registerCanvasSnapshotProvider(() => {
       const canvas = canvasRef.current;
+
       if (!canvas) return convertCanvasToElements();
 
       const activeObject = canvas.getActiveObject();
-      if (activeObject instanceof IText || activeObject instanceof Textbox) {
+
+      if (
+        activeObject instanceof IText ||
+        activeObject instanceof Textbox
+      ) {
         if (activeObject.isEditing) {
           activeObject.exitEditing();
         }
       }
 
       canvas.requestRenderAll();
+
       return convertCanvasToElements();
     });
 
     return () => registerCanvasSnapshotProvider(null);
-  }, [registerCanvasSnapshotProvider, canvasRef, convertCanvasToElements]);
+  }, [
+    registerCanvasSnapshotProvider,
+    canvasRef,
+    convertCanvasToElements,
+  ]);
 
   function applyZoom(nextZoom: number) {
     const clampedZoom = Math.max(
@@ -591,7 +1127,11 @@ export default function FabricEditorCanvas({
       syncCanvasToEditor();
     };
 
-    const handleObjectAdded = () => {
+    const handleObjectAdded = (event: { target: FabricObject }) => {
+      // Apply the custom cursor to new objects, including objects restored
+      // while rebuilding a page. This does not change rotation behaviour.
+      applyRotationCursor(event.target);
+
       if (
         internalChangeRef.current ||
         rebuildingCanvasRef.current
@@ -606,9 +1146,83 @@ export default function FabricEditorCanvas({
       setSelectedObject(canvas.getActiveObject() ?? null);
     };
 
-    const handleDoubleClick = (event: { target?: FabricObject }) => {
-      const target = event.target;
+    const handleDoubleClick = (event: any) => {
+      const target = event.target as
+        | FabricObjectWithMeta
+        | undefined;
 
+      // Double-clicking a table selects the exact cell.
+      if (target?.elementType === "table" && target.tableData) {
+        const pointer =
+          event.scenePoint ?? canvas.getScenePoint(event.e);
+
+        // Convert scene coordinates into the table's local coordinates.
+        const matrix = target.calcTransformMatrix();
+
+        const [a, b, c, d, e, f] = matrix;
+
+        const determinant = a * d - b * c;
+
+        if (!determinant) return;
+
+        const dx = pointer.x - e;
+        const dy = pointer.y - f;
+
+        const localX = (d * dx - c * dy) / determinant;
+        const localY = (-b * dx + a * dy) / determinant;
+
+        const x = localX + (target.width ?? 0) / 2;
+        const y = localY + (target.height ?? 0) / 2;
+
+        const rows = Math.max(1, target.tableData.rows);
+        const columns = Math.max(1, target.tableData.columns);
+
+        const cellWidth = (target.width ?? 1) / columns;
+        const cellHeight = (target.height ?? 1) / rows;
+
+        const row = Math.max(
+          0,
+          Math.min(rows - 1, Math.floor(y / cellHeight)),
+        );
+
+        const column = Math.max(
+          0,
+          Math.min(columns - 1, Math.floor(x / cellWidth)),
+        );
+
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        setActiveTableCell({ row, column });
+
+        // Place a real textarea over the selected cell. The table stays a single
+        // Fabric Group, so its move/rotate/resize behaviour remains unchanged.
+        const cellLeft =
+          -(target.width ?? 1) / 2 + column * cellWidth;
+
+        const cellTop =
+          -(target.height ?? 1) / 2 + row * cellHeight;
+
+        const left = a * cellLeft + c * cellTop + e;
+        const top = b * cellLeft + d * cellTop + f;
+
+        const existingText =
+          target.tableData.cells?.[row]?.[column]?.text ?? "";
+
+        setInlineTableEditor({
+          row,
+          column,
+          text: existingText,
+          width: cellWidth,
+          height: cellHeight,
+          matrix: [a, b, c, d, left, top],
+        });
+
+        canvas.requestRenderAll();
+
+        return;
+      }
+
+      // Preserve existing text double-click editing.
       if (target instanceof IText || target instanceof Textbox) {
         canvas.setActiveObject(target);
         setSelectedObject(target);
@@ -680,6 +1294,7 @@ export default function FabricEditorCanvas({
     if (!canvas) return;
 
     const incomingSignature = getElementSignature(elements);
+
     const currentSignature = getElementSignature(
       convertCanvasToElements(),
     );
@@ -743,10 +1358,14 @@ export default function FabricEditorCanvas({
                 top: element.y,
                 scaleX:
                   element.scaleX ??
-                  (element.width ? element.width / imageWidth : 1),
+                  (element.width
+                    ? element.width / imageWidth
+                    : 1),
                 scaleY:
                   element.scaleY ??
-                  (element.height ? element.height / imageHeight : 1),
+                  (element.height
+                    ? element.height / imageHeight
+                    : 1),
                 angle: element.angle ?? 0,
                 opacity: element.opacity ?? 1,
                 selectable: true,
@@ -758,7 +1377,10 @@ export default function FabricEditorCanvas({
               canvas.add(image);
             } catch (error) {
               if (isCurrentRebuild()) {
-                console.error("Unable to load canvas image:", error);
+                console.error(
+                  "Unable to load canvas image:",
+                  error,
+                );
               }
             }
 
@@ -805,7 +1427,11 @@ export default function FabricEditorCanvas({
     return () => {
       cancelled = true;
     };
-  }, [elements, backgroundColor, activePageId]);
+  }, [
+    elements,
+    backgroundColor,
+    activePageId,
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -830,7 +1456,10 @@ export default function FabricEditorCanvas({
         getObjectMeta(object).elementId === selectedMeta.elementId,
     );
 
-    if (matchingObject && canvas.getActiveObject() !== matchingObject) {
+    if (
+      matchingObject &&
+      canvas.getActiveObject() !== matchingObject
+    ) {
       canvas.setActiveObject(matchingObject);
       canvas.requestRenderAll();
     }
@@ -842,8 +1471,15 @@ export default function FabricEditorCanvas({
     if (!viewport) return;
 
     const updateFitScale = () => {
-      const availableWidth = Math.max(1, viewport.clientWidth - 48);
-      const availableHeight = Math.max(1, viewport.clientHeight - 24);
+      const availableWidth = Math.max(
+        1,
+        viewport.clientWidth - 48,
+      );
+
+      const availableHeight = Math.max(
+        1,
+        viewport.clientHeight - 24,
+      );
 
       const nextScale = Math.min(
         1,
@@ -857,6 +1493,7 @@ export default function FabricEditorCanvas({
     updateFitScale();
 
     const observer = new ResizeObserver(updateFitScale);
+
     observer.observe(viewport);
 
     window.addEventListener("resize", updateFitScale);
@@ -935,6 +1572,61 @@ export default function FabricEditorCanvas({
               ref={htmlCanvasRef}
               aria-label="Certificate editor canvas"
             />
+
+            {inlineTableEditor && (
+              <textarea
+                ref={inlineTableEditorRef}
+                aria-label={`Edit table cell row ${inlineTableEditor.row + 1}, column ${inlineTableEditor.column + 1}`}
+                value={inlineTableEditor.text}
+                onChange={(event) =>
+                  setInlineTableEditor((current) =>
+                    current
+                      ? {
+                          ...current,
+                          text: event.target.value,
+                        }
+                      : current,
+                  )
+                }
+                onBlur={commitInlineTableEdit}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelInlineTableEdit();
+                  } else if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                  ) {
+                    event.preventDefault();
+                    commitInlineTableEdit();
+                  }
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  position: "absolute",
+                  zIndex: 20,
+                  left: 0,
+                  top: 0,
+                  width: inlineTableEditor.width,
+                  height: inlineTableEditor.height,
+                  boxSizing: "border-box",
+                  padding: "7px 8px",
+                  margin: 0,
+                  resize: "none",
+                  overflow: "auto",
+                  border: "2px solid #2563eb",
+                  borderRadius: 0,
+                  outline: "none",
+                  background: "rgba(255,255,255,0.97)",
+                  color: "#1f2937",
+                  font: "14px Arial, sans-serif",
+                  textAlign: "center",
+                  transformOrigin: "top left",
+                  transform: `matrix(${inlineTableEditor.matrix.join(",")})`,
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
