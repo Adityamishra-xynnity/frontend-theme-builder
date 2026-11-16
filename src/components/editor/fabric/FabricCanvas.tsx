@@ -900,6 +900,17 @@ pathStartOffset: 0,
   return object;
 }
 
+type PageVisualConfig = Record<string, unknown>;
+
+function getPageBorderConfig(asset: { assetData: Record<string, unknown> } | null) {
+  return (asset?.assetData?.style ?? {}) as PageVisualConfig;
+}
+
+function getPageAnimationConfig(asset: { assetData: Record<string, unknown> } | null) {
+  return (asset?.assetData?.config ?? {}) as PageVisualConfig;
+}
+
+
 export default function FabricEditorCanvas({
   pageWidth,
   pageHeight,
@@ -931,6 +942,8 @@ export default function FabricEditorCanvas({
     elements,
     backgroundColor,
     activePageId,
+    borderAsset,
+    animationAsset,
     syncElementsFromCanvas,
     registerCanvasSnapshotProvider,
   } = useEditor();
@@ -952,6 +965,143 @@ export default function FabricEditorCanvas({
 
   const safeWidth = Math.max(1, pageWidth || DEFAULT_WIDTH);
   const safeHeight = Math.max(1, pageHeight || DEFAULT_HEIGHT);
+
+  const borderConfig = getPageBorderConfig(borderAsset);
+  const borderInset = Math.max(0, Number(borderConfig.inset ?? 18));
+  const borderWidth = Math.max(1, Number(borderConfig.width ?? 4));
+  const borderColor = String(borderConfig.color ?? "#C9A227");
+  const borderLineStyle = String(borderConfig.lineStyle ?? "solid");
+  const borderRadius = Math.max(0, Number(borderConfig.radius ?? 0));
+  const secondaryBorderColor = borderConfig.secondaryColor
+    ? String(borderConfig.secondaryColor)
+    : "";
+  const secondaryBorderWidth = Math.max(1, Number(borderConfig.secondaryWidth ?? 1));
+  const secondaryBorderGap = Math.max(1, Number(borderConfig.gap ?? 7));
+
+  const animationConfig = getPageAnimationConfig(animationAsset);
+  const animationEffect = String(animationConfig.effect ?? "fade-in");
+  const animationDuration = Math.max(100, Number(animationConfig.durationMs ?? 900));
+  const animationDelay = Math.max(0, Number(animationConfig.delayMs ?? 0));
+  const animationIterations = animationConfig.iterationCount === "infinite"
+    ? "infinite"
+    : String(Math.max(1, Number(animationConfig.iterationCount ?? 1)));
+  const animationTargetObjectRef = useRef<FabricObject | null>(null);
+
+  // Capture the object that was selected at the moment an animation is applied.
+  // Changing selection later must not transfer the animation to another object.
+  useEffect(() => {
+    animationTargetObjectRef.current = animationAsset
+      ? (selectedObject as FabricObject | null)
+      : null;
+  }, [animationAsset]);
+
+  // Animate only the currently selected Fabric object. The HTML canvas element
+  // and its viewport wrapper are deliberately never given CSS animations.
+  useEffect(() => {
+    const object = animationTargetObjectRef.current;
+    const canvas = canvasRef.current;
+    if (!animationAsset || !object || !canvas || object.canvas !== canvas) return;
+
+    const original = {
+      left: object.left ?? 0,
+      top: object.top ?? 0,
+      scaleX: object.scaleX ?? 1,
+      scaleY: object.scaleY ?? 1,
+      opacity: object.opacity ?? 1,
+      angle: object.angle ?? 0,
+      shadow: object.shadow ?? null,
+    };
+    const duration = animationDuration;
+    const delay = animationDelay;
+    const infinite = animationIterations === "infinite";
+    const totalIterations = infinite ? Number.POSITIVE_INFINITY : Math.max(1, Number(animationIterations));
+    let frame = 0;
+    let startTime = 0;
+    let stopped = false;
+
+    const restore = () => {
+      object.set(original);
+      object.setCoords();
+      canvas.requestRenderAll();
+    };
+
+    const tick = (now: number) => {
+      if (stopped) return;
+      if (!startTime) startTime = now;
+      const elapsed = Math.max(0, now - startTime - delay);
+      if (elapsed <= 0) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+
+      const completed = Math.floor(elapsed / duration);
+      if (completed >= totalIterations) {
+        restore();
+        return;
+      }
+      const progress = (elapsed % duration) / duration;
+      const wave = (1 - Math.cos(progress * Math.PI * 2)) / 2;
+      const next: Record<string, unknown> = {
+        left: original.left,
+        top: original.top,
+        scaleX: original.scaleX,
+        scaleY: original.scaleY,
+        opacity: original.opacity,
+        angle: original.angle,
+        shadow: original.shadow,
+      };
+
+      switch (animationEffect) {
+        case "fade-in":
+          next.opacity = original.opacity * (0.25 + 0.75 * progress);
+          break;
+        case "float":
+          next.top = original.top - 9 * wave;
+          break;
+        case "pulse":
+        case "gentle-zoom": {
+          const amount = animationEffect === "pulse" ? 0.07 : 0.045;
+          const factor = 1 + amount * wave;
+          next.scaleX = original.scaleX * factor;
+          next.scaleY = original.scaleY * factor;
+          break;
+        }
+        case "slide-up":
+          next.top = original.top - 18 * (1 - progress);
+          next.opacity = original.opacity * (0.65 + 0.35 * progress);
+          break;
+        case "soft-glow":
+        case "shimmer":
+          next.opacity = original.opacity * (0.82 + 0.18 * wave);
+          next.shadow = new Shadow({
+            color: animationEffect === "soft-glow" ? "rgba(251,191,36,0.75)" : "rgba(255,255,255,0.85)",
+            blur: animationEffect === "soft-glow" ? 5 + 12 * wave : 3 + 7 * wave,
+            offsetX: 0,
+            offsetY: 0,
+          });
+          break;
+        case "sparkle":
+          next.opacity = original.opacity * (0.45 + 0.55 * wave);
+          next.angle = original.angle + 2 * Math.sin(progress * Math.PI * 2);
+          break;
+        default:
+          next.scaleX = original.scaleX * (1 + 0.04 * wave);
+          next.scaleY = original.scaleY * (1 + 0.04 * wave);
+      }
+
+      object.set(next);
+      object.setCoords();
+      canvas.requestRenderAll();
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(frame);
+      restore();
+    };
+  }, [animationAsset, animationEffect, animationDuration, animationDelay, animationIterations, canvasRef]);
 
   // Focus/select only when a cell editor is opened or the active cell changes.
   // Do not depend on the whole editor state: that object also changes on every
@@ -1069,8 +1219,8 @@ export default function FabricEditorCanvas({
 
     if (!viewport) return;
 
-    const availableWidth = Math.max(1, viewport.clientWidth - 48);
-    const availableHeight = Math.max(1, viewport.clientHeight - 24);
+    const availableWidth = Math.max(1, viewport.clientWidth - 32);
+    const availableHeight = Math.max(1, viewport.clientHeight - 32);
 
     const nextScale = Math.min(
       1,
@@ -1470,37 +1620,78 @@ export default function FabricEditorCanvas({
 
     if (!viewport) return;
 
+    let animationFrame = 0;
+    let secondAnimationFrame = 0;
+
     const updateFitScale = () => {
-      const availableWidth = Math.max(
-        1,
-        viewport.clientWidth - 48,
-      );
+      // Wait for the editor flex layout to settle. This is important when
+      // DevTools is docked/undocked or the browser viewport changes.
+      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(secondAnimationFrame);
 
-      const availableHeight = Math.max(
-        1,
-        viewport.clientHeight - 24,
-      );
+      animationFrame = requestAnimationFrame(() => {
+        secondAnimationFrame = requestAnimationFrame(() => {
+          const currentViewport = viewportRef.current;
+          if (!currentViewport) return;
 
-      const nextScale = Math.min(
-        1,
-        availableWidth / safeWidth,
-        availableHeight / safeHeight,
-      );
+          // On a normal laptop/desktop viewport, keep the editor at its
+          // natural 100% zoom. Do not shrink the page just because the
+          // available vertical workspace is shorter than the paper.
+          // On narrow viewports (mobile, tablet, or a docked side DevTools
+          // viewport), automatically fit the page into the available area.
+          let nextScale = 1;
 
-      if (!Number.isFinite(nextScale)) return;
+          if (window.innerWidth < 1024) {
+            const availableWidth = Math.max(
+              1,
+              currentViewport.clientWidth - 32,
+            );
+
+            const availableHeight = Math.max(
+              1,
+              currentViewport.clientHeight - 32,
+            );
+
+            nextScale = Math.min(
+              1,
+              availableWidth / safeWidth,
+              availableHeight / safeHeight,
+            );
+          }
+
+          if (!Number.isFinite(nextScale)) return;
+
+          const fittedScale = Math.max(0.01, nextScale);
+
+          userZoomRef.current = fittedScale;
+          setCanvasScale(fittedScale);
+          setZoomPercent(Math.round(fittedScale * 100));
+        });
+      });
     };
 
     updateFitScale();
 
     const observer = new ResizeObserver(updateFitScale);
-
     observer.observe(viewport);
 
+    // Observe the parent too: flex siblings (sidebar/panel) can change the
+    // available canvas area without changing the outer browser dimensions.
+    if (viewport.parentElement) {
+      observer.observe(viewport.parentElement);
+    }
+
     window.addEventListener("resize", updateFitScale);
+    window.addEventListener("orientationchange", updateFitScale);
+    window.visualViewport?.addEventListener("resize", updateFitScale);
 
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", updateFitScale);
+      window.removeEventListener("orientationchange", updateFitScale);
+      window.visualViewport?.removeEventListener("resize", updateFitScale);
+      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(secondAnimationFrame);
     };
   }, [safeWidth, safeHeight]);
 
@@ -1550,15 +1741,19 @@ export default function FabricEditorCanvas({
 
       <div
         ref={viewportRef}
-        className="flex min-h-0 w-full flex-1 items-center justify-center overflow-auto p-3"
+        className="min-h-0 w-full flex-1 overflow-auto"
       >
-        <div
-          className="relative shrink-0 bg-white"
-          style={{
-            width: safeWidth * canvasScale,
-            height: safeHeight * canvasScale,
-          }}
-        >
+        {/* This inner flex surface centers the page whenever it fits.
+            If the page is wider than the viewport, it starts at the
+            left edge so the beginning of the canvas never gets clipped. */}
+        <div className="flex min-h-full w-max min-w-full items-start justify-center box-border p-3">
+          <div
+            className="relative shrink-0 bg-white"
+            style={{
+              width: safeWidth * canvasScale,
+              height: safeHeight * canvasScale,
+            }}
+          >
           <div
             className="absolute left-0 top-0"
             style={{
@@ -1627,6 +1822,34 @@ export default function FabricEditorCanvas({
                 }}
               />
             )}
+
+            {borderAsset && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute"
+                style={{
+                  zIndex: 25,
+                  inset: borderInset,
+                  border: `${borderWidth}px ${borderLineStyle} ${borderColor}`,
+                  borderRadius,
+                  boxSizing: "border-box",
+                }}
+              >
+                {secondaryBorderColor && (
+                  <span
+                    className="absolute pointer-events-none"
+                    style={{
+                      inset: secondaryBorderGap,
+                      border: `${secondaryBorderWidth}px solid ${secondaryBorderColor}`,
+                      borderRadius: Math.max(0, borderRadius - secondaryBorderGap),
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+          </div>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
-
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 
 import Toolbar from "../components/editor/Toolbar";
 import FabricEditorCanvas from "../components/editor/fabric/FabricCanvas";
@@ -64,6 +64,18 @@ export default function Editor() {
   const location = useLocation();
 
   const [activePanel, setActivePanel] = useState("elements");
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 768,
+  );
+  const [isTablet, setIsTablet] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.innerWidth >= 768 &&
+      window.innerWidth < 1024,
+  );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [tabletSidebarOpen, setTabletSidebarOpen] = useState(true);
 
   const [selectedTemplate, setSelectedTemplate] =
     useState<CertificateTemplate | null>(null);
@@ -89,7 +101,38 @@ export default function Editor() {
   const locationState = location.state as EditorLocationState | null;
   const savedDesign = locationState?.savedDesign;
 
-  // Load saved design or fetch a template from PostgreSQL.
+  useEffect(() => {
+    const updateViewportMode = () => {
+      const width = window.innerWidth;
+      const mobile = width < 768;
+      const tablet = width >= 768 && width < 1024;
+
+      setIsMobile(mobile);
+      setIsTablet(tablet);
+
+      if (!mobile) {
+        setMobileMenuOpen(false);
+        setMobilePanelOpen(false);
+      }
+
+      if (!tablet) {
+        setTabletSidebarOpen(true);
+      }
+    };
+
+    updateViewportMode();
+
+    // ResizeObserver on the canvas handles the actual fit. This listener only
+    // switches the editor navigation mode at the breakpoints.
+    window.addEventListener("resize", updateViewportMode);
+    window.visualViewport?.addEventListener("resize", updateViewportMode);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportMode);
+      window.visualViewport?.removeEventListener("resize", updateViewportMode);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -115,7 +158,6 @@ export default function Editor() {
       setTemplateError("");
       setTemplateLoading(true);
 
-      // Clear the previous canvas while the requested template loads.
       clearCanvas();
       setPageSettings("A4", "landscape");
 
@@ -125,8 +167,6 @@ export default function Editor() {
 
           setSelectedTemplate(template);
 
-          // Convert backend template response into the existing
-          // EditorContext loadTemplate() format.
           loadTemplate({
             id: template.templateKey,
             name: template.name,
@@ -161,7 +201,6 @@ export default function Editor() {
       };
     }
 
-    // /editor opens a fresh blank canvas.
     setSelectedTemplate(null);
     setTemplateError("");
     setTemplateLoading(false);
@@ -182,6 +221,13 @@ export default function Editor() {
   ]);
 
   const handlePanelChange = (panel: string) => {
+    if (isMobile) {
+      setActivePanel(panel);
+      setMobileMenuOpen(false);
+      setMobilePanelOpen(true);
+      return;
+    }
+
     setActivePanel((current) =>
       current === panel ? "" : panel,
     );
@@ -200,62 +246,89 @@ export default function Editor() {
   const dimensions = getCanvasDimensions(pageSize, orientation);
 
   return (
-    <main className="flex h-[calc(100dvh-72px)] min-h-0 w-full flex-col overflow-hidden bg-slate-100">
-      {/* Existing toolbar */}
-      <div className="sticky top-0 z-40 shrink-0 border-b border-slate-200 bg-white">
+    <main className="flex h-[calc(100dvh-72px)] min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-100">
+      <div className="sticky top-0 z-40 w-full min-w-0 shrink-0 border-b border-slate-200 bg-white">
         <Toolbar />
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Existing sidebar */}
-        <div className="z-20 h-full shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
-          <EditorSidebar
-            onPanelChange={handlePanelChange}
-            activePanel={activePanel}
-          />
-        </div>
-
-        {/* Existing editor panel */}
-        {activePanel !== "" && (
-          <div className="z-10 h-full w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white sm:w-72">
-            <EditorPanel
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {!isMobile && (!isTablet || tabletSidebarOpen) && (
+          <div className="z-20 h-full shrink-0 overflow-y-auto overscroll-contain border-r border-slate-200 bg-white">
+            <EditorSidebar
+              onPanelChange={handlePanelChange}
               activePanel={activePanel}
-              paperSize={pageSize}
-              orientation={orientation}
-              onPaperSizeChange={handlePaperSizeChange}
-              onOrientationChange={handleOrientationChange}
             />
           </div>
         )}
 
-        {/* Main canvas area */}
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-slate-100">
-          {/* Page actions and page tabs */}
-          <div className="sticky left-0 top-0 z-10 border-b border-slate-200/80 bg-white/95 px-5 py-3 backdrop-blur-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-lg font-bold text-slate-900">
-                  Certificate Editor
-                </h1>
+        {!isMobile &&
+          activePanel !== "" &&
+          (!isTablet || tabletSidebarOpen) && (
+            <div className="z-10 h-full w-64 min-w-0 shrink-0 overflow-y-auto overscroll-contain border-r border-slate-200 bg-white lg:w-72">
+              <EditorPanel
+                activePanel={activePanel}
+                paperSize={pageSize}
+                orientation={orientation}
+                onPaperSizeChange={handlePaperSizeChange}
+                onOrientationChange={handleOrientationChange}
+              />
+            </div>
+          )}
 
-                <p className="mt-0.5 truncate text-sm text-slate-500">
-                  {savedDesign
-                    ? `Editing: ${savedDesign.name}`
-                    : templateLoading
-                      ? "Loading template..."
-                      : selectedTemplate
-                        ? `Editing: ${selectedTemplate.name}`
-                        : templateError
-                          ? templateError
-                          : "Create your certificate from a blank canvas."}
-                </p>
+        <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-100">
+          <div className="sticky left-0 top-0 z-10 shrink-0 border-b border-slate-200/80 bg-white/95 px-2 py-2 backdrop-blur-sm sm:px-4 sm:py-3 lg:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                {(isMobile || isTablet) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isMobile) {
+                        setMobileMenuOpen(true);
+                      } else {
+                        setTabletSidebarOpen((open) => !open);
+                      }
+                    }}
+                    aria-label={
+                      isMobile
+                        ? "Open editor panels"
+                        : tabletSidebarOpen
+                          ? "Collapse editor panels"
+                          : "Open editor panels"
+                    }
+                    aria-expanded={
+                      isMobile ? mobileMenuOpen : tabletSidebarOpen
+                    }
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <Menu size={19} />
+                  </button>
+                )}
+
+                <div className="min-w-0">
+                  <h1 className="truncate text-base font-bold text-slate-900 sm:text-lg">
+                    Certificate Editor
+                  </h1>
+
+                  <p className="mt-0.5 max-w-full truncate text-xs text-slate-500 sm:text-sm">
+                    {savedDesign
+                      ? `Editing: ${savedDesign.name}`
+                      : templateLoading
+                        ? "Loading template..."
+                        : selectedTemplate
+                          ? `Editing: ${selectedTemplate.name}`
+                          : templateError
+                            ? templateError
+                            : "Create your certificate from a blank canvas."}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:gap-2">
                 <button
                   type="button"
                   onClick={addPage}
-                  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                  className="flex-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 sm:flex-none sm:px-3 sm:text-sm"
                 >
                   + Add Page
                 </button>
@@ -263,7 +336,7 @@ export default function Editor() {
                 <button
                   type="button"
                   onClick={copyPage}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:flex-none sm:px-3 sm:text-sm"
                 >
                   Copy Page
                 </button>
@@ -277,23 +350,22 @@ export default function Editor() {
                       ? "At least one page must remain"
                       : "Delete selected page"
                   }
-                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex-1 rounded-lg border border-red-200 bg-white px-2 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-3 sm:text-sm"
                 >
                   Delete Page
                 </button>
               </div>
             </div>
 
-            {/* Show tabs when there is more than one page */}
             {pages.length > 1 && (
-              <div className="mt-3 flex min-w-0 gap-2 overflow-x-auto pb-1">
+              <div className="mt-2 flex min-w-0 gap-2 overflow-x-auto pb-1 sm:mt-3">
                 {pages.map((page, index) => (
                   <button
                     key={page.id}
                     type="button"
                     onClick={() => selectPage(page.id)}
                     aria-pressed={page.id === activePageId}
-                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition sm:text-sm ${
                       page.id === activePageId
                         ? "border-blue-600 bg-blue-600 text-white shadow-sm"
                         : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
@@ -306,15 +378,8 @@ export default function Editor() {
             )}
           </div>
 
-          {/* Existing Fabric canvas */}
-          <div className="flex min-h-full min-w-full items-center justify-center p-5 sm:p-8">
-            <div
-              className="shrink-0 bg-white"
-              style={{
-                width: dimensions.width,
-                height: dimensions.height,
-              }}
-            >
+          <div className="flex min-h-0 min-w-0 w-full flex-1 items-center justify-center p-1.5 sm:p-3 lg:p-5">
+            <div className="h-full min-h-0 w-full min-w-0">
               <FabricEditorCanvas
                 pageWidth={dimensions.width}
                 pageHeight={dimensions.height}
@@ -323,6 +388,85 @@ export default function Editor() {
           </div>
         </section>
       </div>
+
+      {/* Mobile navigation: parent owns scrolling; the sidebar itself does not
+          create a second nested scroll area. */}
+      {isMobile && mobileMenuOpen && (
+        <div className="fixed inset-0 z-[90]">
+          <button
+            type="button"
+            aria-label="Close editor navigation"
+            onClick={() => setMobileMenuOpen(false)}
+            className="absolute inset-0 h-full w-full bg-slate-950/40"
+          />
+
+          <div className="absolute inset-y-0 left-0 flex w-[112px] max-w-[85vw] flex-col overflow-hidden bg-white shadow-2xl">
+            <div className="flex h-14 shrink-0 items-center justify-center border-b border-slate-200 px-2">
+              <span className="text-xs font-bold text-slate-900">
+                Editor panels
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close editor navigation"
+                className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+              <EditorSidebar
+                onPanelChange={handlePanelChange}
+                activePanel={activePanel}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The selected tool panel is a bottom sheet on phones. */}
+      {isMobile && mobilePanelOpen && activePanel !== "" && (
+        <div className="fixed inset-0 z-[80]">
+          <button
+            type="button"
+            aria-label="Close selected editor panel"
+            onClick={() => setMobilePanelOpen(false)}
+            className="absolute inset-0 h-full w-full bg-slate-950/40"
+          />
+
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[82dvh] min-h-[45dvh] flex-col overflow-hidden rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl">
+            <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 px-4">
+              <span className="text-sm font-bold capitalize text-slate-900">
+                {activePanel === "html-import"
+                  ? "HTML Import"
+                  : activePanel === "page-size"
+                    ? "Page Size"
+                    : activePanel}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setMobilePanelOpen(false)}
+                aria-label="Close selected editor panel"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <EditorPanel
+                activePanel={activePanel}
+                paperSize={pageSize}
+                orientation={orientation}
+                onPaperSizeChange={handlePaperSizeChange}
+                onOrientationChange={handleOrientationChange}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

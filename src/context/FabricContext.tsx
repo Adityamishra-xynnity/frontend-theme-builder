@@ -225,6 +225,7 @@ interface FabricContextType {
   selectObjectById: (id: string) => void;
 
   addText: (type?: TextElementType) => void;
+  addEmoji: (emoji: string) => void;
   addTextCombination: (items: Array<{
     text: string;
     fontSize: number;
@@ -1383,6 +1384,51 @@ export function FabricProvider({
 
     canvas.add(textObject);
     activateObject(textObject);
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+  }
+
+  function addEmoji(emoji: string) {
+    const canvas = canvasRef.current;
+    const value = emoji.trim();
+
+    if (!canvas || !value) return;
+
+    saveCanvasState();
+
+    // Emojis are stored as normal editable text elements so the existing
+    // selection, transform, save/load, undo/redo and export flows keep working.
+    const emojiObject = new Textbox(value, {
+      left: 100,
+      top: 100,
+      width: 110,
+      fontSize: 72,
+      fontFamily: "Segoe UI Emoji",
+      fill: "#111827",
+      fontWeight: "normal",
+      fontStyle: "normal",
+      lineHeight: 1,
+      charSpacing: 0,
+      textAlign: "center",
+      originX: "left",
+      originY: "top",
+      editable: true,
+      selectable: true,
+      evented: true,
+      padding: 4,
+      transparentCorners: false,
+      cornerColor: "#2563eb",
+      cornerStyle: "circle",
+      borderColor: "#2563eb",
+      splitByGrapheme: false,
+      objectCaching: false,
+    });
+
+    applyObjectControls(emojiObject);
+    attachMetadata(emojiObject, "text");
+
+    canvas.add(emojiObject);
+    activateObject(emojiObject);
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -3355,6 +3401,7 @@ export function FabricProvider({
     selectObjectById,
 
     addText,
+    addEmoji,
     addTextCombination,
     addShape,
     addImage,
