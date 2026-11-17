@@ -1,4 +1,3 @@
-
 import {
   Canvas as FabricCanvas,
   FabricImage,
@@ -14,15 +13,15 @@ import {
   Group,
   Shadow,
   Pattern,
+  loadSVGFromString,
+  util,
+  type FabricObject,
 } from "fabric";
 
 import {
-  createContext,
-  useContext,
   useRef,
   useState,
   useEffect,
-  type MutableRefObject,
   type ReactNode,
 } from "react";
 
@@ -33,19 +32,23 @@ import type {
   ElementType,
   EditorElement,
 } from "../types/editor";
+import type {
+  GraphicAsset,
+  GraphicAnimationConfig,
+  GraphicAnimationType,
+} from "../types/graphics";
+import { graphicAnimationRuntime } from "../utils/graphicAnimationRuntime";
 
-type ToolMode =
-  | "select"
-  | "pen"
-  | "marker"
-  | "highlighter"
-  | "eraser";
+import {
+  FabricContext,
+  type FabricContextType,
+  type ShapeElementType,
+  type ToolMode,
+  type DrawingSettings,
+  type TextElementType,
+} from "./useFabric";
 
-type DrawingSettings = {
-  color: string;
-  width: number;
-  opacity: number;
-};
+export type { ShapeElementType, FabricContextType };
 
 type FabricObjectWithMeta = {
   elementId?: string;
@@ -65,6 +68,14 @@ type FabricObjectWithMeta = {
     borderColor: string;
     borderWidth: number;
   };
+  graphicId?: number | string;
+  graphicKey?: string;
+  graphicCategory?: string;
+  svgContent?: string;
+  colorPalette?: string[];
+  isAnimated?: boolean;
+  animationConfig?: GraphicAnimationConfig;
+  animationType?: GraphicAnimationType;
 };
 
 
@@ -160,8 +171,6 @@ function applyOutsideStripedTextEffect(
   object.__outsideStripedColor = stripeColor;
 }
 
-type TextElementType = "heading" | "subheading" | "text";
-
 /**
  * Creates the local baseline used by Fabric's native editable text-on-path
  * rendering. Positive values bend upward; negative values bend downward.
@@ -202,113 +211,6 @@ function createTextBendPath(
   );
 }
 
-
-export type ShapeElementType =
-  | "rectangle" | "circle" | "triangle" | "square" | "polygon"
-  | "pentagon" | "hexagon" | "heptagon" | "octagon"
-  | "line" | "arrow" | "double-arrow" | "dashed-line" | "dotted-line"
-  | "star" | "star-outline" | "star-4" | "star-6" | "star-8" | "star-12"
-  | "square-star-4" | "square-star-8" | "square-star-12" | "square-star-16" | "square-star-24" | "square-star-32"
-  | "cog-4" | "cog-6" | "cog-8" | "cog-10" | "cog-12" | "cog-16" | "cog-20" | "cog-24"
-  | "organic-blob" | "organic-blob-2" | "organic-blob-3" | "organic-wave" | "organic-wave-2" | "organic-cloud" | "organic-splash" | "organic-pebble"
-  | "flower" | "flower-5" | "flower-6" | "flower-8" | "flower-12" | "flower-daisy" | "flower-sunflower" | "flower-rose" | "flower-lotus" | "flower-lily" | "flower-tulip" | "flower-hibiscus" | "flower-cherry-blossom"
-  | "leaf" | "leaf-rounded" | "leaf-pointed" | "leaf-pair" | "petal" | "petal-rounded" | "petal-pointed" | "vine"
-  | "flow-process" | "flow-decision" | "flow-terminator" | "flow-io" | "flow-document" | "flow-connector" | "flow-preparation" | "flow-manual-input"
-  | "speech-bubble" | "chat-bubble" | "thought-bubble" | "rounded-bubble";
-
-interface FabricContextType {
-  canvasRef: MutableRefObject<FabricCanvas | null>;
-  selectedObject: any;
-  setSelectedObject: (object: any) => void;
-
-  convertCanvasToElements: () => EditorElement[];
-  selectObjectById: (id: string) => void;
-
-  addText: (type?: TextElementType) => void;
-  addEmoji: (emoji: string) => void;
-  addTextCombination: (items: Array<{
-    text: string;
-    fontSize: number;
-    fontFamily: string;
-    fill: string;
-    fontWeight?: string;
-    fontStyle?: string;
-    charSpacing?: number;
-    textAlign?: "left" | "center" | "right";
-    textEffect?: "none" | "neon" | "outline" | "3d" | "retro" | "striped" | "outside-striped";
-    textStripeColor?: string;
-    textStripeBaseColor?: string;
-    textStrokeColor?: string;
-    textStrokeWidth?: number;
-  }>) => void;
-  addShape: (type: ShapeElementType) => void;
-  addImage: (dataUrl: string) => void;
-
-  deleteSelected: () => void;
-  duplicateSelected: () => void;
-
-  increaseFontSize: () => void;
-  decreaseFontSize: () => void;
-  setFontSize: (size: number) => void;
-  setTextColor: (color: string) => void;
-  setTextShadow: (amount: number, side: "all" | "top" | "bottom" | "left" | "right", color: string) => void;
-  setShapeColor: (color: string) => void;
-  setFontFamily: (fontFamily: string) => void;
-  toggleBold: () => void;
-  toggleItalic: () => void;
-  setLineSpacing: (value: number) => void;
-  setLetterSpacing: (value: number) => void;
-  setTextBend: (value: number) => void;
-
-  alignObject: (
-    alignment: "left" | "center" | "right" | "justify"
-  ) => void;
-
-  rotateSelected: (degrees: number) => void;
-
-  bringForward: () => void;
-  sendBackward: () => void;
-  bringToFront: () => void;
-  sendToBack: () => void;
-
-  undo: () => void;
-  redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  selectedFontSize: number | null;
-
-  setToolMode: (mode: ToolMode) => void;
-  setDrawingSettings: (
-    settings: Partial<DrawingSettings>
-  ) => void;
-
-  addStickyNote: () => void;
-  addSignature: (text?: string, fontFamily?: string, color?: string) => void;
-  addTable: () => void;
-  activeTableCell: { row: number; column: number } | null;
-  setActiveTableCell: (cell: { row: number; column: number } | null) => void;
-  setTableCellText: (row: number, column: number, text: string) => void;
-  setTableCellTextColor: (row: number, column: number, color: string) => void;
-  setTableCellFontSize: (row: number, column: number, size: number) => void;
-  setTableColumnWidth: (column: number, width: number) => void;
-  setTableRowHeight: (row: number, height: number) => void;
-  setTableCellBackground: (row: number, column: number, color: string) => void;
-  setTableRowBackground: (row: number, color: string) => void;
-  setTableColumnBackground: (column: number, color: string) => void;
-  setTableBorder: (color: string, width: number) => void;
-  addTableRow: () => void;
-  deleteTableRow: (row: number) => void;
-  addTableColumn: () => void;
-  deleteTableColumn: (column: number) => void;
-
-  saveCurrentDesign: (name: string) => Promise<void>;
- downloadPNG: (pageIds?: string[]) => Promise<void>;
-  downloadPDF: (pageIds?: string[]) => void;
-}
-
-const FabricContext =
-  createContext<FabricContextType | null>(null);
-
 const SHAPE_TYPES: ElementType[] = [
   "rectangle", "square", "circle", "triangle", "polygon", "pentagon", "hexagon", "heptagon", "octagon",
   "star", "star-outline", "star-4", "star-6", "star-8", "star-12",
@@ -347,6 +249,14 @@ const SERIALIZED_PROPERTIES = [
   "pathSide",
   "pathAlign",
   "pathStartOffset",
+  "graphicId",
+  "graphicKey",
+  "graphicCategory",
+  "svgContent",
+  "colorPalette",
+  "isAnimated",
+  "animationConfig",
+  "animationType",
 ];
 
 function normalizeOpacity(value: number): number {
@@ -1034,7 +944,12 @@ export function FabricProvider({
       : null;
 
   function getCanvasJSON(canvas: FabricCanvas) {
-    return JSON.stringify(canvas.toObject(SERIALIZED_PROPERTIES));
+    const resume = graphicAnimationRuntime.pauseAndResetAllForExport();
+    try {
+      return JSON.stringify(canvas.toObject(SERIALIZED_PROPERTIES));
+    } finally {
+      resume();
+    }
   }
 
   function saveCanvasState() {
@@ -1090,24 +1005,33 @@ export function FabricProvider({
         ? object.getPointByOrigin("left", "top")
         : null;
 
+      const isRegisteredAnim = graphicAnimationRuntime.isRegistered(object);
+      const baseTransform = isRegisteredAnim
+        ? graphicAnimationRuntime.getBaseTransform(object)
+        : null;
+
       const element: EditorElement = {
         id: item.elementId ?? crypto.randomUUID(),
         type,
         // Freehand Path objects are reconstructed around their center origin.
         // Store that center point so eraser-created fragments keep the exact
         // same position after page switching and page duplication.
-        x: item.isFreehand && object.type === "path"
-          ? object.getCenterPoint().x
-          : textTopLeft?.x ?? object.left ?? 0,
-        y: item.isFreehand && object.type === "path"
-          ? object.getCenterPoint().y
-          : textTopLeft?.y ?? object.top ?? 0,
+        x: baseTransform
+          ? baseTransform.left
+          : item.isFreehand && object.type === "path"
+            ? object.getCenterPoint().x
+            : textTopLeft?.x ?? object.left ?? 0,
+        y: baseTransform
+          ? baseTransform.top
+          : item.isFreehand && object.type === "path"
+            ? object.getCenterPoint().y
+            : textTopLeft?.y ?? object.top ?? 0,
         width: object.width ?? 0,
         height: object.height ?? 0,
-        scaleX: object.scaleX ?? 1,
-        scaleY: object.scaleY ?? 1,
-        angle: object.angle ?? 0,
-        opacity: object.opacity ?? 1,
+        scaleX: baseTransform ? baseTransform.scaleX : (object.scaleX ?? 1),
+        scaleY: baseTransform ? baseTransform.scaleY : (object.scaleY ?? 1),
+        angle: baseTransform ? baseTransform.angle : (object.angle ?? 0),
+        opacity: baseTransform ? baseTransform.opacity : (object.opacity ?? 1),
       };
 
       if (object.type === "i-text" || object.type === "textbox") {
@@ -1216,6 +1140,21 @@ export function FabricProvider({
         element.tableData = JSON.parse(JSON.stringify(item.tableData));
       }
 
+      if (
+        item.elementType === "graphic" ||
+        item.elementType === "animated-graphic" ||
+        item.graphicKey
+      ) {
+        element.graphicId = item.graphicId;
+        element.graphicKey = item.graphicKey;
+        element.graphicCategory = item.graphicCategory;
+        element.svgContent = item.svgContent;
+        element.colorPalette = item.colorPalette ? [...item.colorPalette] : undefined;
+        element.isAnimated = item.isAnimated;
+        element.animationConfig = item.animationConfig ? { ...item.animationConfig } : undefined;
+        element.animationType = item.animationType;
+      }
+
       return element;
     });
   }
@@ -1294,6 +1233,8 @@ export function FabricProvider({
 
       rotateControl.cornerSize = 22;
     }
+
+    object.setCoords?.();
   }
 
   function attachMetadata(
@@ -1304,6 +1245,14 @@ export function FabricProvider({
       imageSrc?: string;
       shapeSides?: number;
       isFreehand?: boolean;
+      graphicId?: number | string;
+      graphicKey?: string;
+      graphicCategory?: string;
+      svgContent?: string;
+      colorPalette?: string[];
+      isAnimated?: boolean;
+      animationConfig?: GraphicAnimationConfig;
+      animationType?: GraphicAnimationType;
     },
   ) {
     const item = object as FabricObjectWithMeta;
@@ -1313,12 +1262,21 @@ export function FabricProvider({
     if (extra?.imageSrc) item.imageSrc = extra.imageSrc;
     if (extra?.shapeSides) item.shapeSides = extra.shapeSides;
     if (extra?.isFreehand) item.isFreehand = true;
+    if (extra?.graphicId !== undefined) item.graphicId = extra.graphicId;
+    if (extra?.graphicKey) item.graphicKey = extra.graphicKey;
+    if (extra?.graphicCategory) item.graphicCategory = extra.graphicCategory;
+    if (extra?.svgContent) item.svgContent = extra.svgContent;
+    if (extra?.colorPalette) item.colorPalette = extra.colorPalette;
+    if (extra?.isAnimated !== undefined) item.isAnimated = extra.isAnimated;
+    if (extra?.animationConfig) item.animationConfig = extra.animationConfig;
+    if (extra?.animationType) item.animationType = extra.animationType;
   }
 
   function activateObject(object: any) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    object?.setCoords?.();
     setToolMode("select");
     canvas.setActiveObject(object);
     setSelectedObject(object);
@@ -1724,6 +1682,207 @@ export function FabricProvider({
     } catch (error) {
       console.error("Image could not be loaded:", error);
     }
+  }
+
+  function extractColorsFromFabricGroup(group: any): string[] {
+    const colors = new Set<string>();
+    const traverse = (obj: any) => {
+      if (obj.getObjects && typeof obj.getObjects === "function") {
+        obj.getObjects().forEach(traverse);
+      }
+      const checkColor = (val: unknown) => {
+        if (typeof val === "string" && val && val !== "none" && val !== "transparent") {
+          const hex = val.trim();
+          if (/^#[0-9a-f]{3,8}$/i.test(hex)) {
+            colors.add(hex.toUpperCase());
+          }
+        }
+      };
+      checkColor(obj.fill);
+      checkColor(obj.stroke);
+    };
+    traverse(group);
+    return Array.from(colors).slice(0, 6);
+  }
+
+  async function addGraphic(graphic: GraphicAsset) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const svgString = graphic.assetData?.svgContent;
+    if (!svgString) {
+      console.warn("Cannot add graphic: svgContent is missing.");
+      return;
+    }
+
+    saveCanvasState();
+
+    try {
+      const { objects, options } = await loadSVGFromString(svgString);
+      const validObjects = objects.filter((o): o is FabricObject => o !== null);
+      if (validObjects.length === 0) {
+        console.warn("No valid objects parsed from SVG for graphic:", graphic.name);
+        return;
+      }
+
+      const group = util.groupSVGElements(validObjects, options);
+
+      // Disarm inner child objects so the group acts as a single atomic interactive object
+      if (typeof (group as any).forEachObject === "function") {
+        (group as any).forEachObject((child: any) => {
+          child.set({
+            selectable: false,
+            evented: false,
+          });
+        });
+      }
+
+      // Default sensible size: ~160px width or height, preserving aspect ratio
+      const origWidth = group.width || 120;
+      const origHeight = group.height || 120;
+      const targetDimension = 160;
+      const scale = targetDimension / Math.max(origWidth, origHeight);
+
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
+      const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
+
+      group.set({
+        originX: "left",
+        originY: "top",
+        left,
+        top,
+        scaleX: scale,
+        scaleY: scale,
+        angle: 0,
+        opacity: 1,
+        selectable: true,
+        evented: true,
+        subTargetCheck: false,
+        interactive: false,
+        hasControls: true,
+        hasBorders: true,
+        lockMovementX: false,
+        lockMovementY: false,
+        lockScalingX: false,
+        lockScalingY: false,
+        lockRotation: false,
+        cornerSize: 12,
+        touchCornerSize: 24,
+        objectCaching: false,
+      });
+
+      applyObjectControls(group);
+      group.setCoords();
+
+      const isAnimated =
+        graphic.assetData?.type === "animated" ||
+        Boolean(graphic.assetData?.animationConfig);
+      const animConfig = graphic.assetData?.animationConfig;
+      const animType: GraphicAnimationType | undefined =
+        animConfig?.type ?? (isAnimated ? "pulse" : undefined);
+      const elementId = crypto.randomUUID();
+
+      let palette = graphic.assetData?.colorPalette
+        ? [...graphic.assetData.colorPalette]
+        : [];
+      if (palette.length === 0) {
+        palette = extractColorsFromFabricGroup(group);
+      }
+
+      attachMetadata(group, isAnimated ? "animated-graphic" : "graphic", elementId, {
+        graphicId: graphic.id,
+        graphicKey: graphic.assetKey,
+        graphicCategory: graphic.category,
+        svgContent: svgString,
+        colorPalette: palette,
+        isAnimated,
+        animationConfig: animConfig ? { ...animConfig } : undefined,
+        animationType: animType,
+      });
+
+      canvas.add(group);
+      activateObject(group);
+      group.setCoords();
+      canvas.requestRenderAll();
+
+      if (isAnimated && animConfig) {
+        graphicAnimationRuntime.register(group, animConfig, elementId);
+      }
+
+      syncCanvasToEditor();
+    } catch (error) {
+      console.error("Graphic could not be loaded:", error);
+    }
+  }
+
+  function setGraphicColor(colorIndex: number, newColor: string) {
+    const canvas = canvasRef.current;
+    if (!canvas || !selectedObject) return;
+
+    const meta = selectedObject as FabricObjectWithMeta;
+    if (
+      !meta.colorPalette ||
+      !Array.isArray(meta.colorPalette) ||
+      colorIndex < 0 ||
+      colorIndex >= meta.colorPalette.length
+    ) {
+      return;
+    }
+
+    const oldColor = meta.colorPalette[colorIndex];
+    if (!oldColor || oldColor.toLowerCase() === newColor.toLowerCase()) return;
+
+    saveCanvasState();
+
+    const normalizeColorStr = (c: string) => {
+      c = c.trim().toLowerCase();
+      if (/^#[0-9a-f]{3}$/i.test(c)) {
+        return `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}`;
+      }
+      return c;
+    };
+
+    const oldNorm = normalizeColorStr(oldColor);
+
+    const recolorGroupItem = (obj: any) => {
+      if (obj.getObjects && typeof obj.getObjects === "function") {
+        obj.getObjects().forEach(recolorGroupItem);
+      }
+      if (typeof obj.fill === "string" && normalizeColorStr(obj.fill) === oldNorm) {
+        obj.set("fill", newColor);
+      }
+      if (typeof obj.stroke === "string" && normalizeColorStr(obj.stroke) === oldNorm) {
+        obj.set("stroke", newColor);
+      }
+    };
+
+    recolorGroupItem(selectedObject);
+
+    // Update palette array
+    const updatedPalette = [...meta.colorPalette];
+    updatedPalette[colorIndex] = newColor;
+    meta.colorPalette = updatedPalette;
+
+    // Update svgContent string so future page reconstructions reflect recolor
+    if (typeof meta.svgContent === "string") {
+      const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regexOld = new RegExp(escapeRegExp(oldColor), "gi");
+      meta.svgContent = meta.svgContent.replace(regexOld, newColor);
+      if (oldNorm !== oldColor.toLowerCase()) {
+        const regexNorm = new RegExp(escapeRegExp(oldNorm), "gi");
+        meta.svgContent = meta.svgContent.replace(regexNorm, newColor);
+      }
+    }
+
+    if (graphicAnimationRuntime.isRegistered(selectedObject)) {
+      graphicAnimationRuntime.updateBaseTransform(selectedObject);
+    }
+
+    selectedObject.dirty = true;
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
   }
 
   function configureDrawingBrush(
@@ -2492,6 +2651,9 @@ export function FabricProvider({
     if (!canvas || !selectedObject) return;
 
     saveCanvasState();
+    if (graphicAnimationRuntime.isRegistered(selectedObject)) {
+      graphicAnimationRuntime.unregister(selectedObject);
+    }
     canvas.remove(selectedObject);
     canvas.discardActiveObject();
     setSelectedObject(null);
@@ -2508,29 +2670,56 @@ export function FabricProvider({
     saveCanvasState();
 
     try {
+      const isRegisteredAnim = graphicAnimationRuntime.isRegistered(original);
+      const base = isRegisteredAnim
+        ? graphicAnimationRuntime.getBaseTransform(original)
+        : null;
+      const baseLeft = base ? base.left : (original.left ?? 0);
+      const baseTop = base ? base.top : (original.top ?? 0);
+
       const cloned = await original.clone(SERIALIZED_PROPERTIES);
 
       cloned.set({
-        left: (original.left ?? 0) + 20,
-        top: (original.top ?? 0) + 20,
+        left: baseLeft + 20,
+        top: baseTop + 20,
+        scaleX: base ? base.scaleX : (original.scaleX ?? 1),
+        scaleY: base ? base.scaleY : (original.scaleY ?? 1),
+        angle: base ? base.angle : (original.angle ?? 0),
+        opacity: base ? base.opacity : (original.opacity ?? 1),
       });
 
       const originalMeta = original as FabricObjectWithMeta;
+      const newId = crypto.randomUUID();
 
       attachMetadata(
         cloned,
         originalMeta.elementType ?? "text",
-        crypto.randomUUID(),
+        newId,
         {
           imageSrc: originalMeta.imageSrc,
           shapeSides: originalMeta.shapeSides,
           isFreehand: originalMeta.isFreehand,
+          graphicId: originalMeta.graphicId,
+          graphicKey: originalMeta.graphicKey,
+          graphicCategory: originalMeta.graphicCategory,
+          svgContent: originalMeta.svgContent,
+          colorPalette: originalMeta.colorPalette ? [...originalMeta.colorPalette] : undefined,
+          isAnimated: originalMeta.isAnimated,
+          animationConfig: originalMeta.animationConfig ? { ...originalMeta.animationConfig } : undefined,
+          animationType: originalMeta.animationType,
         },
       );
+
+      applyObjectControls(cloned);
 
       canvas.add(cloned);
       activateObject(cloned);
       canvas.requestRenderAll();
+
+      if (originalMeta.isAnimated && originalMeta.animationConfig) {
+        graphicAnimationRuntime.register(cloned, originalMeta.animationConfig, newId);
+      }
+
       syncCanvasToEditor();
     } catch (error) {
       console.error("Could not duplicate object:", error);
@@ -2767,6 +2956,9 @@ export function FabricProvider({
     });
 
     selectedObject.setCoords();
+    if (graphicAnimationRuntime.isRegistered(selectedObject)) {
+      graphicAnimationRuntime.updateBaseTransform(selectedObject);
+    }
     canvas.requestRenderAll();
     syncCanvasToEditor();
   }
@@ -2839,7 +3031,26 @@ export function FabricProvider({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Unregister any active animations before restoring snapshot
+    canvas.getObjects().forEach((obj) => {
+      if (graphicAnimationRuntime.isRegistered(obj)) {
+        graphicAnimationRuntime.unregister(obj);
+      }
+    });
+
     await canvas.loadFromJSON(JSON.parse(snapshot));
+
+    // Re-register restored animated graphics
+    canvas.getObjects().forEach((obj) => {
+      const meta = obj as FabricObjectWithMeta;
+      if (
+        (meta.isAnimated || meta.elementType === "animated-graphic") &&
+        meta.animationConfig
+      ) {
+        graphicAnimationRuntime.register(obj, meta.animationConfig, meta.elementId);
+      }
+    });
+
     restoreSelection(selectionId);
     setToolMode(toolModeRef.current);
   }
@@ -2912,8 +3123,10 @@ export function FabricProvider({
   }
 
   async function downloadPNG(pageIds?: string[]) {
-    const initialCanvas = canvasRef.current;
-    if (!initialCanvas) return;
+    const resumeAnimations = graphicAnimationRuntime.pauseAndResetAllForExport();
+    try {
+      const initialCanvas = canvasRef.current;
+      if (!initialCanvas) return;
 
     // Save any text currently being edited before exporting.
     const editingObject = initialCanvas.getActiveObject();
@@ -3182,12 +3395,17 @@ export function FabricProvider({
 
       restoredCanvas?.requestRenderAll();
     }
+  } finally {
+    resumeAnimations();
   }
+}
 
 
   async function downloadPDF(pageIds?: string[]) {
-    const initialCanvas = canvasRef.current;
-    if (!initialCanvas) return;
+    const resumeAnimations = graphicAnimationRuntime.pauseAndResetAllForExport();
+    try {
+      const initialCanvas = canvasRef.current;
+      if (!initialCanvas) return;
 
     // Commit in-progress text editing before reading the page snapshot.
     const editingObject = initialCanvas.getActiveObject();
@@ -3390,7 +3608,10 @@ export function FabricProvider({
       }
       restoredCanvas?.requestRenderAll();
     }
+  } finally {
+    resumeAnimations();
   }
+}
 
   const value: FabricContextType = {
     canvasRef,
@@ -3405,6 +3626,8 @@ export function FabricProvider({
     addTextCombination,
     addShape,
     addImage,
+    addGraphic,
+    setGraphicColor,
 
     deleteSelected,
     duplicateSelected,
@@ -3468,16 +3691,4 @@ export function FabricProvider({
       {children}
     </FabricContext.Provider>
   );
-}
-
-export function useFabric() {
-  const context = useContext(FabricContext);
-
-  if (!context) {
-    throw new Error(
-      "useFabric must be used inside FabricProvider",
-    );
-  }
-
-  return context;
 }

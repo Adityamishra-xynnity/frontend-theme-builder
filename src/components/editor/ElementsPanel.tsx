@@ -16,12 +16,14 @@ import {
   Shapes,
   Sparkles,
   Frame,
+  Palette,
 } from "lucide-react";
 
-import { useFabric } from "../../context/FabricContext";
-import type { ShapeElementType } from "../../context/FabricContext";
+import { useFabric, type ShapeElementType } from "../../context/useFabric";
 import BordersPanel from "./BordersPanel";
 import AnimationsPanel from "./AnimationsPanel";
+import GraphicsBrowser from "./graphics/GraphicsBrowser";
+import StaticGraphicsBrowser from "./graphics/StaticGraphicsBrowser";
 
 // --------------------------------------------------
 // TYPES
@@ -133,7 +135,9 @@ type PanelView =
   | "photo-categories"
   | "photo-items"
   | "borders"
-  | "animations";
+  | "animations"
+  | "graphics"
+  | "animated-designs";
 
 // --------------------------------------------------
 // API CONFIGURATION
@@ -765,7 +769,7 @@ function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
 // --------------------------------------------------
 
 export default function ElementsPanel() {
-  const { addShape, addEmoji, addImage } = useFabric();
+  const { addShape, addEmoji, addImage, addGraphic } = useFabric();
 
   // --------------------------------------------------
   // SHAPES STATE
@@ -1595,7 +1599,9 @@ export default function ElementsPanel() {
     } else if (
       view === "categories" ||
       view === "emoji-categories" ||
-      view === "photo-categories"
+      view === "photo-categories" ||
+      view === "graphics" ||
+      view === "animated-designs"
     ) {
       setView("root");
       setSearch("");
@@ -1924,7 +1930,11 @@ export default function ElementsPanel() {
       ? "Borders"
       : view === "animations"
         ? "Animations"
-        : view === "root"
+        : view === "graphics"
+          ? "Graphics"
+          : view === "animated-designs"
+            ? "Animated Designs"
+            : view === "root"
       ? "Elements"
       : view === "categories"
         ? "Shapes"
@@ -1943,7 +1953,11 @@ export default function ElementsPanel() {
       ? "Choose a border for this page."
       : view === "animations"
         ? "Choose an animation for your design."
-        : view === "root"
+        : view === "graphics"
+          ? "Browse free editable vector illustrations."
+          : view === "animated-designs"
+            ? "Browse dynamic animated vector elements."
+            : view === "root"
       ? "Browse elements for your design."
       : view === "categories"
         ? "Choose a shape category."
@@ -1960,6 +1974,30 @@ export default function ElementsPanel() {
   // --------------------------------------------------
   // MAIN UI
   // --------------------------------------------------
+
+  if (view === "graphics") {
+    return (
+      <StaticGraphicsBrowser
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectGraphic={(graphic) => void addGraphic(graphic)}
+      />
+    );
+  }
+
+  if (view === "animated-designs") {
+    return (
+      <GraphicsBrowser
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectGraphic={(graphic) => void addGraphic(graphic)}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800">
@@ -2410,12 +2448,60 @@ export default function ElementsPanel() {
                 </button>
               )}
 
+            {view === "root" &&
+              ("graphic".includes(normalizedSearch) ||
+                "graphics".includes(normalizedSearch)) && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setView("graphics"); }}
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                    <Palette size={22} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-slate-900">
+                      Graphics
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Flowers, foliage, animals, fruit & objects
+                    </span>
+                  </span>
+                  <ChevronRight size={18} className="text-slate-400" />
+                </button>
+              )}
+
+            {view === "root" &&
+              ("animation".includes(normalizedSearch) ||
+                "animated".includes(normalizedSearch)) && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setView("animated-designs"); }}
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-md"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                    <Sparkles size={22} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-slate-900">
+                      Animated Designs
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Animated arrows, shapes, words & decorative art
+                    </span>
+                  </span>
+                  <ChevronRight size={18} className="text-slate-400" />
+                </button>
+              )}
+
             {filteredCategories.length === 0 &&
               !(
                 view === "root" &&
                 (
                   "emoji".includes(normalizedSearch) ||
                   "photo".includes(normalizedSearch) ||
+                  "graphic".includes(normalizedSearch) ||
+                  "animation".includes(normalizedSearch) ||
                   EMOJI_CATEGORIES.some((category) =>
                     category.title.toLowerCase().includes(normalizedSearch),
                   ) ||
@@ -2442,6 +2528,58 @@ export default function ElementsPanel() {
 
         ) : view === "root" ? (
           <div className="space-y-3">
+            {/* 1. GRAPHICS (STATIC VECTOR LIBRARY) */}
+            <button
+              type="button"
+              onClick={() => { setSearch(""); setView("graphics"); }}
+              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                <Palette size={22} />
+              </span>
+
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-slate-900">
+                  Graphics
+                </span>
+
+                <span className="mt-1 block text-xs text-slate-500">
+                  Flowers, foliage, animals, fruit & objects
+                </span>
+              </span>
+
+              <ChevronRight
+                size={18}
+                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
+              />
+            </button>
+
+            {/* 2. ANIMATED DESIGNS (DYNAMIC ANIMATIONS LIBRARY) */}
+            <button
+              type="button"
+              onClick={() => { setSearch(""); setView("animated-designs"); }}
+              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-100"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                <Sparkles size={22} />
+              </span>
+
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-slate-900">
+                  Animated Designs
+                </span>
+
+                <span className="mt-1 block text-xs text-slate-500">
+                  Animated arrows, shapes, words & decorative art
+                </span>
+              </span>
+
+              <ChevronRight
+                size={18}
+                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-purple-600"
+              />
+            </button>
+
             <button
               type="button"
               onClick={handleOpenShapes}

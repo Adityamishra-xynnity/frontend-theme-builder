@@ -40,7 +40,7 @@ import {
   Mail
 } from "lucide-react";
 
-import { useFabric } from "../../context/FabricContext";
+import { useFabric } from "../../context/useFabric";
 import { useEditor } from "../../context/EditorContext";
 import { designToHtml } from "../../utils/designToHtml";
 import type {
@@ -89,6 +89,7 @@ export default function Toolbar() {
     saveCurrentDesign,
     downloadPNG,
     downloadPDF,
+    setGraphicColor,
   } = useFabric();
 
   const {
@@ -132,14 +133,41 @@ export default function Toolbar() {
     selectedObject?.type === "i-text" ||
     selectedObject?.type === "textbox";
 
-  const isShape = [
-    "rect",
-    "circle",
-    "triangle",
-    "polygon",
-    "path",
-    "line",
-  ].includes(selectedObject?.type ?? "");
+  const isGraphic = Boolean(
+    selectedObject &&
+    ((selectedObject as any).elementType === "graphic" ||
+     (selectedObject as any).elementType === "animated-graphic" ||
+     Boolean((selectedObject as any).graphicKey))
+  );
+
+  const graphicColorPalette: string[] =
+    isGraphic && Array.isArray((selectedObject as any).colorPalette)
+      ? (selectedObject as any).colorPalette
+      : [];
+
+  const [paletteOverride, setPaletteOverride] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (selectedObject && Array.isArray((selectedObject as any).colorPalette)) {
+      setPaletteOverride([...(selectedObject as any).colorPalette]);
+    } else {
+      setPaletteOverride([]);
+    }
+  }, [selectedObject]);
+
+  const activePalette =
+    paletteOverride.length > 0 ? paletteOverride : graphicColorPalette;
+
+  const isShape =
+    !isGraphic &&
+    [
+      "rect",
+      "circle",
+      "triangle",
+      "polygon",
+      "path",
+      "line",
+    ].includes(selectedObject?.type ?? "");
 
   const isImage = selectedObject?.type === "image";
 
@@ -1105,7 +1133,7 @@ return (
               <>
                 {isText && <div className={divider} />}
 
-                {isImage && (
+                {(isImage || isGraphic) && (
                   <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                     <button
                       type="button"
@@ -1165,6 +1193,48 @@ return (
                       aria-label="Shape color"
                     />
                   </label>
+                )}
+
+                {isGraphic && activePalette.length > 0 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1 shadow-xs">
+                    <Palette size={16} className="text-slate-500" />
+                    <span className="text-xs font-medium text-slate-600">
+                      Colors
+                    </span>
+                    <div className="flex items-center gap-1.5 ml-1">
+                      {activePalette.map((color, index) => (
+                        <label
+                          key={index}
+                          className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-slate-200 shadow-xs transition hover:scale-110 hover:border-indigo-400"
+                          title={`Color ${index + 1}: ${color}`}
+                        >
+                          <span
+                            className="h-4 w-4 rounded-md border border-slate-200 shadow-xs"
+                            style={{ backgroundColor: color }}
+                          />
+                          <input
+                            type="color"
+                            value={
+                              /^#[0-9a-f]{6}$/i.test(color)
+                                ? color
+                                : "#2563eb"
+                            }
+                            onChange={(event) => {
+                              const newColor = event.target.value;
+                              setPaletteOverride((prev) => {
+                                const next = [...prev];
+                                next[index] = newColor;
+                                return next;
+                              });
+                              setGraphicColor(index, newColor);
+                            }}
+                            className={colorPicker}
+                            aria-label={`Graphic color ${index + 1}`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </>
             )}

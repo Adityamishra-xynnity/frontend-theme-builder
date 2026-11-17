@@ -10,7 +10,7 @@ import {
   Sun,
 } from "lucide-react";
 
-import { useFabric } from "../../context/FabricContext";
+import { useFabric } from "../../context/useFabric";
 
 type TextStyle = {
   text: string;

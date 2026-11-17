@@ -14,16 +14,19 @@ import {
   Group,
   Shadow,
   Pattern,
+  loadSVGFromString,
+  util,
   type FabricObject,
 } from "fabric";
 
 import { useEditor } from "../../../context/EditorContext";
-import { useFabric } from "../../../context/FabricContext";
+import { useFabric } from "../../../context/useFabric";
 
 import type {
   EditorElement,
   ElementType,
 } from "../../../types/editor";
+import { graphicAnimationRuntime } from "../../../utils/graphicAnimationRuntime";
 
 
 function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
@@ -134,6 +137,14 @@ type FabricObjectWithMeta = FabricObject & {
     borderColor: string;
     borderWidth: number;
   };
+  graphicId?: number | string;
+  graphicKey?: string;
+  graphicCategory?: string;
+  svgContent?: string;
+  colorPalette?: string[];
+  isAnimated?: boolean;
+  animationConfig?: any;
+  animationType?: string;
 };
 
 const DEFAULT_WIDTH = 1400;
@@ -230,6 +241,9 @@ function getElementSignature(elements: EditorElement[]): string {
       src: element.src ?? "",
       pathData: element.pathData ?? [],
       tableData: element.tableData ?? null,
+      graphicKey: element.graphicKey ?? "",
+      svgContent: element.svgContent ?? "",
+      colorPalette: element.colorPalette ?? [],
     })),
   );
 }
@@ -257,6 +271,21 @@ function applyElementMetadata(
 
   if (element.tableData) {
     meta.tableData = JSON.parse(JSON.stringify(element.tableData));
+  }
+
+  if (
+    element.type === "graphic" ||
+    element.type === "animated-graphic" ||
+    element.graphicKey
+  ) {
+    meta.graphicId = element.graphicId;
+    meta.graphicKey = element.graphicKey;
+    meta.graphicCategory = element.graphicCategory;
+    meta.svgContent = element.svgContent;
+    meta.colorPalette = element.colorPalette ? [...element.colorPalette] : undefined;
+    meta.isAnimated = element.isAnimated;
+    meta.animationConfig = element.animationConfig ? { ...element.animationConfig } : undefined;
+    meta.animationType = element.animationType;
   }
 }
 
@@ -1262,7 +1291,64 @@ export default function FabricEditorCanvas({
       setSelectedObject(null);
     };
 
-    const handleObjectModified = () => {
+    const handleObjectMoving = (e: any) => {
+      const target = e?.target;
+      if (target) {
+        if (graphicAnimationRuntime.isRegistered(target)) {
+          graphicAnimationRuntime.updateBaseTransform(target);
+        } else if (target.type === "activeselection" && typeof target.getObjects === "function") {
+          target.getObjects().forEach((obj: any) => {
+            if (graphicAnimationRuntime.isRegistered(obj)) {
+              graphicAnimationRuntime.updateBaseTransform(obj);
+            }
+          });
+        }
+      }
+    };
+
+    const handleObjectScaling = (e: any) => {
+      const target = e?.target;
+      if (target) {
+        if (graphicAnimationRuntime.isRegistered(target)) {
+          graphicAnimationRuntime.updateBaseTransform(target);
+        } else if (target.type === "activeselection" && typeof target.getObjects === "function") {
+          target.getObjects().forEach((obj: any) => {
+            if (graphicAnimationRuntime.isRegistered(obj)) {
+              graphicAnimationRuntime.updateBaseTransform(obj);
+            }
+          });
+        }
+      }
+    };
+
+    const handleObjectRotating = (e: any) => {
+      const target = e?.target;
+      if (target) {
+        if (graphicAnimationRuntime.isRegistered(target)) {
+          graphicAnimationRuntime.updateBaseTransform(target);
+        } else if (target.type === "activeselection" && typeof target.getObjects === "function") {
+          target.getObjects().forEach((obj: any) => {
+            if (graphicAnimationRuntime.isRegistered(obj)) {
+              graphicAnimationRuntime.updateBaseTransform(obj);
+            }
+          });
+        }
+      }
+    };
+
+    const handleObjectModified = (e: any) => {
+      const target = e?.target;
+      if (target) {
+        if (graphicAnimationRuntime.isRegistered(target)) {
+          graphicAnimationRuntime.updateBaseTransform(target);
+        } else if (target.type === "activeselection" && typeof target.getObjects === "function") {
+          target.getObjects().forEach((obj: any) => {
+            if (graphicAnimationRuntime.isRegistered(obj)) {
+              graphicAnimationRuntime.updateBaseTransform(obj);
+            }
+          });
+        }
+      }
       syncCanvasToEditor();
     };
 
@@ -1385,6 +1471,9 @@ export default function FabricEditorCanvas({
     canvas.on("selection:created", handleSelection);
     canvas.on("selection:updated", handleSelection);
     canvas.on("selection:cleared", handleSelectionCleared);
+    canvas.on("object:moving", handleObjectMoving);
+    canvas.on("object:scaling", handleObjectScaling);
+    canvas.on("object:rotating", handleObjectRotating);
     canvas.on("object:modified", handleObjectModified);
     canvas.on("text:changed", handleTextChanged);
     canvas.on("text:editing:exited", handleTextEditingExited);
@@ -1398,12 +1487,21 @@ export default function FabricEditorCanvas({
       canvas.off("selection:created", handleSelection);
       canvas.off("selection:updated", handleSelection);
       canvas.off("selection:cleared", handleSelectionCleared);
+      canvas.off("object:moving", handleObjectMoving);
+      canvas.off("object:scaling", handleObjectScaling);
+      canvas.off("object:rotating", handleObjectRotating);
       canvas.off("object:modified", handleObjectModified);
       canvas.off("text:changed", handleTextChanged);
       canvas.off("text:editing:exited", handleTextEditingExited);
       canvas.off("object:added", handleObjectAdded);
       canvas.off("mouse:down", handleMouseDown);
       canvas.off("mouse:dblclick", handleDoubleClick);
+
+      canvas.getObjects().forEach((obj) => {
+        if (graphicAnimationRuntime.isRegistered(obj)) {
+          graphicAnimationRuntime.unregister(obj);
+        }
+      });
 
       void canvas.dispose();
 
@@ -1481,11 +1579,91 @@ export default function FabricEditorCanvas({
           : undefined;
 
         canvas.discardActiveObject();
+        canvas.getObjects().forEach((obj) => {
+          if (graphicAnimationRuntime.isRegistered(obj)) {
+            graphicAnimationRuntime.unregister(obj);
+          }
+        });
         canvas.clear();
         canvas.backgroundColor = backgroundColor || "#ffffff";
 
         for (const element of elements) {
           if (!isCurrentRebuild()) return;
+
+          if (element.type === "graphic" || element.type === "animated-graphic") {
+            if (!element.svgContent) continue;
+
+            try {
+              const { objects, options } = await loadSVGFromString(element.svgContent);
+              if (!isCurrentRebuild()) return;
+
+              const validObjects = objects.filter((o): o is FabricObject => o !== null);
+              if (validObjects.length === 0) continue;
+
+              const group = util.groupSVGElements(validObjects, options);
+
+              // Disarm inner child objects so the group acts as a single atomic interactive object
+              if (typeof (group as any).forEachObject === "function") {
+                (group as any).forEachObject((child: any) => {
+                  child.set({
+                    selectable: false,
+                    evented: false,
+                  });
+                });
+              }
+
+              group.set({
+                originX: "left",
+                originY: "top",
+                left: element.x,
+                top: element.y,
+                scaleX: element.scaleX ?? 1,
+                scaleY: element.scaleY ?? 1,
+                angle: element.angle ?? 0,
+                opacity: element.opacity ?? 1,
+                selectable: true,
+                evented: true,
+                subTargetCheck: false,
+                interactive: false,
+                hasControls: true,
+                hasBorders: true,
+                lockMovementX: false,
+                lockMovementY: false,
+                lockScalingX: false,
+                lockScalingY: false,
+                lockRotation: false,
+                transparentCorners: false,
+                cornerColor: "#2563eb",
+                cornerStyle: "circle",
+                borderColor: "#2563eb",
+                cornerSize: 12,
+                touchCornerSize: 24,
+                objectCaching: false,
+              });
+
+              applyRotationCursor(group);
+              applyElementMetadata(group, element);
+              group.setCoords();
+              canvas.add(group);
+              group.setCoords();
+
+              if (element.isAnimated || element.type === "animated-graphic") {
+                const animConfig = element.animationConfig || {
+                  type: element.animationType || "pulse",
+                  durationMs: 1400,
+                  easing: "ease-in-out",
+                  loop: true,
+                };
+                graphicAnimationRuntime.register(group, animConfig, element.id);
+              }
+            } catch (error) {
+              if (isCurrentRebuild()) {
+                console.error("Unable to load canvas graphic:", error);
+              }
+            }
+
+            continue;
+          }
 
           if (element.type === "image") {
             if (!element.src) continue;
