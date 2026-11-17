@@ -1,13 +1,9 @@
-
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Search,
   ChevronRight,
   ArrowLeft,
-  Square,
-  Circle,
-  Triangle,
   Star,
   Cog,
   Flower2,
@@ -16,9 +12,6 @@ import {
   MessageCircle,
   GitBranch,
   Minus,
-  Pentagon,
-  Hexagon,
-  Octagon,
   Shapes,
   Sparkles,
 } from "lucide-react";
@@ -29,7 +22,6 @@ import type { ShapeElementType } from "../../context/FabricContext";
 interface ShapeItem {
   label: string;
   type: ShapeElementType;
-  icon?: ReactNode;
 }
 
 interface ShapeCategory {
@@ -38,136 +30,49 @@ interface ShapeCategory {
   items: ShapeItem[];
 }
 
+interface ShapeApiAsset {
+  id: number;
+  assetKey: string;
+  name: string;
+  assetType: string;
+  category: string;
+  assetData: {
+    type?: string;
+    iconKey?: string;
+    [key: string]: unknown;
+  };
+  sortOrder: number;
+  isActive: boolean;
+}
+
+interface ShapePageResponse {
+  content: ShapeApiAsset[];
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}
+
 type PanelView = "root" | "categories" | "items";
 
-const categories: ShapeCategory[] = [
-  {
-    title: "Basic Shapes",
-    icon: <Shapes size={17} />,
-    items: [
-      { label: "Rectangle", type: "rectangle", icon: <Square /> },
-      { label: "Square", type: "square", icon: <Square /> },
-      { label: "Circle", type: "circle", icon: <Circle /> },
-      { label: "Triangle", type: "triangle", icon: <Triangle /> },
-      { label: "Polygon", type: "polygon", icon: <Pentagon /> },
-      { label: "Pentagon", type: "pentagon", icon: <Pentagon /> },
-      { label: "Hexagon", type: "hexagon", icon: <Hexagon /> },
-      { label: "Heptagon", type: "heptagon", icon: <Hexagon /> },
-      { label: "Octagon", type: "octagon", icon: <Octagon /> },
-    ],
-  },
-  {
-    title: "Stars",
-    icon: <Star size={17} />,
-    items: [
-      { label: "Star", type: "star", icon: <Star /> },
-      { label: "Star Outline", type: "star-outline", icon: <Star /> },
-      { label: "4-Point Star", type: "star-4", icon: <Sparkles /> },
-      { label: "6-Point Star", type: "star-6", icon: <Star /> },
-      { label: "8-Point Star", type: "star-8", icon: <Sparkles /> },
-      { label: "12-Point Star", type: "star-12", icon: <Star /> },
-    ],
-  },
-  {
-    title: "Cogs",
-    icon: <Cog size={17} />,
-    items: [
-      { label: "4-Tooth Cog", type: "cog-4", icon: <Cog /> },
-      { label: "6-Tooth Cog", type: "cog-6", icon: <Cog /> },
-      { label: "8-Tooth Cog", type: "cog-8", icon: <Cog /> },
-      { label: "10-Tooth Cog", type: "cog-10", icon: <Cog /> },
-      { label: "12-Tooth Cog", type: "cog-12", icon: <Cog /> },
-      { label: "16-Tooth Cog", type: "cog-16", icon: <Cog /> },
-      { label: "20-Tooth Cog", type: "cog-20", icon: <Cog /> },
-      { label: "24-Tooth Cog", type: "cog-24", icon: <Cog /> },
-    ],
-  },
-  {
-    title: "Square Stars",
-    icon: <Sparkles size={17} />,
-    items: [
-      { label: "4-Point Square Star", type: "square-star-4", icon: <Sparkles /> },
-      { label: "8-Point Square Star", type: "square-star-8", icon: <Star /> },
-      { label: "12-Point Square Star", type: "square-star-12", icon: <Sparkles /> },
-      { label: "16-Point Square Star", type: "square-star-16", icon: <Star /> },
-      { label: "24-Point Square Star", type: "square-star-24", icon: <Sparkles /> },
-      { label: "32-Point Square Star", type: "square-star-32", icon: <Star /> },
-    ],
-  },
-  {
-    title: "Organic Shapes",
-    icon: <Waves size={17} />,
-    items: [
-      { label: "Organic Blob", type: "organic-blob", icon: <Circle /> },
-      { label: "Organic Blob 2", type: "organic-blob-2", icon: <Circle /> },
-      { label: "Organic Blob 3", type: "organic-blob-3", icon: <Circle /> },
-      { label: "Organic Wave", type: "organic-wave", icon: <Waves /> },
-      { label: "Organic Wave 2", type: "organic-wave-2", icon: <Waves /> },
-      { label: "Cloud", type: "organic-cloud", icon: <Waves /> },
-      { label: "Splash", type: "organic-splash", icon: <Sparkles /> },
-      { label: "Pebble", type: "organic-pebble", icon: <Circle /> },
-    ],
-  },
-  {
-    title: "Flowers",
-    icon: <Flower2 size={17} />,
-    items: [
-      { label: "Flower", type: "flower", icon: <Flower2 /> },
-      { label: "5-Petal Flower", type: "flower-5", icon: <Flower2 /> },
-      { label: "8-Petal Flower", type: "flower-8", icon: <Flower2 /> },
-      { label: "12-Petal Flower", type: "flower-12", icon: <Flower2 /> },
-    ],
-  },
-  {
-    title: "Leaves & Petals",
-    icon: <Leaf size={17} />,
-    items: [
-      { label: "Leaf", type: "leaf", icon: <Leaf /> },
-      { label: "Rounded Leaf", type: "leaf-rounded", icon: <Leaf /> },
-      { label: "Pointed Leaf", type: "leaf-pointed", icon: <Leaf /> },
-      { label: "Leaf Pair", type: "leaf-pair", icon: <Leaf /> },
-      { label: "Petal", type: "petal", icon: <Flower2 /> },
-      { label: "Rounded Petal", type: "petal-rounded", icon: <Flower2 /> },
-      { label: "Pointed Petal", type: "petal-pointed", icon: <Flower2 /> },
-      { label: "Vine", type: "vine", icon: <Leaf /> },
-    ],
-  },
-  {
-    title: "Flowchart",
-    icon: <GitBranch size={17} />,
-    items: [
-      { label: "Process", type: "flow-process", icon: <Square /> },
-      { label: "Decision", type: "flow-decision", icon: <Triangle /> },
-      { label: "Terminator", type: "flow-terminator", icon: <Circle /> },
-      { label: "Input / Output", type: "flow-io", icon: <Shapes /> },
-      { label: "Document", type: "flow-document", icon: <Square /> },
-      { label: "Connector", type: "flow-connector", icon: <Circle /> },
-      { label: "Preparation", type: "flow-preparation", icon: <Hexagon /> },
-      { label: "Manual Input", type: "flow-manual-input", icon: <Triangle /> },
-    ],
-  },
-  {
-    title: "Speech Bubbles",
-    icon: <MessageCircle size={17} />,
-    items: [
-      { label: "Speech Bubble", type: "speech-bubble", icon: <MessageCircle /> },
-      { label: "Chat Bubble", type: "chat-bubble", icon: <MessageCircle /> },
-      { label: "Thought Bubble", type: "thought-bubble", icon: <Circle /> },
-      { label: "Rounded Bubble", type: "rounded-bubble", icon: <MessageCircle /> },
-    ],
-  },
-  {
-    title: "Lines & Arrows",
-    icon: <Minus size={17} />,
-    items: [
-      { label: "Line", type: "line", icon: <Minus /> },
-      { label: "Arrow", type: "arrow", icon: <GitBranch /> },
-      { label: "Double Arrow", type: "double-arrow", icon: <GitBranch /> },
-      { label: "Dashed Line", type: "dashed-line", icon: <Minus /> },
-      { label: "Dotted Line", type: "dotted-line", icon: <Minus /> },
-    ],
-  },
-];
+const API_URL = "http://localhost:8080/api/assets/shapes";
+const PAGE_SIZE = 10;
+
+const CATEGORY_ICONS: Record<string, ReactNode> = {
+  "Basic Shapes": <Shapes size={17} />,
+  Stars: <Star size={17} />,
+  Cogs: <Cog size={17} />,
+  "Square Stars": <Sparkles size={17} />,
+  "Organic Shapes": <Waves size={17} />,
+  Flowers: <Flower2 size={17} />,
+  "Leaves & Petals": <Leaf size={17} />,
+  Flowchart: <GitBranch size={17} />,
+  "Speech Bubbles": <MessageCircle size={17} />,
+  "Lines & Arrows": <Minus size={17} />,
+};
 
 const PREVIEW_COLOR = "#2563eb";
 const PREVIEW_STROKE = "#1d4ed8";
@@ -649,17 +554,264 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
   );
 }
 
+function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
+  const categoryMap = new Map<string, ShapeItem[]>();
+
+  const flowerTypeMap: Record<string, ShapeElementType> = {
+    "flower-5-petal": "flower-5",
+    "flower-8-petal": "flower-8",
+    "flower-12-petal": "flower-12",
+  };
+
+  [...assets]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .forEach((asset) => {
+      const categoryName = asset.category?.trim();
+
+      if (!categoryName) return;
+
+      const apiType = asset.assetData?.type || asset.assetKey;
+      const mappedType = flowerTypeMap[asset.assetKey] || apiType;
+
+      const item: ShapeItem = {
+        label: asset.name,
+        type: mappedType as ShapeElementType,
+      };
+
+      const existingItems = categoryMap.get(categoryName) || [];
+
+      if (!existingItems.some((existing) => existing.type === item.type)) {
+        existingItems.push(item);
+      }
+
+      categoryMap.set(categoryName, existingItems);
+    });
+
+  return Array.from(categoryMap.entries()).map(([title, items]) => ({
+    title,
+    icon: CATEGORY_ICONS[title] || <Shapes size={17} />,
+    items,
+  }));
+}
+
 export default function ElementsPanel() {
   const { addShape } = useFabric();
 
+  const [assets, setAssets] = useState<ShapeApiAsset[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+
   const [search, setSearch] = useState("");
   const [view, setView] = useState<PanelView>("root");
-  const [selectedCategory, setSelectedCategory] =
-    useState<ShapeCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const pageRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const activeCategoryRef = useRef<string | null>(null);
+  const inFlightRequestsRef = useRef(new Set<string>());
+  const categoryCacheRef = useRef(
+    new Map<
+      string,
+      { assets: ShapeApiAsset[]; page: number; hasMore: boolean }
+    >(),
+  );
+
+  // Category names are shown without calling the API.
+  // API is called only after the user opens a category.
+  const categories = useMemo<ShapeCategory[]>(
+    () =>
+      Object.entries(CATEGORY_ICONS).map(([title, icon]) => ({
+        title,
+        icon,
+        items: [],
+      })),
+    [],
+  );
+
+  const selectedCategoryData = useMemo(() => {
+    if (!selectedCategory) return null;
+    const category = categories.find((item) => item.title === selectedCategory);
+    if (!category) return null;
+
+    return {
+      ...category,
+      items:
+        buildCategories(assets).find(
+          (item) => item.title === selectedCategory,
+        )?.items ?? [],
+    };
+  }, [assets, categories, selectedCategory]);
+
+  const loadShapes = async (
+    category: string,
+    pageToLoad: number,
+    replace = false,
+  ) => {
+    const requestKey = `${category}:${pageToLoad}`;
+
+    if (inFlightRequestsRef.current.has(requestKey)) return;
+    if (!replace && (loadingRef.current || !hasMoreRef.current)) return;
+
+    inFlightRequestsRef.current.add(requestKey);
+
+    if (replace) {
+      if (activeCategoryRef.current === category) {
+        loadingRef.current = true;
+        setLoading(true);
+        setLoadingMore(false);
+        setError("");
+      }
+    } else {
+      loadingRef.current = true;
+      setLoadingMore(true);
+      setError("");
+    }
+
+    try {
+      const params = new URLSearchParams({
+        page: String(pageToLoad),
+        size: String(PAGE_SIZE),
+        category,
+      });
+
+      const response = await fetch(`${API_URL}/page?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Shapes load nahi ho paye. Server response: ${response.status}`,
+        );
+      }
+
+      const data: ShapePageResponse = await response.json();
+
+      if (!data || !Array.isArray(data.content)) {
+        throw new Error(
+          "Backend se shapes ka valid paginated data nahi mila.",
+        );
+      }
+
+      const activeAssets = data.content.filter(
+        (asset) => asset.isActive !== false,
+      );
+
+      const cached = categoryCacheRef.current.get(category);
+      const base = replace ? [] : (cached?.assets ?? []);
+      const existingIds = new Set(base.map((asset) => asset.id));
+      const uniqueAssets = activeAssets.filter(
+        (asset) => !existingIds.has(asset.id),
+      );
+
+      const nextAssets = [...base, ...uniqueAssets].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      );
+
+      categoryCacheRef.current.set(category, {
+        assets: nextAssets,
+        page: data.number,
+        hasMore: !data.last,
+      });
+
+      if (activeCategoryRef.current === category) {
+        setAssets(nextAssets);
+        pageRef.current = data.number;
+        hasMoreRef.current = !data.last;
+        setHasMore(!data.last);
+        setError("");
+
+        if (replace && activeAssets.length === 0) {
+          setError("Is category mein koi active shape available nahi hai.");
+        }
+      }
+    } catch (err) {
+      if (activeCategoryRef.current === category) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Shapes load karte waqt kuch error aa gaya.",
+        );
+      }
+    } finally {
+      inFlightRequestsRef.current.delete(requestKey);
+
+      // Only the currently active category controls the visible loading state.
+      if (activeCategoryRef.current === category) {
+        loadingRef.current = false;
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  };
+
+  const loadNextPage = () => {
+    const category = activeCategoryRef.current;
+
+    if (!category || loadingRef.current || !hasMoreRef.current) return;
+
+    void loadShapes(category, pageRef.current + 1);
+  };
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const scrollContainer = scrollContainerRef.current;
+
+    // Infinite scroll is active only after a category has been selected.
+    if (
+      view !== "items" ||
+      !selectedCategory ||
+      !sentinel ||
+      !scrollContainer ||
+      loading ||
+      loadingMore ||
+      error ||
+      !hasMore
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadNextPage();
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: "80px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    assets.length,
+    view,
+    selectedCategory,
+  ]);
 
   const normalizedSearch = search.trim().toLowerCase();
 
-  const filteredCategories = categories
+  const searchableCategories =
+    view === "items" ? buildCategories(assets) : categories;
+
+  const filteredCategories = searchableCategories
     .map((category) => ({
       ...category,
       items: category.items.filter((item) =>
@@ -672,20 +824,56 @@ export default function ElementsPanel() {
         category.items.length > 0,
     );
 
+  const visibleCategoryItems =
+    selectedCategoryData?.items.filter((item) =>
+      item.label.toLowerCase().includes(normalizedSearch),
+    ) ?? [];
+
   const handleOpenShapes = () => {
     setView("categories");
     setSelectedCategory(null);
   };
 
   const handleOpenCategory = (category: ShapeCategory) => {
-    setSelectedCategory(category);
+    const categoryName = category.title;
+
+    activeCategoryRef.current = categoryName;
+    setSelectedCategory(categoryName);
     setView("items");
+    setSearch("");
+    setError("");
+
+    const cached = categoryCacheRef.current.get(categoryName);
+
+    if (cached) {
+      setAssets(cached.assets);
+      pageRef.current = cached.page;
+      hasMoreRef.current = cached.hasMore;
+      setHasMore(cached.hasMore);
+      setLoading(false);
+      setLoadingMore(false);
+      loadingRef.current = false;
+      return;
+    }
+
+    setAssets([]);
+    pageRef.current = 0;
+    hasMoreRef.current = false;
+    setHasMore(false);
+    loadingRef.current = false;
+    setLoading(true);
+
+    void loadShapes(categoryName, 0, true);
   };
 
   const handleBack = () => {
     if (view === "items") {
+      activeCategoryRef.current = null;
       setView("categories");
       setSelectedCategory(null);
+      setLoading(false);
+      setLoadingMore(false);
+      loadingRef.current = false;
     } else if (view === "categories") {
       setView("root");
       setSearch("");
@@ -694,6 +882,21 @@ export default function ElementsPanel() {
 
   const handleAddShape = (type: ShapeElementType) => {
     addShape(type);
+  };
+
+  const handleRetry = () => {
+    const category = activeCategoryRef.current;
+
+    if (!category || loadingRef.current) return;
+
+    categoryCacheRef.current.delete(category);
+    setAssets([]);
+    pageRef.current = 0;
+    hasMoreRef.current = false;
+    setHasMore(false);
+    setError("");
+
+    void loadShapes(category, 0, true);
   };
 
   const renderShapeGrid = (items: ShapeItem[]) => (
@@ -737,7 +940,7 @@ export default function ElementsPanel() {
             </span>
 
             <span className="mt-1 block text-xs text-slate-500">
-              {category.items.length} shapes
+              Browse category
             </span>
           </span>
 
@@ -771,7 +974,7 @@ export default function ElementsPanel() {
                 ? "Elements"
                 : view === "categories"
                   ? "Shapes"
-                  : selectedCategory?.title ?? "Shapes"}
+                  : selectedCategory ?? "Shapes"}
             </h2>
 
             <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -801,8 +1004,43 @@ export default function ElementsPanel() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/40 p-3">
-        {normalizedSearch ? (
+      <div
+        ref={scrollContainerRef}
+        className="min-h-0 flex-1 overflow-y-auto bg-slate-50/40 p-3"
+      >
+        {loading ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center">
+            <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+
+            <p className="text-sm font-semibold text-slate-700">
+              Loading shapes...
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Database se shapes load ho rahe hain.
+            </p>
+          </div>
+        ) : error && assets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-red-100 bg-white px-4 py-12 text-center">
+            <Shapes size={30} className="mb-3 text-red-300" />
+
+            <p className="text-sm font-semibold text-slate-700">
+              Shapes load nahi hue
+            </p>
+
+            <p className="mt-2 break-words text-xs text-slate-500">
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : normalizedSearch ? (
           filteredCategories.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
               <Search size={28} className="mb-3 text-slate-300" />
@@ -883,24 +1121,67 @@ export default function ElementsPanel() {
           </button>
         ) : view === "categories" ? (
           renderCategoryList(categories)
-        ) : selectedCategory ? (
+        ) : selectedCategoryData ? (
           <div>
             <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-              <span className="text-blue-600">{selectedCategory.icon}</span>
+              <span className="text-blue-600">
+                {selectedCategoryData.icon}
+              </span>
 
               <span className="text-sm font-semibold text-slate-800">
-                {selectedCategory.title}
+                {selectedCategoryData.title}
               </span>
 
               <span className="ml-auto rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
-                {selectedCategory.items.length} shapes
+                {visibleCategoryItems.length} loaded shapes
               </span>
             </div>
 
-            {renderShapeGrid(selectedCategory.items)}
+            {visibleCategoryItems.length > 0 ? (
+              renderShapeGrid(visibleCategoryItems)
+            ) : (
+              <p className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
+                No shapes found in this category.
+              </p>
+            )}
           </div>
         ) : (
           renderCategoryList(categories)
+        )}
+
+        {loadingMore && (
+          <div className="flex items-center justify-center gap-2 py-5 text-xs font-medium text-slate-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600" />
+            Loading more shapes...
+          </div>
+        )}
+
+        {error && assets.length > 0 && (
+          <div className="my-3 rounded-xl border border-red-100 bg-white p-3 text-center">
+            <p className="text-xs text-red-600">{error}</p>
+
+            <button
+              type="button"
+              onClick={loadNextPage}
+              className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {hasMore && !loading && !error && (
+          <div
+            ref={sentinelRef}
+            className="h-8 w-full"
+            aria-hidden="true"
+          />
+        )}
+
+        {!hasMore && assets.length > 0 && (
+          <p className="py-4 text-center text-[11px] text-slate-400">
+            You have reached the end of the shapes.
+          </p>
         )}
       </div>
 
