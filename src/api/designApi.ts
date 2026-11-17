@@ -1,14 +1,33 @@
-
 import type { EditorElement } from "../types/editor";
 
 export type PaperSize = "A1" | "A2" | "A3" | "A4" | "A5";
 export type PageOrientation = "portrait" | "landscape";
+
+export interface DesignAssetData {
+  id: number;
+  assetKey: string;
+  name: string;
+  category: string;
+  assetData: Record<string, unknown>;
+}
+
+export interface DesignPageData {
+  id: string;
+  name: string;
+  elements: EditorElement[];
+  backgroundColor: string;
+  pageSize: PaperSize;
+  orientation: PageOrientation;
+  borderAsset?: DesignAssetData | null;
+  animationAsset?: DesignAssetData | null;
+}
 
 export interface Design {
   id: number;
   name: string;
   backgroundColor: string;
   elements: EditorElement[];
+  pages?: DesignPageData[];
   createdAt?: string;
   updatedAt?: string;
   pageSize?: PaperSize;
@@ -30,31 +49,37 @@ type DesignPayload = Omit<Design, "id">;
 
 const API_URL = "http://localhost:8080/api/designs";
 
+function cleanElements(elements: EditorElement[] = []) {
+  return elements.map((element) => {
+    const { id, backendId, ...elementData } = element;
+    return elementData;
+  });
+}
+
+function prepareDesignPayload(design: DesignPayload) {
+  return {
+    ...design,
+    // Keep the legacy single-page fields for older backend/frontend versions.
+    elements: cleanElements(design.elements),
+    // Spreading each page preserves borderAsset and animationAsset JSON data.
+    pages: (design.pages ?? []).map((page) => ({
+      ...page,
+      elements: cleanElements(page.elements),
+    })),
+  };
+}
+
 export async function getDesigns(): Promise<Design[]> {
   const response = await fetch(API_URL);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch designs");
-  }
-
+  if (!response.ok) throw new Error("Failed to fetch designs");
   return response.json();
 }
 
-export async function getDesignsPage(
-  page = 0,
-  size = 20
-): Promise<DesignPage> {
-  const response = await fetch(
-    `${API_URL}/page?page=${page}&size=${size}`
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch designs page");
-  }
-
+export async function getDesignsPage(page = 0, size = 20): Promise<DesignPage> {
+  const response = await fetch(`${API_URL}/page?page=${page}&size=${size}`);
+  if (!response.ok) throw new Error("Failed to fetch designs page");
   const data = await response.json();
 
-  // Spring Boot Page response
   if (data && Array.isArray(data.content)) {
     return {
       content: data.content,
@@ -68,11 +93,10 @@ export async function getDesignsPage(
     };
   }
 
-  // Fallback if backend returns a plain array
   if (Array.isArray(data)) {
     return {
       content: data,
-      totalPages: data.length > 0 ? 1 : 0,
+      totalPages: data.length ? 1 : 0,
       totalElements: data.length,
       number: 0,
       size,
@@ -87,68 +111,31 @@ export async function getDesignsPage(
 
 export async function getDesign(id: number): Promise<Design> {
   const response = await fetch(`${API_URL}/${id}`);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch design");
-  }
-
+  if (!response.ok) throw new Error("Failed to fetch design");
   return response.json();
 }
 
-function prepareDesignPayload(design: DesignPayload) {
-  return {
-    ...design,
-    elements: design.elements.map((element) => {
-      const { id, backendId, ...elementData } = element;
-
-      return elementData;
-    }),
-  };
-}
-
-export async function createDesign(
-  design: DesignPayload
-): Promise<Design> {
+export async function createDesign(design: DesignPayload): Promise<Design> {
   const response = await fetch(API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prepareDesignPayload(design)),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to create design");
-  }
-
+  if (!response.ok) throw new Error("Failed to create design");
   return response.json();
 }
 
-export async function updateDesign(
-  id: number,
-  design: DesignPayload
-): Promise<Design> {
+export async function updateDesign(id: number, design: DesignPayload): Promise<Design> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prepareDesignPayload(design)),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to update design");
-  }
-
+  if (!response.ok) throw new Error("Failed to update design");
   return response.json();
 }
 
 export async function deleteDesign(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to delete design");
-  }
+  const response = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Failed to delete design");
 }
