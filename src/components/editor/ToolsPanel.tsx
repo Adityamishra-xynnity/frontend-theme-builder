@@ -15,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { useFabric } from "../../context/FabricContext";
+import { useFabric } from "../../context/useFabric";
 
 type DrawMode = "pen" | "marker" | "highlighter" | "eraser";
 

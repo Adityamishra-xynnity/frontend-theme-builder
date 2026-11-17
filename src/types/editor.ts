@@ -1,4 +1,6 @@
 
+import type { GraphicAnimationConfig, GraphicAnimationType } from "./graphics";
+
 export type ElementType =
   | "heading" | "subheading" | "text"
   | "rectangle" | "circle" | "triangle" | "square" | "polygon"
@@ -12,7 +14,8 @@ export type ElementType =
   | "leaf" | "leaf-rounded" | "leaf-pointed" | "leaf-pair" | "petal" | "petal-rounded" | "petal-pointed" | "vine"
   | "flow-process" | "flow-decision" | "flow-terminator" | "flow-io" | "flow-document" | "flow-connector" | "flow-preparation" | "flow-manual-input"
   | "speech-bubble" | "chat-bubble" | "thought-bubble" | "rounded-bubble"
-  | "table" | "image";
+  | "table" | "image"
+  | "graphic" | "animated-graphic";
 
 export interface TableCellData {
   text: string;
@@ -72,4 +75,14 @@ export interface EditorElement {
   shapeSides?: number;
   pathData?: (string | number)[][];
   tableData?: TableData;
+
+  // Graphic & Animated Graphic properties
+  graphicId?: number | string;
+  graphicKey?: string;
+  graphicCategory?: string;
+  svgContent?: string;
+  colorPalette?: string[];
+  isAnimated?: boolean;
+  animationConfig?: GraphicAnimationConfig;
+  animationType?: GraphicAnimationType;
 }

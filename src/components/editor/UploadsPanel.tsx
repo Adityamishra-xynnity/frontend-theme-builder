@@ -1,7 +1,7 @@
 import { ImagePlus } from "lucide-react";
 import { useRef } from "react";
 
-import { useFabric } from "../../context/FabricContext";
+import { useFabric } from "../../context/useFabric";
 
 export default function UploadsPanel() {
     const { addImage } = useFabric();
