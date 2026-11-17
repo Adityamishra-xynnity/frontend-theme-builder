@@ -390,6 +390,29 @@ export default function Toolbar() {
 
   async function handleSendCanvasEmail() {
     const canvas = canvasRef.current;
+    if (!canvas) {
+      console.error("Canvas is not available");
+      return;
+    }
+
+    console.log("Canvas dimensions:", canvas.getWidth(), canvas.getHeight());
+
+    console.log(
+      "Complete element positions:",
+      canvas.getObjects().map((obj) => ({
+        type: obj.type,
+        left: obj.left,
+        top: obj.top,
+        width: obj.width,
+        height: obj.height,
+        scaleX: obj.scaleX,
+        scaleY: obj.scaleY,
+        angle: obj.angle,
+        originX: obj.originX,
+        originY: obj.originY,
+        boundingRect: obj.getBoundingRect(),
+      }))
+    );
 
     if (!canvas) {
       setEmailMessage("The canvas is not ready.");
@@ -405,14 +428,91 @@ export default function Toolbar() {
       setEmailSending(true);
       setEmailMessage("");
 
-      const canvasDataUrl = canvas.toDataURL({
-        format: "png",
-        multiplier: 1,
-        enableRetinaScaling: false,
-      });
+      const svgContent = canvas.toSVG();
+
+      console.log(
+        "Canvas objects:",
+        canvas.getObjects().map((obj) => ({
+          type: obj.type,
+          left: obj.left,
+          top: obj.top,
+          width: obj.width,
+          height: obj.height,
+          scaleX: obj.scaleX,
+          scaleY: obj.scaleY,
+          angle: obj.angle,
+          fill: obj.fill,
+          stroke: obj.stroke,
+          text: "text" in obj ? obj.text : undefined,
+        }))
+      );
+
+      console.log(
+        "Shape details:",
+        canvas.getObjects()
+          .filter(
+            (obj) =>
+              obj.type !== "textbox" &&
+              obj.type !== "i-text" &&
+              obj.type !== "image"
+          )
+          .map((obj) => obj.toObject())
+      );
+
+      console.log(
+        "Canvas object types:",
+        canvas.getObjects().map((obj) => obj.type)
+      );
+
+      console.log(
+        "Image source:",
+        canvas.getObjects()
+          .filter((obj) => obj.type === "image")
+          .map((obj) => ({
+            source: (obj as any).getSrc(),
+            crossOrigin: (obj as any).getCrossOrigin(),
+          }))
+      );
+
+      console.log(
+        "Text objects:",
+        canvas.getObjects()
+          .filter((obj) => obj.type === "textbox" || obj.type === "i-text")
+          .map((obj: any) => ({
+            text: obj.text,
+            left: obj.left,
+            top: obj.top,
+            width: obj.width,
+            height: obj.height,
+            fontSize: obj.fontSize,
+            fontFamily: obj.fontFamily,
+            fontWeight: obj.fontWeight,
+            fontStyle: obj.fontStyle,
+            fill: obj.fill,
+            textAlign: obj.textAlign,
+            angle: obj.angle,
+            opacity: obj.opacity,
+          }))
+      );
+
+      console.log("SVG generated:", svgContent.includes("<svg"));
+      console.log("SVG length:", svgContent.length);
+      console.log("SVG preview:", svgContent.substring(0, 500));
+      console.log("Canvas background:", canvas.backgroundColor);
+
+
+      console.log(
+        "FULL FABRIC OBJECT DATA:",
+        canvas.getObjects().map((obj) => ({
+          type: obj.type,
+          data: obj.toObject(),
+          boundingRect: obj.getBoundingRect(),
+          center: obj.getCenterPoint(),
+        }))
+      );
 
       const htmlContent = designToHtml(
-        canvasDataUrl,
+        canvas,
         currentDesignName || "My Design"
       );
 

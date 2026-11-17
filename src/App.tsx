@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 
 import { EditorProvider } from "./context/EditorContext";
 import { FabricProvider } from "./context/FabricContext";
+import EmailCampaign from "./email-campaign/EmailCampaign";
 
 export default function App() {
   const location = useLocation();
@@ -42,15 +43,11 @@ export default function App() {
           <main className="flex-1">
             <Routes>
               <Route path="/" element={<Home />} />
-
               <Route path="/templates" element={<Templates />} />
-
               <Route path="/editor" element={<Editor />} />
-
               <Route path="/editor/:id" element={<Editor />} />
-
               <Route path="/saved-designs" element={<SavedDesigns />} />
-
+              <Route path="/email-campaign" element={<EmailCampaign />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
