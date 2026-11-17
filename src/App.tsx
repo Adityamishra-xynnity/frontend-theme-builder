@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 
 import { EditorProvider } from "./context/EditorContext";
 import { FabricProvider } from "./context/FabricContext";
+import EmailCampaign from "./email-campaign/EmailCampaign";
 
 export default function App() {
 
@@ -62,6 +63,11 @@ export default function App() {
               <Route
                 path="*"
                 element={<NotFound />}
+              />
+
+              <Route
+                path="/email-campaign"
+                element={<EmailCampaign />}
               />
             </Routes>
           </main>

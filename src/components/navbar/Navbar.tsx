@@ -16,6 +16,7 @@ import {
   ChevronDown,
   FilePlus2,
   Sparkles,
+  Mail,
 } from "lucide-react";
 
 export default function Navbar() {
@@ -25,10 +26,9 @@ export default function Navbar() {
   const navigate = useNavigate();
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
-      isActive
-        ? "bg-violet-100 text-violet-700"
-        : "text-gray-600 hover:bg-gray-100 hover:text-gray-950"
+    `flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${isActive
+      ? "bg-violet-100 text-violet-700"
+      : "text-gray-600 hover:bg-gray-100 hover:text-gray-950"
     }`;
 
   const closeMenus = () => {
@@ -81,6 +81,11 @@ export default function Navbar() {
             <FolderHeart size={17} />
             Saved Designs
           </NavLink>
+
+          <NavLink to="/email-campaign" className={navLinkClass}>
+            <Mail size={17} />
+            Email Campaign
+          </NavLink>
         </div>
 
         {/* Desktop Create Menu */}
@@ -97,9 +102,8 @@ export default function Navbar() {
 
             <ChevronDown
               size={16}
-              className={`transition-transform duration-200 ${
-                createMenuOpen ? "rotate-180" : ""
-              }`}
+              className={`transition-transform duration-200 ${createMenuOpen ? "rotate-180" : ""
+                }`}
             />
           </button>
 
@@ -208,6 +212,15 @@ export default function Navbar() {
             >
               <FolderHeart size={18} />
               Saved Designs
+            </NavLink>
+
+            <NavLink
+              to="/email-campaign"
+              onClick={closeMenus}
+              className={navLinkClass}
+            >
+              <Mail size={18} />
+              Email Campaign
             </NavLink>
 
             <button
