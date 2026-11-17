@@ -11,7 +11,6 @@ import {
   ArrowDownToLine,
   Copy,
   Trash2,
-  Type,
   Bold,
   Italic,
   Underline,
@@ -129,6 +128,9 @@ export default function Toolbar() {
     maxHeight: 400,
   });
 
+  const [showSpacingPopover, setShowSpacingPopover] = useState(false);
+  const spacingRef = useRef<HTMLDivElement>(null);
+
   const isText =
     selectedObject?.type === "i-text" ||
     selectedObject?.type === "textbox";
@@ -200,7 +202,7 @@ export default function Toolbar() {
     setRotation(selectedObject.angle ?? 0);
   }, [selectedObject]);
 
-  // Close dropdown when clicking outside.
+  // Close dropdowns and popovers when clicking outside or pressing Escape.
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node;
@@ -212,14 +214,35 @@ export default function Toolbar() {
       ) {
         setShowDownloadMenu(false);
       }
+
+      if (
+        spacingRef.current &&
+        !spacingRef.current.contains(target)
+      ) {
+        setShowSpacingPopover(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowSpacingPopover(false);
+        setShowDownloadMenu(false);
+      }
     }
 
     document.addEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  // Reset popovers when selected object changes
+  useEffect(() => {
+    setShowSpacingPopover(false);
+  }, [selectedObject]);
 
   // Position dropdown BELOW the toolbar button, inside the canvas area.
   function updateDownloadMenuPosition() {
@@ -575,41 +598,52 @@ export default function Toolbar() {
 
   
 
-const button =
-  "inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-lg px-2.5 text-slate-600 transition-all duration-150 hover:bg-indigo-50 hover:text-indigo-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-35";
+  const toolBtn =
+    "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-slate-600 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-35 select-none";
 
-const divider = "mx-1.5 h-6 w-px shrink-0 bg-slate-200";
+  const toolBtnActive =
+    "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2 font-semibold text-indigo-700 shadow-xs transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 select-none";
 
-const field =
-  "h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none transition hover:border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+  const divider = "mx-1 h-5 w-px shrink-0 bg-slate-200";
 
-const group = "flex shrink-0 items-center gap-1";
+  const field =
+    "h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
-const panel =
-  "flex h-12 items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3 shadow-[0_2px_8px_rgba(15,23,42,0.035)]";
+  const group = "flex shrink-0 items-center gap-1";
 
-const colorPicker =
-  "absolute inset-0 h-full w-full cursor-pointer opacity-0";
+  const colorPicker =
+    "absolute inset-0 h-full w-full cursor-pointer opacity-0";
 
-return (
-  <>
-    <div className="relative z-40 w-full border-b border-slate-200 bg-slate-50/95 px-3 py-3">
-      <div className="overflow-x-auto pb-0.5">
-        <div className="min-w-max space-y-2">
+  const isBold =
+    object?.fontWeight === "bold" ||
+    object?.fontWeight === 700 ||
+    object?.fontWeight === "700";
 
-          {/* ROW 1: History, layers, typography and export */}
-          <div className={panel}>
+  const isItalic = object?.fontStyle === "italic";
+  const isUnderline = Boolean(object?.underline);
+  const isStrikethrough = Boolean(object?.linethrough);
+  const currentAlign = object?.textAlign || "left";
+
+  return (
+    <>
+      {/* PROFESSIONAL CANVA-INSPIRED SINGLE-ROW TOOLBAR */}
+      <div className="relative z-40 w-full border-b border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex h-12 w-full items-center justify-between gap-1.5 px-3 overflow-x-auto overflow-y-visible">
+
+          {/* LEFT / CONTEXTUAL CONTROLS */}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* HISTORY GROUP */}
             <div className={group}>
               <button
                 type="button"
                 onMouseDown={preserveSelection}
                 onClick={undo}
                 disabled={!canUndo}
-                className={button}
-                title="Undo"
+                className={toolBtn}
+                title="Undo (Ctrl+Z)"
                 aria-label="Undo"
               >
-                <Undo2 size={17} strokeWidth={2} />
+                <Undo2 size={16} strokeWidth={2} />
               </button>
 
               <button
@@ -617,113 +651,28 @@ return (
                 onMouseDown={preserveSelection}
                 onClick={redo}
                 disabled={!canRedo}
-                className={button}
-                title="Redo"
+                className={toolBtn}
+                title="Redo (Ctrl+Y)"
                 aria-label="Redo"
               >
-                <Redo2 size={17} strokeWidth={2} />
+                <Redo2 size={16} strokeWidth={2} />
               </button>
             </div>
 
             <div className={divider} />
 
-            {selectedObject && (
-              <>
-                <div className={group}>
-                  <span
-                    className="flex items-center px-1.5 text-indigo-600"
-                    title="Layer controls"
-                  >
-                    <Layers size={18} strokeWidth={2} />
-                  </span>
+            {/* CONTEXTUAL TOOLBAR BASED ON SELECTION */}
 
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={bringToFront}
-                    className={button}
-                    title="Bring to front"
-                    aria-label="Bring to front"
-                  >
-                    <ArrowUpToLine size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={bringForward}
-                    className={button}
-                    title="Bring forward"
-                    aria-label="Bring forward"
-                  >
-                    <ArrowUp size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={sendBackward}
-                    className={button}
-                    title="Send backward"
-                    aria-label="Send backward"
-                  >
-                    <ArrowDown size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={sendToBack}
-                    className={button}
-                    title="Send to back"
-                    aria-label="Send to back"
-                  >
-                    <ArrowDownToLine size={16} />
-                  </button>
-                </div>
-
-                <div className={divider} />
-
-                <div className={group}>
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={duplicateSelected}
-                    className={button}
-                    title="Duplicate object"
-                    aria-label="Duplicate object"
-                  >
-                    <Copy size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={deleteSelected}
-                    className={`${button} text-rose-500 hover:bg-rose-50 hover:text-rose-600`}
-                    title="Delete object"
-                    aria-label="Delete object"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-
-                <div className={divider} />
-              </>
-            )}
-
+            {/* 1. TEXT SELECTED */}
             {isText && (
               <>
-                <div className={group}>
-                  <Type size={16} className="text-slate-400" />
-
+                {/* Font Family */}
+                <div className="relative">
                   <select
                     aria-label="Font family"
                     value={selectedObject?.fontFamily ?? "Arial"}
-                    onChange={(event) =>
-                      setFontFamily(event.target.value)
-                    }
-                    className={`${field} w-36`}
+                    onChange={(event) => setFontFamily(event.target.value)}
+                    className={`${field} w-32 cursor-pointer appearance-none pr-6 text-xs font-medium`}
                     title="Font family"
                   >
                     <option value="Arial">Arial</option>
@@ -734,114 +683,61 @@ return (
                     <option value="Verdana">Verdana</option>
                     <option value="Courier New">Courier New</option>
                   </select>
-
-                  <div className="flex h-9 items-center overflow-hidden rounded-lg border border-slate-200 bg-white transition focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
-                    <button
-                      type="button"
-                      onMouseDown={preserveSelection}
-                      onClick={decreaseFontSize}
-                      className="flex h-full w-8 items-center justify-center text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-700"
-                      title="Decrease font size"
-                      aria-label="Decrease font size"
-                    >
-                      <Minus size={13} />
-                    </button>
-
-                    <input
-                      type="number"
-                      min={8}
-                      max={200}
-                      value={fontSize}
-                      onChange={(event) =>
-                        handleFontSizeChange(event.target.value)
-                      }
-                      className="h-full w-12 border-x border-slate-200 text-center text-xs font-semibold text-slate-700 outline-none"
-                      title="Font size"
-                      aria-label="Font size"
-                    />
-
-                    <button
-                      type="button"
-                      onMouseDown={preserveSelection}
-                      onClick={increaseFontSize}
-                      className="flex h-full w-8 items-center justify-center text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-700"
-                      title="Increase font size"
-                      aria-label="Increase font size"
-                    >
-                      <Plus size={13} />
-                    </button>
-                  </div>
+                  <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
 
-                <div className={divider} />
-
-                <div className="flex items-center gap-0.5 rounded-xl bg-slate-100/80 p-1">
+                {/* Font Size (+ / input / -) */}
+                <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
-                    onClick={toggleBold}
-                    className={button}
-                    title="Bold"
-                    aria-label="Bold"
+                    onClick={decreaseFontSize}
+                    className="flex h-full w-7 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
+                    title="Decrease font size"
+                    aria-label="Decrease font size"
                   >
-                    <Bold size={16} />
+                    <Minus size={12} />
                   </button>
 
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={toggleItalic}
-                    className={button}
-                    title="Italic"
-                    aria-label="Italic"
-                  >
-                    <Italic size={16} />
-                  </button>
+                  <input
+                    type="number"
+                    min={8}
+                    max={200}
+                    value={fontSize}
+                    onChange={(event) => handleFontSizeChange(event.target.value)}
+                    className="h-full w-10 border-x border-slate-200 text-center text-xs font-semibold text-slate-700 outline-none focus:bg-indigo-50/50"
+                    title="Font size"
+                    aria-label="Font size"
+                  />
 
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
-                    onClick={() => toggleTextDecoration("underline")}
-                    className={button}
-                    title="Underline"
-                    aria-label="Underline"
+                    onClick={increaseFontSize}
+                    className="flex h-full w-7 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
+                    title="Increase font size"
+                    aria-label="Increase font size"
                   >
-                    <Underline size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => toggleTextDecoration("linethrough")}
-                    className={button}
-                    title="Strikethrough"
-                    aria-label="Strikethrough"
-                  >
-                    <Strikethrough size={16} />
+                    <Plus size={12} />
                   </button>
                 </div>
 
+                {/* Text Color Swatch */}
                 <label
-                  className="relative flex h-9 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-indigo-400 hover:bg-indigo-50"
+                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs transition hover:border-indigo-400 hover:bg-slate-50"
                   title="Text color"
                 >
-                  <span className="text-base font-bold text-slate-800">
-                    A
-                  </span>
+                  <span className="text-xs font-bold text-slate-800 leading-none">A</span>
                   <span
-                    className="absolute bottom-1 h-1 w-5 rounded-full"
+                    className="absolute bottom-1 h-1 w-4 rounded-full"
                     style={{ backgroundColor: selectedFill }}
                   />
                   <input
                     type="color"
                     value={
-                      /^#[0-9a-f]{6}$/i.test(selectedFill)
-                        ? selectedFill
-                        : "#222222"
+                      /^#[0-9a-f]{6}$/i.test(selectedFill) ? selectedFill : "#222222"
                     }
-                    onChange={(event) =>
-                      setTextColor(event.target.value)
-                    }
+                    onChange={(event) => setTextColor(event.target.value)}
                     className={colorPicker}
                     aria-label="Text color"
                   />
@@ -849,459 +745,276 @@ return (
 
                 <div className={divider} />
 
-                <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                {/* Formatting Pill: Bold, Italic, Underline, Strikethrough */}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={toggleBold}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
+                      isBold
+                        ? "bg-white text-indigo-700 shadow-xs font-bold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                    title="Bold (Ctrl+B)"
+                    aria-label="Bold"
+                  >
+                    <Bold size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={toggleItalic}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
+                      isItalic
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                    title="Italic (Ctrl+I)"
+                    aria-label="Italic"
+                  >
+                    <Italic size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={() => toggleTextDecoration("underline")}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
+                      isUnderline
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                    title="Underline (Ctrl+U)"
+                    aria-label="Underline"
+                  >
+                    <Underline size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={() => toggleTextDecoration("linethrough")}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
+                      isStrikethrough
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                    title="Strikethrough"
+                    aria-label="Strikethrough"
+                  >
+                    <Strikethrough size={14} />
+                  </button>
+                </div>
+
+                {/* Text Alignment */}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => alignObject("left")}
-                    className={button}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+                      currentAlign === "left"
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
                     title="Align left"
                     aria-label="Align left"
                   >
-                    <AlignLeft size={16} />
+                    <AlignLeft size={14} />
                   </button>
 
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => alignObject("center")}
-                    className={button}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+                      currentAlign === "center"
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
                     title="Align center"
                     aria-label="Align center"
                   >
-                    <AlignCenter size={16} />
+                    <AlignCenter size={14} />
                   </button>
 
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => alignObject("right")}
-                    className={button}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+                      currentAlign === "right"
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
                     title="Align right"
                     aria-label="Align right"
                   >
-                    <AlignRight size={16} />
+                    <AlignRight size={14} />
                   </button>
 
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => alignObject("justify")}
-                    className={button}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+                      currentAlign === "justify"
+                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
                     title="Justify alignment"
                     aria-label="Justify alignment"
                   >
-                    <AlignJustify size={16} />
+                    <AlignJustify size={14} />
                   </button>
                 </div>
-              </>
-            )}
 
-            <div className="ml-auto flex shrink-0 items-center gap-2 pl-3">
-              <button
-                type="button"
-                onMouseDown={preserveSelection}
-                onClick={() => {
-                  setEmailMessage("");
-                  setShowEmailModal(true);
-                }}
-                className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-violet-200 bg-white px-3.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
-                title="Send canvas design by email"
-              >
-                <Mail size={15} />
-                <span>Send by Email</span>
-              </button>
-              <button
-                type="button"
-                onClick={openSaveModal}
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 hover:shadow-md active:scale-[0.98]"
-              >
-                <Save size={15} />
-                Save
-              </button>
+                {/* Spacing Popover */}
+                <div className="relative" ref={spacingRef}>
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={() => setShowSpacingPopover((prev) => !prev)}
+                    className={showSpacingPopover ? toolBtnActive : toolBtn}
+                    title="Letter and line spacing"
+                    aria-expanded={showSpacingPopover}
+                  >
+                    <BetweenVerticalStart size={15} className="text-slate-500" />
+                    <span className="hidden xl:inline text-xs">Spacing</span>
+                    <ChevronDown size={11} className={`transition-transform duration-150 ${showSpacingPopover ? "rotate-180" : ""}`} />
+                  </button>
 
-              {/* DOWNLOAD BUTTON AND PORTAL MENU */}
-              <div className="relative" ref={downloadRef}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!showDownloadMenu) {
-                      updateDownloadMenuPosition();
-                    }
-
-                    setShowDownloadMenu((previous) => !previous);
-                  }}
-                  aria-expanded={showDownloadMenu}
-                  aria-haspopup="menu"
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
-                >
-                  <Download size={15} />
-                  Download
-
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform duration-200 ${showDownloadMenu ? "rotate-180" : ""
-                      }`}
-                  />
-                </button>
-
-                {showDownloadMenu &&
-                  createPortal(
-                    <div
-                      ref={downloadMenuRef}
-                      style={{
-                        position: "fixed",
-                        top: downloadMenuPosition.top,
-                        right: downloadMenuPosition.right,
-                        maxHeight: downloadMenuPosition.maxHeight,
-                        zIndex: 2147483647,
-                      }}
-                      className="w-72 overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.30)] ring-1 ring-slate-900/10"
-                      role="menu"
-                      aria-label="Download options"
-                    >
-                      {/* DOWNLOAD PNG */}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setShowDownloadMenu(false);
-
-                          if (pages.length <= 1) {
-                            void downloadPNG(pages.map((page) => page.id));
-                          } else {
-                            openExportPagesModal("png");
-                          }
-                        }}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-indigo-50"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-                          <ImageDown size={19} />
-                        </span>
-
-                        <span>
-                          <span className="block text-sm font-semibold text-slate-800">
-                            Download PNG
+                  {showSpacingPopover && (
+                    <div className="absolute left-0 top-full mt-1.5 z-[150] w-64 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xl shadow-slate-900/10 space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                            <LetterText size={14} className="text-slate-400" /> Letter spacing
                           </span>
-                          <span className="mt-1 block text-xs text-slate-500">
-                            Export pages as separate images
+                          <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                            {letterSpacing}
                           </span>
-                        </span>
-                      </button>
-
-                      {/* DOWNLOAD PDF */}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setShowDownloadMenu(false);
-
-                          if (pages.length <= 1) {
-                            void downloadPDF(pages.map((page) => page.id));
-                          } else {
-                            openExportPagesModal("pdf");
-                          }
-                        }}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-rose-50"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
-                          <FileDown size={19} />
-                        </span>
-
-                        <span>
-                          <span className="block text-sm font-semibold text-slate-800">
-                            Download PDF
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={letterSpacing}
+                          onChange={(e) => handleLetterSpacingChange(e.target.value)}
+                          className="w-full accent-indigo-600 h-1.5 bg-slate-100 rounded-lg cursor-pointer"
+                        />
+                      </div>
+                      <div className="pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                            <BetweenVerticalStart size={14} className="text-slate-400" /> Line spacing
                           </span>
-                          <span className="mt-1 block text-xs text-slate-500">
-                            Export a print-ready document
+                          <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                            {lineSpacing}
                           </span>
-                        </span>
-                      </button>
-                    </div>,
-                    document.body
+                        </div>
+                        <select
+                          value={lineSpacing}
+                          onChange={(e) => handleLineSpacingChange(e.target.value)}
+                          className="w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                        >
+                          <option value={0.75}>0.75</option>
+                          <option value={1}>1.0</option>
+                          <option value={1.16}>1.16</option>
+                          <option value={1.25}>1.25</option>
+                          <option value={1.5}>1.5</option>
+                          <option value={1.75}>1.75</option>
+                          <option value={2}>2.0</option>
+                          <option value={2.5}>2.5</option>
+                          <option value={3}>3.0</option>
+                        </select>
+                      </div>
+                    </div>
                   )}
-              </div>
-            </div>
-          </div>
-
-          {/* PNG / PDF PAGE SELECTION MODAL */}
-          {showExportPagesModal && (
-            <div
-              className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="export-pages-title"
-            >
-              <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2
-                    id="export-pages-title"
-                    className="text-sm font-semibold text-slate-900"
-                  >
-                    Choose {exportFormat.toUpperCase()} pages
-                  </h2>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowExportPagesModal(false)}
-                    className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
-                    aria-label="Close page selection"
-                  >
-                    <X size={18} />
-                  </button>
                 </div>
 
-                <div className="mb-3 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                  <span className="text-xs font-medium text-slate-700">
-                    Select pages to export
-                  </span>
-
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                    onClick={() =>
-                      setSelectedExportPageIds(
-                        selectedExportPageIds.length === pages.length
-                          ? []
-                          : pages.map((page) => page.id)
-                      )
-                    }
-                  >
-                    {selectedExportPageIds.length === pages.length
-                      ? "Deselect all"
-                      : "Select all"}
-                  </button>
-                </div>
-
-                <div className="mb-5 max-h-64 space-y-1 overflow-y-auto">
-                  {pages.map((page, index) => (
-                    <label
-                      key={page.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-indigo-50"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-indigo-600"
-                        checked={selectedExportPageIds.includes(page.id)}
-                        onChange={(event) =>
-                          setSelectedExportPageIds((current) =>
-                            event.target.checked
-                              ? [...current, page.id]
-                              : current.filter((id) => id !== page.id)
-                          )
-                        }
-                      />
-
-                      <span>
-                        {page.name?.trim() || `Page ${index + 1}`}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowExportPagesModal(false)}
-                    className="rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleExportPages(true)}
-                    className="rounded-lg border border-indigo-200 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-                  >
-                    Download All Pages
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={selectedExportPageIds.length === 0}
-                    onClick={() => handleExportPages(false)}
-                    className="rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Download Selected
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ROW 2: Text spacing, lists, rotation and canvas */}
-          <div className={panel}>
-            {isText && (
-              <>
-                <div className={group}>
-                  <BetweenVerticalStart
-                    size={16}
-                    className="text-slate-400"
-                  />
-
-                  <select
-                    aria-label="Line spacing"
-                    value={lineSpacing}
-                    onChange={(event) =>
-                      handleLineSpacingChange(event.target.value)
-                    }
-                    className={`${field} w-24`}
-                    title="Line spacing"
-                  >
-                    <option value={0.75}>0.75</option>
-                    <option value={1}>1.0</option>
-                    <option value={1.16}>1.16</option>
-                    <option value={1.25}>1.25</option>
-                    <option value={1.5}>1.5</option>
-                    <option value={1.75}>1.75</option>
-                    <option value={2}>2.0</option>
-                    <option value={2.5}>2.5</option>
-                    <option value={3}>3.0</option>
-                  </select>
-                </div>
-
-                <div className={divider} />
-
-                <div className={group}>
-                  <LetterText size={16} className="text-slate-400" />
-
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={letterSpacing}
-                    onChange={(event) =>
-                      handleLetterSpacingChange(event.target.value)
-                    }
-                    className={`${field} w-20 text-center`}
-                    title="Letter spacing"
-                    aria-label="Letter spacing"
-                  />
-                </div>
-
-                <div className={divider} />
-
-                <div className="flex items-center gap-0.5 rounded-xl bg-slate-100/80 p-1">
+                {/* Lists and Indents */}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => applyList("bullet")}
-                    className={button}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
                     title="Bulleted list"
                     aria-label="Bulleted list"
                   >
-                    <List size={17} />
+                    <List size={14} />
                   </button>
-
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => applyList("number")}
-                    className={button}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
                     title="Numbered list"
                     aria-label="Numbered list"
                   >
-                    <ListOrdered size={17} />
+                    <ListOrdered size={14} />
                   </button>
-
+                  <span className="h-4 w-px bg-slate-200 mx-0.5" />
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => changeIndent("decrease")}
-                    className={button}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
                     title="Decrease indent"
                     aria-label="Decrease indent"
                   >
-                    <IndentDecrease size={17} />
+                    <IndentDecrease size={14} />
                   </button>
-
                   <button
                     type="button"
                     onMouseDown={preserveSelection}
                     onClick={() => changeIndent("increase")}
-                    className={button}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
                     title="Increase indent"
                     aria-label="Increase indent"
                   >
-                    <IndentIncrease size={17} />
+                    <IndentIncrease size={14} />
                   </button>
                 </div>
               </>
             )}
 
-            {selectedObject && (
+            {/* 2. SHAPE SELECTED */}
+            {isShape && (
+              <label
+                className="relative flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 shadow-xs transition hover:border-indigo-300 hover:bg-slate-50"
+                title="Shape color"
+              >
+                <Palette size={14} className="text-slate-500" />
+                <span className="text-xs font-medium text-slate-700">Shape color</span>
+                <span
+                  className="h-4 w-4 rounded-md border border-slate-200 shadow-xs"
+                  style={{ backgroundColor: selectedFill }}
+                />
+                <input
+                  type="color"
+                  value={
+                    /^#[0-9a-f]{6}$/i.test(selectedFill) ? selectedFill : "#2563eb"
+                  }
+                  onChange={(event) => setShapeColor(event.target.value)}
+                  className={colorPicker}
+                  aria-label="Shape color"
+                />
+              </label>
+            )}
+
+            {/* 3. GRAPHIC OR IMAGE SELECTED */}
+            {(isImage || isGraphic) && (
               <>
-                {isText && <div className={divider} />}
-
-                {(isImage || isGraphic) && (
-                  <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                    <button
-                      type="button"
-                      onMouseDown={preserveSelection}
-                      onClick={() => rotateSelected(-15)}
-                      className={button}
-                      title="Rotate left 15 degrees"
-                      aria-label="Rotate left"
-                    >
-                      <RotateCcw size={16} />
-                    </button>
-
-                    <span className="min-w-12 rounded-md bg-white px-2 py-1 text-center text-xs font-semibold text-slate-600">
-                      {rotation}°
-                    </span>
-
-                    <button
-                      type="button"
-                      onMouseDown={preserveSelection}
-                      onClick={() => rotateSelected(15)}
-                      className={button}
-                      title="Rotate right 15 degrees"
-                      aria-label="Rotate right"
-                    >
-                      <RotateCw size={16} />
-                    </button>
-                  </div>
-                )}
-
-                {isShape && (
-                  <label
-                    className="relative flex h-9 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 transition hover:border-indigo-300 hover:bg-indigo-50"
-                    title="Shape color"
-                  >
-                    <Palette size={16} className="text-slate-500" />
-
-                    <span className="text-xs font-medium text-slate-600">
-                      Shape color
-                    </span>
-
-                    <span
-                      className="h-4 w-4 rounded-md border border-slate-200 shadow-sm"
-                      style={{ backgroundColor: selectedFill }}
-                    />
-
-                    <input
-                      type="color"
-                      value={
-                        /^#[0-9a-f]{6}$/i.test(selectedFill)
-                          ? selectedFill
-                          : "#2563eb"
-                      }
-                      onChange={(event) =>
-                        setShapeColor(event.target.value)
-                      }
-                      className={colorPicker}
-                      aria-label="Shape color"
-                    />
-                  </label>
-                )}
-
+                {/* Graphic Multi-Color Palette */}
                 {isGraphic && activePalette.length > 0 && (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1 shadow-xs">
-                    <Palette size={16} className="text-slate-500" />
-                    <span className="text-xs font-medium text-slate-600">
-                      Colors
-                    </span>
-                    <div className="flex items-center gap-1.5 ml-1">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 shadow-xs">
+                    <Palette size={14} className="text-slate-500" />
+                    <span className="text-xs font-medium text-slate-600">Colors</span>
+                    <div className="flex items-center gap-1 ml-0.5">
                       {activePalette.map((color, index) => (
                         <label
                           key={index}
@@ -1315,9 +1028,7 @@ return (
                           <input
                             type="color"
                             value={
-                              /^#[0-9a-f]{6}$/i.test(color)
-                                ? color
-                                : "#2563eb"
+                              /^#[0-9a-f]{6}$/i.test(color) ? color : "#2563eb"
                             }
                             onChange={(event) => {
                               const newColor = event.target.value;
@@ -1336,56 +1047,403 @@ return (
                     </div>
                   </div>
                 )}
+
+                {/* Rotation Controls */}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={() => rotateSelected(-15)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
+                    title="Rotate left 15°"
+                    aria-label="Rotate left 15 degrees"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <span className="min-w-9 px-1 text-center text-xs font-mono font-semibold text-slate-700">
+                    {rotation}°
+                  </span>
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={() => rotateSelected(15)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-white hover:text-slate-900 transition"
+                    title="Rotate right 15°"
+                    aria-label="Rotate right 15 degrees"
+                  >
+                    <RotateCw size={14} />
+                  </button>
+                </div>
               </>
             )}
 
-            <div className="ml-auto flex shrink-0 items-center gap-3 pl-3">
+            {/* LAYER & OBJECT ACTIONS (FOR ANY SELECTED OBJECT) */}
+            {selectedObject && (
+              <>
+                <div className={divider} />
+
+                {/* Visible Layer Actions & Object Controls */}
+                <div className="flex items-center gap-0.5">
+                  <span
+                    className="flex items-center px-1.5 text-indigo-600"
+                    title="Layer controls"
+                    aria-hidden="true"
+                  >
+                    <Layers size={16} strokeWidth={2} />
+                  </span>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={bringForward}
+                    className={toolBtn}
+                    title="Bring forward"
+                    aria-label="Bring forward"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={sendBackward}
+                    className={toolBtn}
+                    title="Send backward"
+                    aria-label="Send backward"
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={bringToFront}
+                    className={toolBtn}
+                    title="Bring to front"
+                    aria-label="Bring to front"
+                  >
+                    <ArrowUpToLine size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={sendToBack}
+                    className={toolBtn}
+                    title="Send to back"
+                    aria-label="Send to back"
+                  >
+                    <ArrowDownToLine size={15} />
+                  </button>
+
+                  <div className={divider} />
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={duplicateSelected}
+                    className={toolBtn}
+                    title="Duplicate object (Ctrl+D)"
+                    aria-label="Duplicate object"
+                  >
+                    <Copy size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={preserveSelection}
+                    onClick={deleteSelected}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition"
+                    title="Delete object (Del)"
+                    aria-label="Delete object"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* 4. NOTHING SELECTED - GENERAL CANVAS CONTROLS */}
+            {!selectedObject && (
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <label
+                  className="relative flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 shadow-xs transition hover:border-indigo-300 hover:bg-slate-50"
+                  title="Canvas background color"
+                >
+                  <Palette size={14} className="text-indigo-500" />
+                  <span className="font-medium text-slate-700">Background</span>
+                  <span
+                    className="h-4 w-4 rounded-md border border-slate-200 shadow-xs"
+                    style={{ backgroundColor }}
+                  />
+                  <input
+                    type="color"
+                    value={backgroundColor}
+                    onChange={(event) => setCanvasBackground(event.target.value)}
+                    className={colorPicker}
+                    aria-label="Canvas background color"
+                  />
+                </label>
+
+                <span className="hidden sm:inline-flex items-center gap-1 text-slate-400">
+                  •
+                </span>
+
+                <span className="hidden sm:inline-block text-xs font-medium text-slate-500">
+                  {currentDesignName || "Untitled Certificate"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT / DOCUMENT ACTIONS */}
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {/* Always accessible background color when object selected */}
+            {selectedObject && (
               <label
-                className="relative flex h-9 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50"
+                className="relative hidden md:flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 shadow-xs transition hover:border-slate-300 hover:bg-slate-50"
                 title="Canvas background color"
               >
-                <Palette size={15} className="text-indigo-500" />
-
-                <span>Background</span>
-
-                <span
-                  className="h-4 w-4 rounded-md border border-slate-200 shadow-sm"
-                  style={{ backgroundColor }}
-                />
-
+                <Palette size={13} className="text-indigo-500" />
+                <span className="h-3.5 w-3.5 rounded border border-slate-200 shadow-xs" style={{ backgroundColor }} />
                 <input
                   type="color"
                   value={backgroundColor}
-                  onChange={(event) =>
-                    setCanvasBackground(event.target.value)
-                  }
+                  onChange={(event) => setCanvasBackground(event.target.value)}
                   className={colorPicker}
                   aria-label="Canvas background color"
                 />
               </label>
+            )}
 
-              <div className="h-7 w-px bg-slate-200" />
+            {/* Send by Email */}
+            <button
+              type="button"
+              onMouseDown={preserveSelection}
+              onClick={() => {
+                setEmailMessage("");
+                setShowEmailModal(true);
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 text-xs font-semibold text-violet-700 shadow-xs transition hover:bg-violet-50 active:scale-95"
+              title="Send canvas design by email"
+            >
+              <Mail size={14} />
+              <span className="hidden sm:inline">Send by Email</span>
+            </button>
 
-              <div className="flex max-w-48 items-center gap-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                  <FileDown size={15} />
-                </span>
+            {/* Save */}
+            <button
+              type="button"
+              onClick={openSaveModal}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 text-xs font-semibold text-white shadow-xs shadow-indigo-600/20 transition hover:bg-indigo-700 active:scale-95"
+              title="Save certificate"
+            >
+              <Save size={14} />
+              <span>Save</span>
+            </button>
 
-                <span
-                  className="max-w-36 truncate text-xs font-semibold text-slate-600"
-                  title={currentDesignName ?? "My Certificate"}
-                >
-                  {currentDesignName || "My Certificate"}
-                </span>
-              </div>
+            {/* Download Dropdown */}
+            <div className="relative" ref={downloadRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!showDownloadMenu) updateDownloadMenuPosition();
+                  setShowDownloadMenu((prev) => !prev);
+                }}
+                aria-expanded={showDownloadMenu}
+                aria-haspopup="menu"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 active:scale-95"
+              >
+                <Download size={14} />
+                <span>Download</span>
+                <ChevronDown
+                  size={12}
+                  className={`transition-transform duration-200 ${showDownloadMenu ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {showDownloadMenu &&
+                createPortal(
+                  <div
+                    ref={downloadMenuRef}
+                    style={{
+                      position: "fixed",
+                      top: downloadMenuPosition.top,
+                      right: downloadMenuPosition.right,
+                      maxHeight: downloadMenuPosition.maxHeight,
+                      zIndex: 2147483647,
+                    }}
+                    className="w-72 overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.30)] ring-1 ring-slate-900/10"
+                    role="menu"
+                    aria-label="Download options"
+                  >
+                    {/* DOWNLOAD PNG */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        if (pages.length <= 1) {
+                          void downloadPNG(pages.map((page) => page.id));
+                        } else {
+                          openExportPagesModal("png");
+                        }
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-indigo-50"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                        <ImageDown size={19} />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">
+                          Download PNG
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          Export pages as separate images
+                        </span>
+                      </span>
+                    </button>
+
+                    {/* DOWNLOAD PDF */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        if (pages.length <= 1) {
+                          void downloadPDF(pages.map((page) => page.id));
+                        } else {
+                          openExportPagesModal("pdf");
+                        }
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-rose-50"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                        <FileDown size={19} />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">
+                          Download PDF
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          Export a print-ready document
+                        </span>
+                      </span>
+                    </button>
+                  </div>,
+                  document.body
+                )}
             </div>
           </div>
-
         </div>
       </div>
-    </div>
 
-    {/* SAVE CERTIFICATE MODAL */}
+      {/* PNG / PDF PAGE SELECTION MODAL */}
+      {showExportPagesModal && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-pages-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2
+                id="export-pages-title"
+                className="text-sm font-semibold text-slate-900"
+              >
+                Choose {exportFormat.toUpperCase()} pages
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => setShowExportPagesModal(false)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                aria-label="Close page selection"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mb-3 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+              <span className="text-xs font-medium text-slate-700">
+                Select pages to export
+              </span>
+
+              <button
+                type="button"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                onClick={() =>
+                  setSelectedExportPageIds(
+                    selectedExportPageIds.length === pages.length
+                      ? []
+                      : pages.map((page) => page.id)
+                  )
+                }
+              >
+                {selectedExportPageIds.length === pages.length
+                  ? "Deselect all"
+                  : "Select all"}
+              </button>
+            </div>
+
+            <div className="mb-5 max-h-64 space-y-1 overflow-y-auto">
+              {pages.map((page, index) => (
+                <label
+                  key={page.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-indigo-50"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-indigo-600"
+                    checked={selectedExportPageIds.includes(page.id)}
+                    onChange={(event) =>
+                      setSelectedExportPageIds((current) =>
+                        event.target.checked
+                          ? [...current, page.id]
+                          : current.filter((id) => id !== page.id)
+                      )
+                    }
+                  />
+
+                  <span>
+                    {page.name?.trim() || `Page ${index + 1}`}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowExportPagesModal(false)}
+                className="rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportPages(true)}
+                className="rounded-lg border border-indigo-200 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+              >
+                Download All Pages
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedExportPageIds.length === 0}
+                onClick={() => handleExportPages(false)}
+                className="rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Download Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAVE CERTIFICATE MODAL */}
     {showSaveModal && (
       <div
         className="fixed inset-0 .z-\[200\] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-[3px]"
