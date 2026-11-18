@@ -962,6 +962,7 @@ export default function FabricEditorCanvas({
   const inlineTableEditorRef = useRef<HTMLTextAreaElement | null>(null);
 
   const userZoomRef = useRef(1);
+  const isAutoFitRef = useRef(true);
   const internalChangeRef = useRef(false);
   const mountedRef = useRef(false);
   const rebuildingCanvasRef = useRef(false);
@@ -1236,10 +1237,12 @@ export default function FabricEditorCanvas({
   }
 
   function zoomIn() {
+    isAutoFitRef.current = false;
     applyZoom(userZoomRef.current + ZOOM_STEP);
   }
 
   function zoomOut() {
+    isAutoFitRef.current = false;
     applyZoom(userZoomRef.current - ZOOM_STEP);
   }
 
@@ -1248,16 +1251,24 @@ export default function FabricEditorCanvas({
 
     if (!viewport) return;
 
-    const availableWidth = Math.max(1, viewport.clientWidth - 32);
-    const availableHeight = Math.max(1, viewport.clientHeight - 32);
+    isAutoFitRef.current = true;
+
+    // Use consistent padding for comfortable viewing on all sides
+    const paddingX = 48;
+    const paddingY = 48;
+
+    const availableWidth = Math.max(1, viewport.clientWidth - paddingX);
+    const availableHeight = Math.max(1, viewport.clientHeight - paddingY);
 
     const nextScale = Math.min(
-      1,
       availableWidth / safeWidth,
       availableHeight / safeHeight,
     );
 
-    const fittedScale = Math.max(0.01, nextScale);
+    const fittedScale = Math.max(
+      MIN_ZOOM,
+      Math.min(MAX_ZOOM, Math.round(nextScale * 100) / 100),
+    );
 
     userZoomRef.current = fittedScale;
     setCanvasScale(fittedScale);
@@ -1803,7 +1814,7 @@ export default function FabricEditorCanvas({
 
     const updateFitScale = () => {
       // Wait for the editor flex layout to settle. This is important when
-      // DevTools is docked/undocked or the browser viewport changes.
+      // DevTools is docked/undocked, side panels open/close, or the browser viewport changes.
       cancelAnimationFrame(animationFrame);
       cancelAnimationFrame(secondAnimationFrame);
 
@@ -1812,34 +1823,28 @@ export default function FabricEditorCanvas({
           const currentViewport = viewportRef.current;
           if (!currentViewport) return;
 
-          // On a normal laptop/desktop viewport, keep the editor at its
-          // natural 100% zoom. Do not shrink the page just because the
-          // available vertical workspace is shorter than the paper.
-          // On narrow viewports (mobile, tablet, or a docked side DevTools
-          // viewport), automatically fit the page into the available area.
-          let nextScale = 1;
+          // Preserve user-controlled manual zoom if user zoomed in or out
+          if (!isAutoFitRef.current) return;
 
-          if (window.innerWidth < 1024) {
-            const availableWidth = Math.max(
-              1,
-              currentViewport.clientWidth - 32,
-            );
+          // Calculate available workspace dimensions with comfortable padding
+          const paddingX = 48;
+          const paddingY = 48;
 
-            const availableHeight = Math.max(
-              1,
-              currentViewport.clientHeight - 32,
-            );
+          const availableWidth = Math.max(1, currentViewport.clientWidth - paddingX);
+          const availableHeight = Math.max(1, currentViewport.clientHeight - paddingY);
 
-            nextScale = Math.min(
-              1,
-              availableWidth / safeWidth,
-              availableHeight / safeHeight,
-            );
-          }
+          // Calculate aspect-ratio-preserving fit scale
+          const nextScale = Math.min(
+            availableWidth / safeWidth,
+            availableHeight / safeHeight,
+          );
 
           if (!Number.isFinite(nextScale)) return;
 
-          const fittedScale = Math.max(0.01, nextScale);
+          const fittedScale = Math.max(
+            MIN_ZOOM,
+            Math.min(MAX_ZOOM, Math.round(nextScale * 100) / 100),
+          );
 
           userZoomRef.current = fittedScale;
           setCanvasScale(fittedScale);
@@ -1848,12 +1853,14 @@ export default function FabricEditorCanvas({
       });
     };
 
+    // Recalculate auto-fit when safeWidth or safeHeight changes (orientation, page size, page switch)
+    isAutoFitRef.current = true;
     updateFitScale();
 
     const observer = new ResizeObserver(updateFitScale);
     observer.observe(viewport);
 
-    // Observe the parent too: flex siblings (sidebar/panel) can change the
+    // Observe the parent too: flex siblings (sidebar/panel) change the
     // available canvas area without changing the outer browser dimensions.
     if (viewport.parentElement) {
       observer.observe(viewport.parentElement);
@@ -1874,77 +1881,33 @@ export default function FabricEditorCanvas({
   }, [safeWidth, safeHeight]);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-100">
-      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-        <button
-          type="button"
-          onClick={zoomOut}
-          disabled={zoomPercent <= MIN_ZOOM * 100}
-          title="Zoom out"
-          aria-label="Zoom out"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-lg text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          −
-        </button>
-
-        <span
-          className="min-w-[58px] text-center text-sm font-medium text-slate-700"
-          aria-live="polite"
-        >
-          {zoomPercent}%
-        </span>
-
-        <button
-          type="button"
-          onClick={zoomIn}
-          disabled={zoomPercent >= MAX_ZOOM * 100}
-          title="Zoom in"
-          aria-label="Zoom in"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-lg text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          +
-        </button>
-
-        <span className="mx-1 h-5 w-px bg-slate-200" />
-
-        <button
-          type="button"
-          onClick={fitToScreen}
-          title="Fit page to screen"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
-        >
-          Fit to screen
-        </button>
-      </div>
-
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-100">
       <div
         ref={viewportRef}
-        className="min-h-0 w-full flex-1 overflow-auto"
+        className="relative flex-1 min-h-0 w-full overflow-auto bg-slate-100 flex"
       >
-        {/* This inner flex surface centers the page whenever it fits.
-            If the page is wider than the viewport, it starts at the
-            left edge so the beginning of the canvas never gets clipped. */}
-        <div className="flex min-h-full w-max min-w-full items-start justify-center box-border p-3">
+        {/* Canvas centering container: centers canvas both vertically and horizontally */}
+        <div className="m-auto flex shrink-0 items-center justify-center p-6 sm:p-8">
           <div
-            className="relative shrink-0 bg-white"
+            className="relative bg-white shadow-[0_4px_25px_rgba(0,0,0,0.12)] border border-slate-200/60 rounded-xs transition-shadow duration-200"
             style={{
-              width: safeWidth * canvasScale,
-              height: safeHeight * canvasScale,
+              width: Math.round(safeWidth * canvasScale),
+              height: Math.round(safeHeight * canvasScale),
             }}
           >
-          <div
-            className="absolute left-0 top-0"
-            style={{
-              width: safeWidth,
-              height: safeHeight,
-              transform: `scale(${canvasScale})`,
-              transformOrigin: "top left",
-            }}
-          >
-            <canvas
-              ref={htmlCanvasRef}
-              aria-label="Certificate editor canvas"
-            />
+            <div
+              className="absolute left-0 top-0"
+              style={{
+                width: safeWidth,
+                height: safeHeight,
+                transform: `scale(${canvasScale})`,
+                transformOrigin: "top left",
+              }}
+            >
+              <canvas
+                ref={htmlCanvasRef}
+                aria-label="Certificate editor canvas"
+              />
 
             {inlineTableEditor && (
               <textarea
@@ -2030,6 +1993,49 @@ export default function FabricEditorCanvas({
           </div>
           </div>
         </div>
+      </div>
+
+      {/* FLOATING ZOOM CONTROLS (CANVA STYLE) */}
+      <div className="absolute bottom-4 right-5 z-20 flex items-center gap-1 rounded-xl border border-slate-200/90 bg-white/95 px-2 py-1 shadow-lg shadow-slate-900/10 backdrop-blur-md transition-all">
+        <button
+          type="button"
+          onClick={zoomOut}
+          disabled={zoomPercent <= MIN_ZOOM * 100}
+          title="Zoom out"
+          aria-label="Zoom out"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-base font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          −
+        </button>
+
+        <span
+          className="min-w-[48px] text-center text-xs font-semibold text-slate-700 select-none"
+          aria-live="polite"
+        >
+          {zoomPercent}%
+        </span>
+
+        <button
+          type="button"
+          onClick={zoomIn}
+          disabled={zoomPercent >= MAX_ZOOM * 100}
+          title="Zoom in"
+          aria-label="Zoom in"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-base font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          +
+        </button>
+
+        <span className="mx-1 h-4 w-px bg-slate-200" />
+
+        <button
+          type="button"
+          onClick={fitToScreen}
+          title="Fit page to screen"
+          className="rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 active:scale-95"
+        >
+          Fit to screen
+        </button>
       </div>
     </div>
   );

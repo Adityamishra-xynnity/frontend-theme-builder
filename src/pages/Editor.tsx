@@ -19,41 +19,7 @@ import {
 
 import EditorSidebar from "../components/editor/EditorSidebar";
 import EditorPanel from "../components/editor/EditorPanel";
-
-export type { PaperSize, PageOrientation } from "../context/EditorContext";
-
-export interface PageDimensions {
-  width: number;
-  height: number;
-}
-
-export const PAPER_DIMENSIONS: Record<PaperSize, PageDimensions> = {
-  A1: { width: 594, height: 841 },
-  A2: { width: 420, height: 594 },
-  A3: { width: 297, height: 420 },
-  A4: { width: 210, height: 297 },
-  A5: { width: 148, height: 210 },
-};
-
-const CANVAS_SCALE = 900 / 297;
-
-export function getCanvasDimensions(
-  paperSize: PaperSize,
-  orientation: PageOrientation,
-): PageDimensions {
-  const paper = PAPER_DIMENSIONS[paperSize];
-
-  const width =
-    orientation === "landscape" ? paper.height : paper.width;
-
-  const height =
-    orientation === "landscape" ? paper.width : paper.height;
-
-  return {
-    width: Math.round(width * CANVAS_SCALE),
-    height: Math.round(height * CANVAS_SCALE),
-  };
-}
+import { getCanvasDimensions } from "../constants/paperDimensions";
 
 interface EditorLocationState {
   savedDesign?: SavedDesign;
@@ -276,7 +242,7 @@ export default function Editor() {
           )}
 
         <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-100">
-          <div className="sticky left-0 top-0 z-10 shrink-0 border-b border-slate-200/80 bg-white/95 px-2 py-2 backdrop-blur-sm sm:px-4 sm:py-3 lg:px-5">
+          <div className="sticky left-0 top-0 z-10 shrink-0 border-b border-slate-200/80 bg-white/95 px-3 py-2 backdrop-blur-sm sm:px-4 sm:py-2">
             <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {(isMobile || isTablet) && (
@@ -378,13 +344,11 @@ export default function Editor() {
             )}
           </div>
 
-          <div className="flex min-h-0 min-w-0 w-full flex-1 items-center justify-center p-1.5 sm:p-3 lg:p-5">
-            <div className="h-full min-h-0 w-full min-w-0">
-              <FabricEditorCanvas
-                pageWidth={dimensions.width}
-                pageHeight={dimensions.height}
-              />
-            </div>
+          <div className="relative flex min-h-0 min-w-0 w-full flex-1 overflow-hidden">
+            <FabricEditorCanvas
+              pageWidth={dimensions.width}
+              pageHeight={dimensions.height}
+            />
           </div>
         </section>
       </div>
