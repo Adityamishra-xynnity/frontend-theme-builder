@@ -19,6 +19,12 @@ export function getCanvasDimensions(
   paperSize: PaperSize,
   orientation: PageOrientation,
 ): PageDimensions {
+  if (paperSize === "A4") {
+    return orientation === "landscape"
+      ? { width: 900, height: 650 }
+      : { width: 650, height: 900 };
+  }
+
   const paper = PAPER_DIMENSIONS[paperSize];
 
   const width =
@@ -29,6 +35,6 @@ export function getCanvasDimensions(
 
   return {
     width: Math.round(width * CANVAS_SCALE),
-    height: Math.round(height * CANVAS_SCALE),
+    height: Math.round(height * (650 / 210)),
   };
 }

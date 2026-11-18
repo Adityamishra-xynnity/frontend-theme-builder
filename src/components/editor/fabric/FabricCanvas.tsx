@@ -557,16 +557,19 @@ pathStartOffset: 0,
       objectCaching: false,
     };
 
-    object =
-      element.type === "text"
-        ? new Textbox(element.text || "Text", textOptions)
-        : new IText(
-            element.text ||
-              (element.type === "heading"
-                ? "Certificate Heading"
-                : "Certificate Subheading"),
-            textOptions,
-          );
+    object = new Textbox(
+      element.text ||
+        (element.type === "heading"
+          ? "Certificate Heading"
+          : element.type === "subheading"
+            ? "Certificate Subheading"
+            : "Text"),
+      {
+        ...textOptions,
+        originX: "left",
+        originY: "top",
+      },
+    );
     (object as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
     (object as any).textEffect = element.textEffect ?? "none";
     (object as any).textStripeColor = element.textStripeColor ?? "#FDBA74";
@@ -580,12 +583,33 @@ pathStartOffset: 0,
     element.type === "rectangle" ||
     element.type === "square"
   ) {
+    const isTransparentBg =
+      element.backgroundColor === "transparent" ||
+      element.backgroundColor === "rgba(0,0,0,0)";
+    const hasExplicitStroke =
+      element.strokeWidth !== undefined && element.strokeWidth > 0;
+    const effectiveStrokeWidth = hasExplicitStroke
+      ? element.strokeWidth!
+      : isTransparentBg && (element.color || element.strokeColor)
+        ? 2
+        : 0;
+    const effectiveFill = isTransparentBg
+      ? "transparent"
+      : element.backgroundColor || color;
+    const effectiveStroke =
+      hasExplicitStroke ||
+      (isTransparentBg && (element.color || element.strokeColor))
+        ? strokeColor || color
+        : undefined;
+
     object = new Rect({
       width,
       height,
-      fill: element.backgroundColor || color,
-      stroke: strokeColor,
-      strokeWidth,
+      fill: effectiveFill,
+      stroke: effectiveStroke,
+      strokeWidth: effectiveStrokeWidth,
+      originX: "left",
+      originY: "top",
     });
   } else if (element.type === "circle") {
     const diameter = Math.max(width, height);
