@@ -6,6 +6,7 @@ import EmailSidebar, {
 import EmailElementsPanel from "./panels/EmailElementsPanel";
 import EmailCanvas from "./components/EmailCanvas";
 import { EmailEditorProvider } from "./context/EmailEditorContext";
+import UploadsPanel from "./components/UploadsPanel";
 
 export default function EmailCampaign() {
   const [activePanel, setActivePanel] =
@@ -27,6 +28,7 @@ export default function EmailCampaign() {
   return (
     <EmailEditorProvider>
       <div className="flex h-[calc(100vh-72px)] overflow-hidden bg-gray-100">
+
         {/* Main navigation sidebar */}
         <EmailSidebar
           activePanel={activePanel}
@@ -38,6 +40,8 @@ export default function EmailCampaign() {
           <div className="w-[320px] shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
             {activePanel === "elements" ? (
               <EmailElementsPanel />
+            ) : activePanel === "uploads" ? (
+              <UploadsPanel />
             ) : (
               <div className="p-5">
                 <h2 className="text-lg font-semibold text-gray-800">
@@ -55,8 +59,8 @@ export default function EmailCampaign() {
         <main className="flex min-w-0 flex-1 flex-col">
           <EmailCanvas />
         </main>
-        
+
       </div>
-       </EmailEditorProvider>
-      );
+    </EmailEditorProvider>
+  );
 }

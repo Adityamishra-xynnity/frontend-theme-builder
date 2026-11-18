@@ -61,6 +61,7 @@ interface EmailEditorContextType {
   selectedNodeId: string | null;
 
   addSection: (template: EmailSectionTemplate) => void;
+  addImage: (imageUrl: string) => void;
 
   updateNodeContent: (
     sectionId: string,
@@ -147,6 +148,40 @@ export function EmailEditorProvider({
     setSections((current) => [...current, newSection]);
     setSelectedSectionId(sectionId);
     setSelectedNodeId(null);
+  };
+
+  // Add an uploaded image to the email canvas
+  const addImage = (imageUrl: string) => {
+    const sectionId = crypto.randomUUID();
+    const nodeId = crypto.randomUUID();
+
+    const newSection: EmailSection = {
+      id: sectionId,
+      templateId: "uploaded-image",
+      category: "images",
+      name: "Uploaded Image",
+      backgroundColor: "#FFFFFF",
+      padding: "24px",
+      x: 0,
+      y: sections.length * 280,
+      width: 600,
+      height: 260,
+      nodes: [
+        {
+          id: nodeId,
+          type: "image",
+          content: imageUrl,
+          x: 24,
+          y: 24,
+          width: 552,
+          height: 212,
+        },
+      ],
+    };
+
+    setSections((current) => [...current, newSection]);
+    setSelectedSectionId(sectionId);
+    setSelectedNodeId(nodeId);
   };
 
   // Update text or other element content
@@ -261,6 +296,7 @@ export function EmailEditorProvider({
         selectedSectionId,
         selectedNodeId,
         addSection,
+        addImage,
         updateNodeContent,
         updateSectionBounds,
         updateNodeBounds,

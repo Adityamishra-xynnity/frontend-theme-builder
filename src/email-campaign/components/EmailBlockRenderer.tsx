@@ -251,7 +251,8 @@ export default function EmailBlockRenderer() {
 
                       {node.type === "image" && (
                         <div className="h-full w-full">
-                          {node.content.startsWith("http") ? (
+                          {node.content.startsWith("http") ||
+                            node.content.startsWith("data:image/") ? (
                             <img
                               src={node.content}
                               alt="Email element"
