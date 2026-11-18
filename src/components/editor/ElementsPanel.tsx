@@ -16,6 +16,19 @@ import {
   Shapes,
   Sparkles,
   Frame,
+  Smile,
+  Images,
+  PartyPopper,
+  Trophy,
+  GraduationCap,
+  PawPrint,
+  Briefcase,
+  Medal,
+  BookOpen,
+  Trees,
+  Building2,
+  Gift,
+  Wallpaper,
 } from "lucide-react";
 
 import { useFabric } from "../../context/FabricContext";
@@ -1741,73 +1754,211 @@ export default function ElementsPanel() {
     </div>
   );
 
-  const renderCategoryList = (items: ShapeCategory[]) => (
-    <div className="space-y-2.5">
-      {items.map((category) => (
-        <button
-          key={category.title}
-          type="button"
-          onClick={() => handleOpenCategory(category)}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 transition-colors group-hover:from-blue-100 group-hover:to-indigo-100 group-hover:text-blue-700">
-            {category.icon}
-          </span>
+  const renderCategoryList = (items: ShapeCategory[]) => {
+    const colors = [
+      {
+        bg: "bg-blue-50",
+        hover: "group-hover:bg-blue-100",
+        ring: "group-focus-visible:ring-blue-200",
+        icon: "text-blue-600",
+        label: "group-hover:text-blue-700",
+      },
+      {
+        bg: "bg-amber-50",
+        hover: "group-hover:bg-amber-100",
+        ring: "group-focus-visible:ring-amber-200",
+        icon: "text-amber-600",
+        label: "group-hover:text-amber-700",
+      },
+      {
+        bg: "bg-pink-50",
+        hover: "group-hover:bg-pink-100",
+        ring: "group-focus-visible:ring-pink-200",
+        icon: "text-pink-600",
+        label: "group-hover:text-pink-700",
+      },
+      {
+        bg: "bg-purple-50",
+        hover: "group-hover:bg-purple-100",
+        ring: "group-focus-visible:ring-purple-200",
+        icon: "text-purple-600",
+        label: "group-hover:text-purple-700",
+      },
+      {
+        bg: "bg-green-50",
+        hover: "group-hover:bg-green-100",
+        ring: "group-focus-visible:ring-green-200",
+        icon: "text-green-600",
+        label: "group-hover:text-green-700",
+      },
+      {
+        bg: "bg-sky-50",
+        hover: "group-hover:bg-sky-100",
+        ring: "group-focus-visible:ring-sky-200",
+        icon: "text-sky-600",
+        label: "group-hover:text-sky-700",
+      },
+      {
+        bg: "bg-orange-50",
+        hover: "group-hover:bg-orange-100",
+        ring: "group-focus-visible:ring-orange-200",
+        icon: "text-orange-600",
+        label: "group-hover:text-orange-700",
+      },
+      {
+        bg: "bg-indigo-50",
+        hover: "group-hover:bg-indigo-100",
+        ring: "group-focus-visible:ring-indigo-200",
+        icon: "text-indigo-600",
+        label: "group-hover:text-indigo-700",
+      },
+      {
+        bg: "bg-rose-50",
+        hover: "group-hover:bg-rose-100",
+        ring: "group-focus-visible:ring-rose-200",
+        icon: "text-rose-600",
+        label: "group-hover:text-rose-700",
+      },
+      {
+        bg: "bg-teal-50",
+        hover: "group-hover:bg-teal-100",
+        ring: "group-focus-visible:ring-teal-200",
+        icon: "text-teal-600",
+        label: "group-hover:text-teal-700",
+      },
+    ];
 
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-800">
-              {category.title}
-            </span>
+    return (
+      <div className="grid grid-cols-3 gap-2.5">
+        {items.map((category, index) => {
+          const color = colors[index % colors.length];
 
-            <span className="mt-1 block text-xs text-slate-500">
-              Browse category
-            </span>
-          </span>
+          return (
+            <button
+              key={category.title}
+              type="button"
+              onClick={() => handleOpenCategory(category)}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div
+                className={`flex aspect-square w-full items-center justify-center rounded-xl p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 ${color.bg} ${color.hover} ${color.ring}`}
+              >
+                <span
+                  className={`flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm ${color.icon}`}
+                >
+                  {category.icon}
+                </span>
+              </div>
 
-          <ChevronRight
-            size={17}
-            className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-          />
-        </button>
-      ))}
-    </div>
-  );
+              <span
+                className={`text-center text-xs font-semibold text-slate-700 transition-colors ${color.label}`}
+              >
+                {category.title}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
 
   // --------------------------------------------------
   // EMOJI UI HELPERS
   // --------------------------------------------------
 
-  const renderEmojiCategoryList = () => (
-    <div className="space-y-2.5">
-      {filteredEmojiCategories.map((category) => (
-        <button
-          key={category.title}
-          type="button"
-          onClick={() => handleOpenEmojiCategory(category.title)}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-50 to-orange-100 text-2xl transition-transform group-hover:scale-105">
-            {category.emoji}
-          </span>
 
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-800">
-              {category.title}
-            </span>
+  const renderEmojiCategoryList = () => {
+    const colors = [
+      {
+        bg: "bg-pink-50",
+        hover: "group-hover:bg-pink-100",
+        ring: "group-focus-visible:ring-pink-200",
+        label: "group-hover:text-pink-700",
+      },
+      {
+        bg: "bg-orange-50",
+        hover: "group-hover:bg-orange-100",
+        ring: "group-focus-visible:ring-orange-200",
+        label: "group-hover:text-orange-700",
+      },
+      {
+        bg: "bg-sky-50",
+        hover: "group-hover:bg-sky-100",
+        ring: "group-focus-visible:ring-sky-200",
+        label: "group-hover:text-sky-700",
+      },
+      {
+        bg: "bg-amber-50",
+        hover: "group-hover:bg-amber-100",
+        ring: "group-focus-visible:ring-amber-200",
+        label: "group-hover:text-amber-700",
+      },
+      {
+        bg: "bg-indigo-50",
+        hover: "group-hover:bg-indigo-100",
+        ring: "group-focus-visible:ring-indigo-200",
+        label: "group-hover:text-indigo-700",
+      },
+      {
+        bg: "bg-green-50",
+        hover: "group-hover:bg-green-100",
+        ring: "group-focus-visible:ring-green-200",
+        label: "group-hover:text-green-700",
+      },
+      {
+        bg: "bg-purple-50",
+        hover: "group-hover:bg-purple-100",
+        ring: "group-focus-visible:ring-purple-200",
+        label: "group-hover:text-purple-700",
+      },
+      {
+        bg: "bg-teal-50",
+        hover: "group-hover:bg-teal-100",
+        ring: "group-focus-visible:ring-teal-200",
+        label: "group-hover:text-teal-700",
+      },
+    ];
 
-            <span className="mt-1 block text-xs text-slate-500">
-              {category.description}
-            </span>
-          </span>
+    return (
+      <div className="grid grid-cols-3 gap-2.5">
+        {filteredEmojiCategories.map((category, index) => {
+          const color = colors[index % colors.length];
 
-          <ChevronRight
-            size={17}
-            className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-          />
-        </button>
-      ))}
-    </div>
-  );
+          return (
+            <button
+              key={category.title}
+              type="button"
+              onClick={() => handleOpenEmojiCategory(category.title)}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div
+                className={`flex aspect-square w-full items-center justify-center rounded-xl p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 ${color.bg} ${color.hover} ${color.ring}`}
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm transition-transform group-hover:scale-105">
+                  {category.title === "Faces" && <Smile size={24} className="text-pink-600" />}
+                  {category.title === "Celebration" && <PartyPopper size={24} className="text-orange-600" />}
+                  {category.title === "Symbols" && <Shapes size={24} className="text-sky-600" />}
+                  {category.title === "Awards" && <Trophy size={24} className="text-amber-600" />}
+                  {category.title === "Education" && <GraduationCap size={24} className="text-indigo-600" />}
+                  {category.title === "Nature" && <Leaf size={24} className="text-green-600" />}
+                  {category.title === "Animals" && <PawPrint size={24} className="text-purple-600" />}
+                  {category.title === "Business" && <Briefcase size={24} className="text-teal-600" />}
+                </span>
+              </div>
+
+              <span
+                className={`text-center text-xs font-semibold text-slate-700 transition-colors ${color.label}`}
+              >
+                {category.title}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
 
   const renderEmojiGrid = () => (
     <div className="grid grid-cols-4 gap-2">
@@ -1836,37 +1987,89 @@ export default function ElementsPanel() {
   // PHOTO UI HELPERS
   // --------------------------------------------------
 
-  const renderPhotoCategoryList = () => (
-    <div className="space-y-2.5">
-      {filteredPhotoCategories.map((category) => (
-        <button
-          key={category.title}
-          type="button"
-          onClick={() => handleOpenPhotoCategory(category.title)}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-2xl transition-transform group-hover:scale-105">
-            {category.emoji}
-          </span>
 
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-800">
-              {category.title}
-            </span>
+  const renderPhotoCategoryList = () => {
+    const colors = [
+      {
+        bg: "bg-amber-50",
+        hover: "group-hover:bg-amber-100",
+        ring: "group-focus-visible:ring-amber-200",
+        icon: "text-amber-600",
+        label: "group-hover:text-amber-700",
+      },
+      {
+        bg: "bg-indigo-50",
+        hover: "group-hover:bg-indigo-100",
+        ring: "group-focus-visible:ring-indigo-200",
+        icon: "text-indigo-600",
+        label: "group-hover:text-indigo-700",
+      },
+      {
+        bg: "bg-green-50",
+        hover: "group-hover:bg-green-100",
+        ring: "group-focus-visible:ring-green-200",
+        icon: "text-green-600",
+        label: "group-hover:text-green-700",
+      },
+      {
+        bg: "bg-sky-50",
+        hover: "group-hover:bg-sky-100",
+        ring: "group-focus-visible:ring-sky-200",
+        icon: "text-sky-600",
+        label: "group-hover:text-sky-700",
+      },
+      {
+        bg: "bg-orange-50",
+        hover: "group-hover:bg-orange-100",
+        ring: "group-focus-visible:ring-orange-200",
+        icon: "text-orange-600",
+        label: "group-hover:text-orange-700",
+      },
+      {
+        bg: "bg-purple-50",
+        hover: "group-hover:bg-purple-100",
+        ring: "group-focus-visible:ring-purple-200",
+        icon: "text-purple-600",
+        label: "group-hover:text-purple-700",
+      },
+    ];
 
-            <span className="mt-1 block text-xs text-slate-500">
-              {category.description}
-            </span>
-          </span>
+    return (
+      <div className="grid grid-cols-3 gap-2.5">
+        {filteredPhotoCategories.map((category, index) => {
+          const color = colors[index % colors.length];
 
-          <ChevronRight
-            size={17}
-            className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-          />
-        </button>
-      ))}
-    </div>
-  );
+          return (
+            <button
+              key={category.title}
+              type="button"
+              onClick={() => handleOpenPhotoCategory(category.title)}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div
+                className={`flex aspect-square w-full items-center justify-center rounded-xl p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 ${color.bg} ${color.hover} ${color.ring}`}
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm transition-transform group-hover:scale-105">
+                  {category.title === "Awards" && <Medal size={24} strokeWidth={2} className="text-amber-600" />}
+                  {category.title === "Education" && <BookOpen size={24} strokeWidth={2} className="text-indigo-600" />}
+                  {category.title === "Nature" && <Trees size={24} strokeWidth={2} className="text-green-600" />}
+                  {category.title === "Business" && <Building2 size={24} strokeWidth={2} className="text-sky-600" />}
+                  {category.title === "Celebration" && <Gift size={24} strokeWidth={2} className="text-orange-600" />}
+                  {category.title === "Backgrounds" && <Wallpaper size={24} strokeWidth={2} className="text-purple-600" />}
+                </span>
+              </div>
+
+              <span
+                className={`text-center text-xs font-semibold text-slate-700 transition-colors ${color.label}`}
+              >
+                {category.title}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderPhotoGrid = () => (
     <div className="grid grid-cols-2 gap-2.5">
@@ -1925,18 +2128,18 @@ export default function ElementsPanel() {
       : view === "animations"
         ? "Animations"
         : view === "root"
-      ? "Elements"
-      : view === "categories"
-        ? "Shapes"
-        : view === "items"
-          ? selectedCategory ?? "Shapes"
-          : view === "emoji-categories"
-            ? "Emojis"
-            : view === "emoji-items"
-              ? selectedEmojiCategory ?? "Emojis"
-              : view === "photo-categories"
-                ? "Photos"
-                : selectedPhotoCategory ?? "Photos";
+          ? "Elements"
+          : view === "categories"
+            ? "Shapes"
+            : view === "items"
+              ? selectedCategory ?? "Shapes"
+              : view === "emoji-categories"
+                ? "Emojis"
+                : view === "emoji-items"
+                  ? selectedEmojiCategory ?? "Emojis"
+                  : view === "photo-categories"
+                    ? "Photos"
+                    : selectedPhotoCategory ?? "Photos";
 
   const pageSubtitle =
     view === "borders"
@@ -1944,18 +2147,18 @@ export default function ElementsPanel() {
       : view === "animations"
         ? "Choose an animation for your design."
         : view === "root"
-      ? "Browse elements for your design."
-      : view === "categories"
-        ? "Choose a shape category."
-        : view === "items"
-          ? "Select a shape to add it to your canvas."
-          : view === "emoji-categories"
-            ? "Choose an emoji category."
-            : view === "emoji-items"
-              ? "Select an emoji to add it to your canvas."
-              : view === "photo-categories"
-                ? "Choose a photo category."
-                : "Select a photo to add it to your canvas.";
+          ? "Browse elements for your design."
+          : view === "categories"
+            ? "Choose a shape category."
+            : view === "items"
+              ? "Select a shape to add it to your canvas."
+              : view === "emoji-categories"
+                ? "Choose an emoji category."
+                : view === "emoji-items"
+                  ? "Select an emoji to add it to your canvas."
+                  : view === "photo-categories"
+                    ? "Choose a photo category."
+                    : "Select a photo to add it to your canvas.";
 
   // --------------------------------------------------
   // MAIN UI
@@ -1990,31 +2193,31 @@ export default function ElementsPanel() {
         </div>
 
         {view !== "borders" && view !== "animations" && (
-        <div className="relative mt-4">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          />
+          <div className="relative mt-4">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
 
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={
-              view === "emoji-items"
-                ? "Search emojis..."
-                : view === "emoji-categories"
-                  ? "Search emoji categories..."
-                  : view === "photo-items"
-                    ? "Search photos..."
-                    : view === "photo-categories"
-                      ? "Search photo categories..."
-                      : "Search elements..."
-            }
-            aria-label="Search elements"
-            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
-          />
-        </div>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={
+                view === "emoji-items"
+                  ? "Search emojis..."
+                  : view === "emoji-categories"
+                    ? "Search emoji categories..."
+                    : view === "photo-items"
+                      ? "Search photos..."
+                      : view === "photo-categories"
+                        ? "Search photo categories..."
+                        : "Search elements..."
+              }
+              aria-label="Search elements"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
+            />
+          </div>
         )}
       </div>
 
@@ -2047,7 +2250,7 @@ export default function ElementsPanel() {
             </div>
           )
 
-        /* PHOTO ITEMS */
+          /* PHOTO ITEMS */
 
         ) : view === "photo-items" ? (
           photoLoading && photoAssets.length === 0 ? (
@@ -2152,7 +2355,7 @@ export default function ElementsPanel() {
             </>
           )
 
-        /* EMOJI CATEGORIES */
+          /* EMOJI CATEGORIES */
 
         ) : view === "emoji-categories" ? (
           filteredEmojiCategories.length > 0 ? (
@@ -2171,7 +2374,7 @@ export default function ElementsPanel() {
             </div>
           )
 
-        /* EMOJI ITEMS */
+          /* EMOJI ITEMS */
 
         ) : view === "emoji-items" ? (
           emojiLoading && emojiAssets.length === 0 ? (
@@ -2276,7 +2479,7 @@ export default function ElementsPanel() {
             </>
           )
 
-        /* SHAPE LOADING */
+          /* SHAPE LOADING */
 
         ) : loading ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center">
@@ -2311,7 +2514,7 @@ export default function ElementsPanel() {
             </button>
           </div>
 
-        /* SEARCH RESULTS */
+          /* SEARCH RESULTS */
 
         ) : normalizedSearch ? (
           <div className="space-y-3">
@@ -2438,121 +2641,132 @@ export default function ElementsPanel() {
               )}
           </div>
 
-        /* ROOT VIEW */
+          /* ROOT VIEW */
+
 
         ) : view === "root" ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2.5">
+
             <button
               type="button"
               onClick={handleOpenShapes}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="group flex flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 shadow-sm transition-transform group-hover:scale-105">
-                <Shapes size={22} />
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">
-                  Shapes
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-blue-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-blue-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+                  <Shapes
+                    size={24}
+                    strokeWidth={2}
+                    className="text-blue-600 transition-transform group-hover:scale-110"
+                  />
                 </span>
+              </div>
 
-                <span className="mt-1 block text-xs text-slate-500">
-                  Explore all shape categories
-                </span>
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-blue-700">
+                Shapes
               </span>
-
-              <ChevronRight
-                size={18}
-                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-              />
             </button>
+
 
             <button
               type="button"
               onClick={handleOpenEmojis}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="group flex flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 text-2xl shadow-sm transition-transform group-hover:scale-105">
-                😀
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">
-                  Emojis
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-pink-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-pink-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-pink-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+                  <Smile
+                    size={24}
+                    strokeWidth={2}
+                    className="text-pink-600 transition-transform group-hover:scale-110"
+                  />
                 </span>
+              </div>
 
-                <span className="mt-1 block text-xs text-slate-500">
-                  Explore emojis for your design
-                </span>
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-pink-700">
+                Emojis
               </span>
-
-              <ChevronRight
-                size={18}
-                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-              />
             </button>
+
 
             <button
               type="button"
               onClick={handleOpenPhotos}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="group flex flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-100 text-2xl shadow-sm transition-transform group-hover:scale-105">
-                🖼️
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">
-                  Photos
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-sky-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-sky-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-sky-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+                  <Images
+                    size={24}
+                    strokeWidth={2}
+                    className="text-sky-600 transition-transform group-hover:scale-110"
+                  />
                 </span>
+              </div>
 
-                <span className="mt-1 block text-xs text-slate-500">
-                  Explore photos for your design
-                </span>
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-sky-700">
+                Photos
               </span>
+            </button>
 
-              <ChevronRight
-                size={18}
-                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-              />
-            </button>
-            <button
-              type="button"
-              onClick={() => { setSearch(""); setView("borders"); }}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
-            >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-yellow-100 text-amber-700 shadow-sm transition-transform group-hover:scale-105">
-                <Frame size={22} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">Borders</span>
-                <span className="mt-1 block text-xs text-slate-500">Explore page border styles</span>
-              </span>
-              <ChevronRight size={18} className="text-slate-400" />
-            </button>
+
 
             <button
               type="button"
-              onClick={() => { setSearch(""); setView("animations"); }}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onClick={() => {
+                setSearch("");
+                setView("borders");
+              }}
+              className="group flex flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-700 shadow-sm transition-transform group-hover:scale-105">
-                <Sparkles size={22} />
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-amber-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-amber-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-amber-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+                  <Frame
+                    size={24}
+                    strokeWidth={2}
+                    className="text-orange-600 transition-transform group-hover:scale-110"
+                  />
+                </span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-orange-700">
+                Borders
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">Animations</span>
-                <span className="mt-1 block text-xs text-slate-500">Explore animation effects</span>
-              </span>
-              <ChevronRight size={18} className="text-slate-400" />
             </button>
+
+
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setView("animations");
+              }}
+              className="group flex flex-col items-center gap-2 focus:outline-none"
+            >
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-purple-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-purple-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-purple-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+                  <Sparkles
+                    size={24}
+                    strokeWidth={2}
+                    className="text-purple-600 transition-transform group-hover:scale-110"
+                  />
+                </span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-purple-700">
+                Animations
+              </span>
+            </button>
+
           </div>
 
-        /* SHAPE CATEGORIES */
+          /* SHAPE CATEGORIES */
 
         ) : view === "categories" ? (
           renderCategoryList(categories)
 
-        /* SHAPE ITEMS */
+          /* SHAPE ITEMS */
 
         ) : selectedCategoryData ? (
           <div>
