@@ -2729,7 +2729,7 @@ export default function ElementsPanel() {
 
 
         ) : view === "root" ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
             {/* 1. GRAPHICS (STATIC VECTOR LIBRARY) */}
             <button
               type="button"
@@ -2737,27 +2737,22 @@ export default function ElementsPanel() {
                 setSearch("");
                 setView("graphics");
               }}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
-                <Palette size={22} />
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">
-                  Graphics
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-orange-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-orange-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
+                  <Palette
+                    size={24}
+                    strokeWidth={2}
+                    className="text-orange-700"
+                  />
                 </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Flowers, foliage, animals, fruit & objects
-                </span>
-              </span>
+              </div>
 
-              <ChevronRight
-                size={18}
-                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600"
-              />
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-orange-700">
+                Graphics
+              </span>
             </button>
-
             {/* 2. ANIMATED DESIGNS */}
             <button
               type="button"
@@ -2765,25 +2760,21 @@ export default function ElementsPanel() {
                 setSearch("");
                 setView("animated-designs");
               }}
-              className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-100"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-sm transition-transform group-hover:scale-105">
-                <Sparkles size={22} />
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-900">
-                  Animated Designs
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-violet-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-violet-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
+                  <Sparkles
+                    size={24}
+                    strokeWidth={2}
+                    className="text-violet-700"
+                  />
                 </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Animated arrows, shapes, words & decorative art
-                </span>
-              </span>
+              </div>
 
-              <ChevronRight
-                size={18}
-                className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-purple-600"
-              />
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-violet-700">
+                Animated Designs
+              </span>
             </button>
 
             <button
@@ -2791,12 +2782,12 @@ export default function ElementsPanel() {
               onClick={handleOpenShapes}
               className="group flex flex-col items-center gap-2 focus:outline-none"
             >
-              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-blue-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-blue-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-blue-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-blue-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm">
                   <Shapes
                     size={24}
                     strokeWidth={2}
-                    className="text-blue-600 transition-transform group-hover:scale-110"
+                    className="text-blue-700 transition-transform group-hover:scale-110"
                   />
                 </span>
               </div>
@@ -2806,18 +2797,17 @@ export default function ElementsPanel() {
               </span>
             </button>
 
-
             <button
               type="button"
               onClick={handleOpenEmojis}
-              className="group flex flex-col items-center gap-2 focus:outline-none"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-pink-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-pink-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-pink-200">
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-pink-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-pink-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
                   <Smile
                     size={24}
                     strokeWidth={2}
-                    className="text-pink-600 transition-transform group-hover:scale-110"
+                    className="text-pink-700"
                   />
                 </span>
               </div>
@@ -2827,27 +2817,25 @@ export default function ElementsPanel() {
               </span>
             </button>
 
-
             <button
               type="button"
               onClick={handleOpenPhotos}
-              className="group flex flex-col items-center gap-2 focus:outline-none"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-sky-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-sky-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-sky-200">
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-green-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-green-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
                   <Images
                     size={24}
                     strokeWidth={2}
-                    className="text-sky-600 transition-transform group-hover:scale-110"
+                    className="text-green-700"
                   />
                 </span>
               </div>
 
-              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-sky-700">
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-green-700">
                 Photos
               </span>
             </button>
-
 
 
             <button
@@ -2856,19 +2844,19 @@ export default function ElementsPanel() {
                 setSearch("");
                 setView("borders");
               }}
-              className="group flex flex-col items-center gap-2 focus:outline-none"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-amber-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-amber-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-amber-200">
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-amber-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-amber-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
                   <Frame
                     size={24}
                     strokeWidth={2}
-                    className="text-orange-600 transition-transform group-hover:scale-110"
+                    className="text-amber-700"
                   />
                 </span>
               </div>
 
-              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-orange-700">
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-amber-700">
                 Borders
               </span>
             </button>
@@ -2881,19 +2869,19 @@ export default function ElementsPanel() {
                 setSearch("");
                 setView("animations");
               }}
-              className="group flex flex-col items-center gap-2 focus:outline-none"
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
             >
-              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-purple-50 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-purple-100 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-purple-200">
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-fuchsia-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-fuchsia-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
                   <Sparkles
                     size={24}
                     strokeWidth={2}
-                    className="text-purple-600 transition-transform group-hover:scale-110"
+                    className="text-fuchsia-700"
                   />
                 </span>
               </div>
 
-              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-purple-700">
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-fuchsia-700">
                 Animations
               </span>
             </button>
