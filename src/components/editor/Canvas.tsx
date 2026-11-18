@@ -43,7 +43,7 @@ export default function Canvas() {
             }}
           >
             <div className="bg-white shadow-2xl rounded-sm overflow-hidden">
-              <FabricCanvas />
+             <FabricCanvas pageWidth={1400} pageHeight={800} />
             </div>
           </div>
 

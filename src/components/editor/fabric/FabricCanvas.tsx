@@ -1,1336 +1,1856 @@
-import {
-  useEffect,
-  useRef,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
-  Canvas as FabricCanvas,
-  Textbox,
+  Canvas as FabricCanvasInstance,
+  FabricImage,
   IText,
+  Textbox,
   Rect,
   Circle,
   Triangle,
   Polygon,
   Line,
   Path,
-  FabricImage,
+  Group,
+  Shadow,
+  Pattern,
+  type FabricObject,
 } from "fabric";
 
 import { useEditor } from "../../../context/EditorContext";
-
 import { useFabric } from "../../../context/FabricContext";
 
 import type {
+  EditorElement,
   ElementType,
 } from "../../../types/editor";
 
-type FabricObjectWithMeta = {
-  elementId?: string;
 
-  elementType?: ElementType;
+function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
+  const tile = document.createElement("canvas");
+  tile.width = 24;
+  tile.height = 24;
+  const context = tile.getContext("2d");
+  if (context) {
+    context.fillStyle = baseColor;
+    context.fillRect(0, 0, tile.width, tile.height);
+    context.strokeStyle = stripeColor;
+    context.lineWidth = 4;
+    context.lineCap = "butt";
+    for (let offset = -24; offset < 48; offset += 9) {
+      context.beginPath();
+      context.moveTo(offset, 24);
+      context.lineTo(offset + 24, 0);
+      context.stroke();
+    }
+  }
+  return new Pattern({ source: tile, repeat: "repeat" });
+}
 
-  imageSrc?: string;
+function applyOutsideStripedTextEffect(
+  object: any,
+  stripeColor: string,
+): void {
+  if (!object || object.__outsideStripedRenderApplied) return;
 
-  shapeSides?: number;
-};
+  const originalRender = object._render;
+  if (typeof originalRender !== "function") return;
 
-function getPolygonPoints(
-  sides: number,
-  radius: number
-) {
-  const points = [];
-
-  for (
-    let index = 0;
-    index < sides;
-    index++
+  object._render = function (
+    this: any,
+    ctx: CanvasRenderingContext2D,
   ) {
-    const angle =
-      -Math.PI / 2 +
-      (index * 2 * Math.PI) /
-        sides;
+    const foregroundFill = this.fill;
 
-    points.push({
-      x:
-        radius +
-        radius * Math.cos(angle),
+    // Stripe color always follows the current text color.
+    const currentStripeColor =
+      typeof foregroundFill === "string"
+        ? foregroundFill
+        : stripeColor;
 
-      y:
-        radius +
-        radius * Math.sin(angle),
-    });
-  }
+    // Rebuild the stripe pattern only when the text color changes.
+    if (
+      !this.__outsideStripedPattern ||
+      this.__outsideStripedColor !== currentStripeColor
+    ) {
+      const tile = document.createElement("canvas");
+      tile.width = 24;
+      tile.height = 24;
 
-  return points;
-}
+      const patternContext = tile.getContext("2d");
 
-function applyControls(
-  object: any
-) {
-  object.set({
-    selectable: true,
+      if (patternContext) {
+        patternContext.strokeStyle = currentStripeColor;
+        patternContext.lineWidth = 3.5;
+        patternContext.lineCap = "butt";
 
-    evented: true,
+        for (let offset = -24; offset < 48; offset += 8) {
+          patternContext.beginPath();
+          patternContext.moveTo(offset, 24);
+          patternContext.lineTo(offset + 24, 0);
+          patternContext.stroke();
+        }
+      }
 
-    transparentCorners:
-      false,
+      this.__outsideStripedPattern = new Pattern({
+        source: tile,
+        repeat: "repeat",
+      });
 
-    cornerColor:
-      "#111827",
+      this.__outsideStripedColor = currentStripeColor;
+    }
 
-    cornerStyle:
-      "circle",
+    ctx.save();
+    ctx.translate(7, 7);
 
-    borderColor:
-      "#111827",
+    this.fill = this.__outsideStripedPattern;
+    originalRender.call(this, ctx);
 
-    originX:
-      "left",
+    ctx.restore();
 
-    originY:
-      "top",
-  });
-}
-
-function createLineObject(
-  element: {
-    type:
-      | "line"
-      | "arrow"
-      | "double-arrow"
-      | "dashed-line"
-      | "dotted-line";
-
-    x: number;
-
-    y: number;
-
-    width: number;
-
-    height: number;
-
-    scaleX?: number;
-
-    scaleY?: number;
-
-    angle?: number;
-
-    opacity?: number;
-
-    strokeColor?: string;
-
-    strokeWidth?: number;
-
-    lineDash?: number[];
-  }
-) {
-  const width =
-    Math.max(
-      40,
-      element.width || 220
-    );
-
-  const stroke =
-    element.strokeColor ??
-    "#111827";
-
-  const strokeWidth =
-    element.strokeWidth ??
-    4;
-
-  const commonOptions = {
-    left: element.x,
-
-    top: element.y,
-
-    scaleX:
-      element.scaleX ?? 1,
-
-    scaleY:
-      element.scaleY ?? 1,
-
-    angle:
-      element.angle ?? 0,
-
-    opacity:
-      element.opacity ?? 1,
-
-    fill: "",
-
-    stroke,
-
-    strokeWidth,
-
-    strokeLineCap:
-      "round" as const,
-
-    strokeLineJoin:
-      "round" as const,
-
-    originX:
-      "left" as const,
-
-    originY:
-      "top" as const,
-
-    selectable: true,
-
-    evented: true,
-
-    transparentCorners:
-      false,
-
-    cornerColor:
-      "#111827",
-
-    cornerStyle:
-      "circle" as const,
-
-    borderColor:
-      "#111827",
+    this.fill = foregroundFill;
+    originalRender.call(this, ctx);
   };
 
-  if (
-    element.type ===
-      "line" ||
-    element.type ===
-      "dashed-line" ||
-    element.type ===
-      "dotted-line"
-  ) {
-    return new Line(
-      [
-        0,
-        0,
-        width,
-        0,
-      ],
-      {
-        ...commonOptions,
+  object.__outsideStripedRenderApplied = true;
+  object.__outsideStripedColor = stripeColor;
+}
 
-        strokeDashArray:
-          element.lineDash ??
-          (
-            element.type ===
-            "dashed-line"
-              ? [18, 10]
-              : element.type ===
-                  "dotted-line"
-                ? [2, 10]
-                : undefined
-          ),
-      }
-    );
+interface FabricEditorCanvasProps {
+  pageWidth: number;
+  pageHeight: number;
+}
+
+type FabricObjectWithMeta = FabricObject & {
+  elementId?: string;
+  elementType?: ElementType;
+  imageSrc?: string;
+  shapeSides?: number;
+  isFreehand?: boolean;
+  tableData?: {
+    rows: number;
+    columns: number;
+    cells: { text: string; backgroundColor: string }[][];
+    borderColor: string;
+    borderWidth: number;
+  };
+};
+
+const DEFAULT_WIDTH = 1400;
+const DEFAULT_HEIGHT = 800;
+
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.1;
+
+function getObjectMeta(object: FabricObject): FabricObjectWithMeta {
+  return object as FabricObjectWithMeta;
+}
+
+// Circular rotate-arrow cursor for Fabric rotation handle.
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M25 13A11 11 0 1 0 26 19" fill="none" stroke="#111111" stroke-width="2.8" stroke-linecap="round"/><path d="M20 5L27 12L18 14" fill="none" stroke="#111111" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)}") 16 16, auto`;
+
+function applyRotationCursor(object: FabricObject): void {
+  const rotationControl = object.controls?.mtr;
+
+  if (rotationControl) {
+    rotationControl.cursorStyle = ROTATE_CURSOR;
   }
+}
 
-  if (
-    element.type ===
-    "arrow"
-  ) {
-    return new Path(
-      `
-      M 0 0
-      L ${width} 0
+/**
+ * Creates the local baseline used by Fabric's native editable text-on-path
+ * rendering. Positive values bend upward; negative values bend downward.
+ */
+function createTextBendPath(
+  width: number,
+  fontSize: number,
+  bend: number,
+): Path | undefined {
+  const amount = Math.max(-100, Math.min(100, Number(bend) || 0));
 
-      M ${width} 0
-      L ${width - 18} -12
+  if (Math.abs(amount) < 0.5) return undefined;
 
-      M ${width} 0
-      L ${width - 18} 12
-      `,
-      commonOptions
-    );
-  }
+  const safeWidth = Math.max(40, width || 40);
+
+  // Stronger curve intensity
+  const intensity = Math.abs(amount) / 100;
+
+  // Maximum curve height increases significantly
+  const amplitude = Math.max(
+    fontSize * 2,
+    safeWidth * 0.45,
+  ) * intensity;
+
+  // Positive = upward curve, Negative = downward curve
+  const controlY = amount > 0 ? -2 * amplitude : 2 * amplitude;
 
   return new Path(
-    `
-    M 0 0
-    L ${width} 0
-
-    M 0 0
-    L 18 -12
-
-    M 0 0
-    L 18 12
-
-    M ${width} 0
-    L ${width - 18} -12
-
-    M ${width} 0
-    L ${width - 18} 12
-    `,
-    commonOptions
+    `M 0 0 Q ${safeWidth / 2} ${controlY} ${safeWidth} 0`,
+    {
+      fill: "",
+      stroke: "",
+      strokeWidth: 0,
+      objectCaching: false,
+      selectable: false,
+      evented: false,
+    },
+  );
+}
+function getElementSignature(elements: EditorElement[]): string {
+  return JSON.stringify(
+    elements.map((element) => ({
+      id: element.id,
+      type: element.type,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      scaleX: element.scaleX ?? 1,
+      scaleY: element.scaleY ?? 1,
+      angle: element.angle ?? 0,
+      opacity: element.opacity ?? 1,
+      text: element.text ?? "",
+      fontSize: element.fontSize ?? 32,
+      fontFamily: element.fontFamily ?? "Arial",
+      color: element.color ?? "#000000",
+      backgroundColor: element.backgroundColor ?? "",
+      fontWeight: element.fontWeight ?? "normal",
+      fontStyle: element.fontStyle ?? "normal",
+      textAlign: element.textAlign ?? "left",
+      lineHeight: element.lineHeight ?? 1.16,
+      charSpacing: element.charSpacing ?? 0,
+      textBend: element.textBend ?? 0,
+      strokeColor: element.strokeColor ?? "",
+      strokeWidth: element.strokeWidth ?? 0,
+      lineDash: element.lineDash ?? [],
+      shapeSides: element.shapeSides ?? 0,
+      src: element.src ?? "",
+      pathData: element.pathData ?? [],
+      tableData: element.tableData ?? null,
+    })),
   );
 }
 
-export default function FabricEditorCanvas() {
-  const canvasElementRef =
-    useRef<HTMLCanvasElement | null>(
-      null
-    );
+function applyElementMetadata(
+  object: FabricObject,
+  element: EditorElement,
+): void {
+  const meta = getObjectMeta(object);
 
-  const internalChangeRef =
-    useRef(false);
+  meta.elementId = element.id;
+  meta.elementType = element.type;
+  (meta as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
+
+  if (element.type === "image" && element.src) {
+    meta.imageSrc = element.src;
+  }
+
+  if (element.shapeSides !== undefined) {
+    meta.shapeSides = element.shapeSides;
+  }
+
+  // Keep freehand paths identifiable after a page rebuild.
+  meta.isFreehand = Boolean(element.pathData?.length);
+
+  if (element.tableData) {
+    meta.tableData = JSON.parse(JSON.stringify(element.tableData));
+  }
+}
+
+/**
+ * Restores the saved properties of a Fabric object.
+ * Polygon geometry is normalized before construction, so the saved dimensions
+ * remain stable without multiplying scale or changing stroke thickness.
+ */
+function applyCommonProperties(
+  object: FabricObject,
+  element: EditorElement,
+): void {
+  object.set({
+    originX: element.pathData?.length ? "center" : "left",
+    originY: element.pathData?.length ? "center" : "top",
+
+    left: element.x,
+    top: element.y,
+
+    // Do not multiply polygon scale during page rebuild.
+    // Repeated multiplication was making the shape border thicker.
+    scaleX: element.scaleX ?? 1,
+    scaleY: element.scaleY ?? 1,
+
+    angle: element.angle ?? 0,
+    opacity: element.opacity ?? 1,
+    selectable: true,
+    evented: true,
+    objectCaching: false,
+  });
+
+  object.setCoords();
+
+  applyElementMetadata(object, element);
+}
+
+function createPolygonPoints(
+  sides: number,
+  width: number,
+  height: number,
+): { x: number; y: number }[] {
+  const safeSides = Math.max(3, Math.min(12, sides));
+
+  return Array.from({ length: safeSides }, (_, index) => {
+    const angle =
+      (Math.PI * 2 * index) / safeSides - Math.PI / 2;
+
+    return {
+      x: width / 2 + Math.cos(angle) * (width / 2),
+      y: height / 2 + Math.sin(angle) * (height / 2),
+    };
+  });
+}
+
+function createStarPoints(
+  points: number,
+  width: number,
+  height: number,
+  innerRatio = 0.42,
+): { x: number; y: number }[] {
+  const count = Math.max(4, Math.min(32, points));
+
+  return Array.from({ length: count * 2 }, (_, index) => {
+    const outer = index % 2 === 0;
+    const angle = (Math.PI * index) / count - Math.PI / 2;
+    const ratio = outer ? 1 : innerRatio;
+
+    return {
+      x: width / 2 + Math.cos(angle) * (width / 2) * ratio,
+      y: height / 2 + Math.sin(angle) * (height / 2) * ratio,
+    };
+  });
+}
+
+function createCogPoints(teeth: number, width: number, height: number) {
+  const count = Math.max(4, Math.min(24, teeth)) * 4;
+
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
+    const step = i % 4;
+    const r = step === 0 || step === 3 ? 1 : 0.78;
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
+  });
+}
+
+function createFlowerPoints(petals: number, width: number, height: number) {
+  const count = Math.max(4, Math.min(16, petals)) * 24;
+
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (Math.PI * 2 * i) / count;
+    const r = 0.68 + 0.32 * Math.cos(petals * angle);
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
+  });
+}
+
+function createOrganicPoints(variant: number, width: number, height: number) {
+  return Array.from({ length: 80 }, (_, i) => {
+    const angle = (i / 80) * Math.PI * 2;
+    const wave =
+      Math.sin(angle * (variant + 2)) * 0.09 +
+      Math.cos(angle * (variant + 3)) * 0.06;
+    const r = 0.83 + wave;
+
+    return {
+      x: width / 2 + Math.cos(angle) * width / 2 * r,
+      y: height / 2 + Math.sin(angle) * height / 2 * r,
+    };
+  });
+}
+
+
+/**
+ * Fabric Polygon derives its width and height from the minimum and maximum
+ * coordinates in the supplied points. For shapes such as odd-sided polygons,
+ * stars, flowers and organic shapes, the generated points do not always touch
+ * all four requested edges. Fabric therefore reports a smaller base size.
+ *
+ * Normalize the points to the requested local bounds before constructing the
+ * Polygon. This keeps width/height stable when a page is serialized and rebuilt,
+ * without changing scaleX/scaleY (which would also scale the stroke).
+ */
+function normalizePolygonPoints(
+  points: { x: number; y: number }[],
+  width: number,
+  height: number,
+): { x: number; y: number }[] {
+  if (points.length === 0) return points;
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+
+  const sourceWidth = maxX - minX;
+  const sourceHeight = maxY - minY;
+
+  if (sourceWidth <= 0 || sourceHeight <= 0) return points;
+
+  return points.map((point) => ({
+    x: ((point.x - minX) / sourceWidth) * width,
+    y: ((point.y - minY) / sourceHeight) * height,
+  }));
+}
+
+function createElementObject(
+  element: EditorElement,
+): FabricObject | null {
+  const width = Math.max(1, element.width || 1);
+  const height = Math.max(1, element.height || 1);
+  const color = element.color || "#000000";
+  const strokeColor = element.strokeColor || color;
+  const strokeWidth = element.strokeWidth ?? 0;
+
+  let object: FabricObject | null = null;
+
+  if (element.type === "table" && element.tableData) {
+    const tableData = element.tableData;
+    const rows = Math.max(1, tableData.rows);
+    const columns = Math.max(1, tableData.columns);
+    const cellWidth = width / columns;
+    const cellHeight = height / rows;
+    const borderColor = tableData.borderColor || "#cbd5e1";
+    const borderWidth = tableData.borderWidth ?? 1.5;
+    const children: FabricObject[] = [];
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const cell = tableData.cells?.[row]?.[column] ?? {
+          text: "",
+          backgroundColor: "#ffffff",
+        };
+
+        children.push(
+          new Rect({
+            left: column * cellWidth,
+            top: row * cellHeight,
+            width: cellWidth,
+            height: cellHeight,
+            fill: cell.backgroundColor || "#ffffff",
+            stroke: borderColor,
+            strokeWidth: borderWidth,
+            selectable: false,
+            evented: false,
+            originX: "left",
+            originY: "top",
+          }),
+          new Textbox(cell.text || "", {
+            left: column * cellWidth + 8,
+            top: row * cellHeight + 8,
+            width: Math.max(1, cellWidth - 16),
+            height: Math.max(1, cellHeight - 16),
+            fontSize: 14,
+            fontFamily: "Arial",
+            fontWeight: row === 0 ? "bold" : "normal",
+            fill: row === 0 ? "#ffffff" : "#1f2937",
+            textAlign: "center",
+            verticalAlign: "middle",
+            editable: false,
+            selectable: false,
+            evented: false,
+            splitByGrapheme: false,
+            originX: "left",
+            originY: "top",
+          } as any),
+        );
+      }
+    }
+
+    object = new Group(children, {
+      left: element.x,
+      top: element.y,
+      width,
+      height,
+      originX: "left",
+      originY: "top",
+      subTargetCheck: false,
+      interactive: false,
+      objectCaching: false,
+    } as any);
+  } else if (
+    element.type === "heading" ||
+    element.type === "subheading" ||
+    element.type === "text"
+  ) {
+    const textOptions = {
+      left: element.x,
+      top: element.y,
+      width,
+      fontSize: element.fontSize ?? 32,
+      fontFamily: element.fontFamily || "Arial",
+      fill: element.textEffect === "striped"
+        ? createStripedTextPattern(element.textStripeBaseColor ?? color, element.textStripeColor ?? "#FDBA74")
+        : color,
+      fontWeight: element.fontWeight ?? "normal",
+      fontStyle: element.fontStyle ?? "normal",
+      textAlign: element.textAlign ?? "left",
+      lineHeight: element.lineHeight ?? 1.16,
+      charSpacing: element.charSpacing ?? 0,
+      path: createTextBendPath(width, element.fontSize ?? 32, element.textBend ?? 0),
+    pathSide: "left" as const,
+pathAlign: "center" as const,
+pathStartOffset: 0,
+      stroke: element.textStrokeColor,
+      strokeWidth: element.textStrokeWidth ?? 0,
+      paintFirst: "stroke" as const,
+      shadow: element.textShadow
+        ? new Shadow({
+            color: element.textShadow.color,
+            blur: element.textShadow.blur,
+            offsetX: element.textShadow.offsetX,
+            offsetY: element.textShadow.offsetY,
+          })
+        : undefined,
+      // Match the padding used when text is first created in FabricContext.
+      // Without this, a rebuilt body Textbox can appear offset after page copy.
+      padding: 4,
+      angle: element.angle ?? 0,
+      opacity: element.opacity ?? 1,
+      editable: true,
+      splitByGrapheme: false,
+      objectCaching: false,
+    };
+
+    object =
+      element.type === "text"
+        ? new Textbox(element.text || "Text", textOptions)
+        : new IText(
+            element.text ||
+              (element.type === "heading"
+                ? "Certificate Heading"
+                : "Certificate Subheading"),
+            textOptions,
+          );
+    (object as any).textBend = Math.max(-100, Math.min(100, Number(element.textBend) || 0));
+    (object as any).textEffect = element.textEffect ?? "none";
+    (object as any).textStripeColor = element.textStripeColor ?? "#FDBA74";
+    (object as any).textStripeBaseColor = element.textStripeBaseColor ?? color;
+    if (element.textEffect === "outside-striped") {
+      applyOutsideStripedTextEffect(object, element.textStripeColor ?? color);
+    }
+    (object as any).textStrokeColor = element.textStrokeColor;
+    (object as any).textStrokeWidth = element.textStrokeWidth ?? 0;
+  } else if (
+    element.type === "rectangle" ||
+    element.type === "square"
+  ) {
+    object = new Rect({
+      width,
+      height,
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+    });
+  } else if (element.type === "circle") {
+    const diameter = Math.max(width, height);
+
+    object = new Circle({
+      radius: diameter / 2,
+      scaleX: width / diameter,
+      scaleY: height / diameter,
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+    });
+  } else if (element.type === "triangle") {
+    object = new Triangle({
+      width,
+      height,
+      fill: element.backgroundColor || color,
+      stroke: strokeColor,
+      strokeWidth,
+    });
+  } else if (
+    /^star(?:-outline|-\d+)?$/.test(element.type) ||
+    /^square-star-\d+$/.test(element.type)
+  ) {
+    const match = element.type.match(/(\d+)$/);
+    const points = match ? Number(match[1]) : 5;
+    const isSquareStar = element.type.startsWith("square-star");
+    const isOutline = element.type === "star-outline";
+
+    object = new Polygon(
+      normalizePolygonPoints(
+        createStarPoints(
+          points,
+          width,
+          height,
+          isSquareStar ? 0.7 : 0.42,
+        ),
+        width,
+        height,
+      ),
+      {
+        fill: isOutline
+          ? "rgba(0,0,0,0)"
+          : element.backgroundColor || color,
+        stroke: strokeColor,
+        strokeWidth: strokeWidth || (isOutline ? 2 : 0),
+      },
+    );
+  } else if (
+    element.type === "polygon" ||
+    element.type === "pentagon" ||
+    element.type === "hexagon" ||
+    element.type === "heptagon" ||
+    element.type === "octagon"
+  ) {
+    const sides =
+      element.shapeSides ??
+      (element.type === "pentagon"
+        ? 5
+        : element.type === "hexagon"
+          ? 6
+          : element.type === "heptagon"
+            ? 7
+            : element.type === "octagon"
+              ? 8
+              : 6);
+
+    object = new Polygon(
+      normalizePolygonPoints(
+        createPolygonPoints(sides, width, height),
+        width,
+        height,
+      ),
+      {
+        fill: element.backgroundColor || color,
+        stroke: strokeColor,
+        strokeWidth,
+      },
+    );
+  } else if (
+    element.type === "line" &&
+    element.pathData &&
+    element.pathData.length > 0
+  ) {
+    // Restore freehand strokes as their original Fabric Path, not as a straight Line.
+    object = new Path(
+      element.pathData.map((command) => [...command]) as any,
+      {
+        fill: "",
+        stroke: element.strokeColor || color,
+        strokeWidth: element.strokeWidth ?? 4,
+        strokeDashArray: element.lineDash,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        originX: "center",
+        originY: "center",
+        objectCaching: false,
+      },
+    );
+  } else if (
+    element.type === "line" ||
+    element.type === "arrow" ||
+    element.type === "double-arrow" ||
+    element.type === "dashed-line" ||
+    element.type === "dotted-line"
+  ) {
+    const isArrow =
+      element.type === "arrow" ||
+      element.type === "double-arrow";
+
+    const dash =
+      element.lineDash ??
+      (element.type === "dashed-line"
+        ? [10, 6]
+        : element.type === "dotted-line"
+          ? [2, 5]
+          : undefined);
+
+    if (isArrow) {
+      const arrowHead = 12;
+
+      const arrowPath =
+        element.type === "double-arrow"
+          ? `M 0 0 L ${width} 0 M ${arrowHead} -${arrowHead / 2} L 0 0 L ${arrowHead} ${arrowHead / 2} M ${width - arrowHead} -${arrowHead / 2} L ${width} 0 L ${width - arrowHead} ${arrowHead / 2}`
+          : `M 0 0 L ${width} 0 M ${width - arrowHead} -${arrowHead / 2} L ${width} 0 L ${width - arrowHead} ${arrowHead / 2}`;
+
+      object = new Path(arrowPath, {
+        fill: "",
+        stroke: strokeColor,
+        strokeWidth: strokeWidth || 2,
+        strokeDashArray: dash,
+      });
+    } else {
+      object = new Line([0, 0, width, 0], {
+        stroke: strokeColor,
+        strokeWidth: strokeWidth || 2,
+        strokeDashArray: dash,
+        fill: "",
+        originX: "left",
+        originY: "top",
+      });
+    }
+  } else {
+    const type = element.type as string;
+    const cog = type.match(/^cog-(4|6|8|10|12|16|20|24)$/);
+
+    const flowerMap: Record<string, number> = {
+      flower: 6,
+      "flower-5": 5,
+      "flower-6": 6,
+      "flower-8": 8,
+      "flower-12": 12,
+      "flower-daisy": 12,
+      "flower-sunflower": 16,
+      "flower-rose": 10,
+      "flower-lotus": 8,
+      "flower-lily": 6,
+      "flower-tulip": 5,
+      "flower-hibiscus": 5,
+      "flower-cherry-blossom": 5,
+      petal: 5,
+      "petal-rounded": 6,
+      "petal-pointed": 4,
+    };
+
+    const organicMap: Record<string, number> = {
+      "organic-blob": 1,
+      "organic-blob-2": 2,
+      "organic-blob-3": 3,
+      "organic-cloud": 4,
+      "organic-splash": 5,
+      "organic-pebble": 6,
+    };
+
+    const fill = element.backgroundColor || color;
+
+    const outline = {
+      fill,
+      stroke: strokeColor,
+      strokeWidth: strokeWidth || 2,
+      objectCaching: false,
+    };
+
+    if (cog) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createCogPoints(Number(cog[1]), width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else if (flowerMap[type]) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createFlowerPoints(flowerMap[type], width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else if (organicMap[type]) {
+      object = new Polygon(
+        normalizePolygonPoints(
+          createOrganicPoints(organicMap[type], width, height),
+          width,
+          height,
+        ),
+        outline,
+      );
+    } else {
+      const paths: Record<string, string> = {
+        "organic-wave": `M 0 ${height * 0.39} Q ${width * 0.25} 0 ${width * 0.5} ${height * 0.39} T ${width} ${height * 0.39} L ${width} ${height} L 0 ${height} Z`,
+        "organic-wave-2": `M 0 ${height * 0.5} C ${width * 0.17} 0 ${width * 0.33} ${height} ${width * 0.5} ${height * 0.5} S ${width * 0.83} 0 ${width} ${height * 0.5} L ${width} ${height} L 0 ${height} Z`,
+        leaf: `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.9} ${height * 0.8} 0 ${height} Z`,
+        "leaf-rounded": `M 0 ${height} Q ${width * 0.1} 0 ${width} 0 Q ${width} ${height} 0 ${height} Z`,
+        "leaf-pointed": `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.7} ${height * 0.8} 0 ${height} Z`,
+        "leaf-pair": `M 0 ${height * 0.5} Q ${width * 0.1} 0 ${width * 0.5} 0 Q ${width * 0.5} ${height * 0.5} 0 ${height * 0.5} Z M ${width * 0.5} ${height} Q ${width * 0.55} ${height * 0.3} ${width} ${height * 0.3} Q ${width * 0.95} ${height} ${width * 0.5} ${height} Z`,
+        vine: `M 0 ${height} Q ${width * 0.25} ${height * 0.8} ${width * 0.2} ${height * 0.5} T ${width * 0.5} ${height * 0.2} T ${width} 0`,
+        "flow-document": (() => {
+          // Fabric includes the path stroke in its reported width/height.
+          // Subtract it from the path coordinates so rebuilding this shape
+          // does not add the stroke size again on every page switch.
+          const documentStrokeWidth = strokeWidth || 2;
+          const pathWidth = Math.max(1, width - documentStrokeWidth);
+          const pathHeight = Math.max(1, height - documentStrokeWidth);
+
+          return `M 0 0 L ${pathWidth} 0 L ${pathWidth} ${pathHeight * 0.8} Q ${pathWidth * 0.75} ${pathHeight * (1 + Math.sqrt(3) / 10)} ${pathWidth * 0.5} ${pathHeight * 0.85} Q ${pathWidth * 0.25} ${pathHeight * 0.65} 0 ${pathHeight * 0.85} Z`;
+        })(),
+        "speech-bubble": `M 0 0 L ${width} 0 L ${width} ${height * 0.8} L ${width * 0.3} ${height * 0.8} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.8} L 0 ${height * 0.8} Z`,
+        "chat-bubble": `M ${width * 0.1} 0 L ${width * 0.9} 0 Q ${width} 0 ${width} ${height * 0.15} L ${width} ${height * 0.7} Q ${width} ${height * 0.85} ${width * 0.85} ${height * 0.85} L ${width * 0.3} ${height * 0.85} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.85} L ${width * 0.1} ${height * 0.85} Q 0 ${height * 0.85} 0 ${height * 0.7} L 0 ${height * 0.15} Q 0 0 ${width * 0.1} 0 Z`,
+        "thought-bubble": `M ${width * 0.2} ${height * 0.2} C 0 ${height * 0.1} 0 ${height * 0.5} ${width * 0.15} ${height * 0.6} C 0 ${height} ${width * 0.5} ${height} ${width * 0.6} ${height * 0.8} C ${width} ${height} ${width} ${height * 0.4} ${width * 0.8} ${height * 0.3} C ${width * 0.7} 0 ${width * 0.3} 0 ${width * 0.2} ${height * 0.2} Z`,
+      };
+
+      if (paths[type]) {
+        object = new Path(paths[type], {
+          ...outline,
+          fill: type === "vine" ? "" : fill,
+        });
+      } else if (type === "flow-process") {
+        object = new Rect({ width, height, ...outline });
+      } else if (
+        type === "flow-terminator" ||
+        type === "rounded-bubble"
+      ) {
+        object = new Rect({
+          width,
+          height,
+          rx: Math.min(width, height) / 3,
+          ry: Math.min(width, height) / 3,
+          ...outline,
+        });
+      } else if (type === "flow-connector") {
+        object = new Circle({
+          radius: Math.min(width, height) / 2,
+          ...outline,
+        });
+      } else if (type === "flow-decision") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width / 2, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width / 2, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-io") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width * 0.2, y: 0 },
+              { x: width, y: 0 },
+              { x: width * 0.8, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-preparation") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: width * 0.25, y: 0 },
+              { x: width * 0.75, y: 0 },
+              { x: width, y: height / 2 },
+              { x: width * 0.75, y: height },
+              { x: width * 0.25, y: height },
+              { x: 0, y: height / 2 },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      } else if (type === "flow-manual-input") {
+        object = new Polygon(
+          normalizePolygonPoints(
+            [
+              { x: 0, y: height * 0.25 },
+              { x: width, y: 0 },
+              { x: width, y: height },
+              { x: 0, y: height },
+            ],
+            width,
+            height,
+          ),
+          outline,
+        );
+      }
+    }
+  }
+
+  if (object) {
+    applyCommonProperties(object, element);
+
+    // Flow-document is a Fabric Path whose calculated bounds can differ
+    // slightly from the dimensions saved on the page (stroke + Bézier bounds).
+    // Keep its rendered size equal to the saved rendered size on every rebuild.
+    // This is intentionally limited to this one shape type.
+    if (element.type === "flow-document") {
+      const savedScaleX = element.scaleX ?? 1;
+      const savedScaleY = element.scaleY ?? 1;
+      const rebuiltWidth = Math.max(1, object.width ?? width);
+      const rebuiltHeight = Math.max(1, object.height ?? height);
+
+      object.set({
+        scaleX: (width * savedScaleX) / rebuiltWidth,
+        scaleY: (height * savedScaleY) / rebuiltHeight,
+      });
+      object.setCoords();
+    }
+  }
+
+  return object;
+}
+
+type PageVisualConfig = Record<string, unknown>;
+
+function getPageBorderConfig(asset: { assetData: Record<string, unknown> } | null) {
+  return (asset?.assetData?.style ?? {}) as PageVisualConfig;
+}
+
+function getPageAnimationConfig(asset: { assetData: Record<string, unknown> } | null) {
+  return (asset?.assetData?.config ?? {}) as PageVisualConfig;
+}
+
+
+export default function FabricEditorCanvas({
+  pageWidth,
+  pageHeight,
+}: FabricEditorCanvasProps) {
+  const htmlCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [zoomPercent, setZoomPercent] = useState(100);
+
+  const [inlineTableEditor, setInlineTableEditor] = useState<{
+    row: number;
+    column: number;
+    text: string;
+    width: number;
+    height: number;
+    matrix: [number, number, number, number, number, number];
+  } | null>(null);
+
+  const inlineTableEditorRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const userZoomRef = useRef(1);
+  const internalChangeRef = useRef(false);
+  const mountedRef = useRef(false);
+  const rebuildingCanvasRef = useRef(false);
+  const imageLoadTokenRef = useRef(0);
 
   const {
     elements,
-
     backgroundColor,
-
+    activePageId,
+    borderAsset,
+    animationAsset,
     syncElementsFromCanvas,
+    registerCanvasSnapshotProvider,
   } = useEditor();
+
+  const lastSyncedSignatureRef = useRef("");
+  const canvasPageIdRef = useRef(activePageId);
+  const latestSyncRef = useRef(syncElementsFromCanvas);
+
+  latestSyncRef.current = syncElementsFromCanvas;
 
   const {
     canvasRef,
-
+    selectedObject,
     setSelectedObject,
-
+    setActiveTableCell,
+    setTableCellText,
     convertCanvasToElements,
   } = useFabric();
 
+  const safeWidth = Math.max(1, pageWidth || DEFAULT_WIDTH);
+  const safeHeight = Math.max(1, pageHeight || DEFAULT_HEIGHT);
+
+  const borderConfig = getPageBorderConfig(borderAsset);
+  const borderInset = Math.max(0, Number(borderConfig.inset ?? 18));
+  const borderWidth = Math.max(1, Number(borderConfig.width ?? 4));
+  const borderColor = String(borderConfig.color ?? "#C9A227");
+  const borderLineStyle = String(borderConfig.lineStyle ?? "solid");
+  const borderRadius = Math.max(0, Number(borderConfig.radius ?? 0));
+  const secondaryBorderColor = borderConfig.secondaryColor
+    ? String(borderConfig.secondaryColor)
+    : "";
+  const secondaryBorderWidth = Math.max(1, Number(borderConfig.secondaryWidth ?? 1));
+  const secondaryBorderGap = Math.max(1, Number(borderConfig.gap ?? 7));
+
+  const animationConfig = getPageAnimationConfig(animationAsset);
+  const animationEffect = String(animationConfig.effect ?? "fade-in");
+  const animationDuration = Math.max(100, Number(animationConfig.durationMs ?? 900));
+  const animationDelay = Math.max(0, Number(animationConfig.delayMs ?? 0));
+  const animationIterations = animationConfig.iterationCount === "infinite"
+    ? "infinite"
+    : String(Math.max(1, Number(animationConfig.iterationCount ?? 1)));
+  const animationTargetObjectRef = useRef<FabricObject | null>(null);
+
+  // Capture the object that was selected at the moment an animation is applied.
+  // Changing selection later must not transfer the animation to another object.
+  useEffect(() => {
+    animationTargetObjectRef.current = animationAsset
+      ? (selectedObject as FabricObject | null)
+      : null;
+  }, [animationAsset]);
+
+  // Animate only the currently selected Fabric object. The HTML canvas element
+  // and its viewport wrapper are deliberately never given CSS animations.
+  useEffect(() => {
+    const object = animationTargetObjectRef.current;
+    const canvas = canvasRef.current;
+    if (!animationAsset || !object || !canvas || object.canvas !== canvas) return;
+
+    const original = {
+      left: object.left ?? 0,
+      top: object.top ?? 0,
+      scaleX: object.scaleX ?? 1,
+      scaleY: object.scaleY ?? 1,
+      opacity: object.opacity ?? 1,
+      angle: object.angle ?? 0,
+      shadow: object.shadow ?? null,
+    };
+    const duration = animationDuration;
+    const delay = animationDelay;
+    const infinite = animationIterations === "infinite";
+    const totalIterations = infinite ? Number.POSITIVE_INFINITY : Math.max(1, Number(animationIterations));
+    let frame = 0;
+    let startTime = 0;
+    let stopped = false;
+
+    const restore = () => {
+      object.set(original);
+      object.setCoords();
+      canvas.requestRenderAll();
+    };
+
+    const tick = (now: number) => {
+      if (stopped) return;
+      if (!startTime) startTime = now;
+      const elapsed = Math.max(0, now - startTime - delay);
+      if (elapsed <= 0) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+
+      const completed = Math.floor(elapsed / duration);
+      if (completed >= totalIterations) {
+        restore();
+        return;
+      }
+      const progress = (elapsed % duration) / duration;
+      const wave = (1 - Math.cos(progress * Math.PI * 2)) / 2;
+      const next: Record<string, unknown> = {
+        left: original.left,
+        top: original.top,
+        scaleX: original.scaleX,
+        scaleY: original.scaleY,
+        opacity: original.opacity,
+        angle: original.angle,
+        shadow: original.shadow,
+      };
+
+      switch (animationEffect) {
+        case "fade-in":
+          next.opacity = original.opacity * (0.25 + 0.75 * progress);
+          break;
+        case "float":
+          next.top = original.top - 9 * wave;
+          break;
+        case "pulse":
+        case "gentle-zoom": {
+          const amount = animationEffect === "pulse" ? 0.07 : 0.045;
+          const factor = 1 + amount * wave;
+          next.scaleX = original.scaleX * factor;
+          next.scaleY = original.scaleY * factor;
+          break;
+        }
+        case "slide-up":
+          next.top = original.top - 18 * (1 - progress);
+          next.opacity = original.opacity * (0.65 + 0.35 * progress);
+          break;
+        case "soft-glow":
+        case "shimmer":
+          next.opacity = original.opacity * (0.82 + 0.18 * wave);
+          next.shadow = new Shadow({
+            color: animationEffect === "soft-glow" ? "rgba(251,191,36,0.75)" : "rgba(255,255,255,0.85)",
+            blur: animationEffect === "soft-glow" ? 5 + 12 * wave : 3 + 7 * wave,
+            offsetX: 0,
+            offsetY: 0,
+          });
+          break;
+        case "sparkle":
+          next.opacity = original.opacity * (0.45 + 0.55 * wave);
+          next.angle = original.angle + 2 * Math.sin(progress * Math.PI * 2);
+          break;
+        default:
+          next.scaleX = original.scaleX * (1 + 0.04 * wave);
+          next.scaleY = original.scaleY * (1 + 0.04 * wave);
+      }
+
+      object.set(next);
+      object.setCoords();
+      canvas.requestRenderAll();
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(frame);
+      restore();
+    };
+  }, [animationAsset, animationEffect, animationDuration, animationDelay, animationIterations, canvasRef]);
+
+  // Focus/select only when a cell editor is opened or the active cell changes.
+  // Do not depend on the whole editor state: that object also changes on every
+  // keystroke, and re-selecting the textarea then replaces the previous letter.
+  const inlineTableEditorRow = inlineTableEditor?.row;
+  const inlineTableEditorColumn = inlineTableEditor?.column;
+
   useEffect(() => {
     if (
-      !canvasElementRef.current
+      inlineTableEditorRow === undefined ||
+      inlineTableEditorColumn === undefined
     ) {
       return;
     }
 
-    const canvas =
-      new FabricCanvas(
-        canvasElementRef.current,
-        {
-          width: 900,
+    const input = inlineTableEditorRef.current;
 
-          height: 650,
+    if (!input) return;
 
-          backgroundColor,
+    input.focus();
+    input.select();
+  }, [inlineTableEditorRow, inlineTableEditorColumn]);
 
-          selection: true,
+  function commitInlineTableEdit() {
+    if (!inlineTableEditor) return;
 
-          preserveObjectStacking:
-            true,
+    const { row, column, text } = inlineTableEditor;
+
+    setInlineTableEditor(null);
+    setTableCellText(row, column, text);
+  }
+
+  function cancelInlineTableEdit() {
+    setInlineTableEditor(null);
+  }
+
+  function syncCanvasToEditor() {
+    const canvas = canvasRef.current;
+
+    if (
+      !canvas ||
+      rebuildingCanvasRef.current ||
+      internalChangeRef.current
+    ) {
+      return;
+    }
+
+    // Ignore events emitted by the previous page after a page switch.
+    if (canvasPageIdRef.current !== activePageId) {
+      return;
+    }
+
+    const converted = convertCanvasToElements();
+
+    lastSyncedSignatureRef.current =
+      getElementSignature(converted);
+
+    internalChangeRef.current = true;
+
+    latestSyncRef.current(converted, canvasPageIdRef.current);
+  }
+
+  // Expose a live, synchronous canvas snapshot to Copy Page. If a text box is
+  // being edited, commit it before serialization so the latest text is copied.
+  useEffect(() => {
+    registerCanvasSnapshotProvider(() => {
+      const canvas = canvasRef.current;
+
+      if (!canvas) return convertCanvasToElements();
+
+      const activeObject = canvas.getActiveObject();
+
+      if (
+        activeObject instanceof IText ||
+        activeObject instanceof Textbox
+      ) {
+        if (activeObject.isEditing) {
+          activeObject.exitEditing();
         }
-      );
+      }
 
-    canvasRef.current =
-      canvas;
+      canvas.requestRenderAll();
 
-    const updateEditorFromCanvas =
-      () => {
-        const latestElements =
-          convertCanvasToElements();
+      return convertCanvasToElements();
+    });
 
-        internalChangeRef.current =
-          true;
+    return () => registerCanvasSnapshotProvider(null);
+  }, [
+    registerCanvasSnapshotProvider,
+    canvasRef,
+    convertCanvasToElements,
+  ]);
 
-        syncElementsFromCanvas(
-          latestElements
-        );
-
-        const object =
-          canvas.getActiveObject();
-
-        setSelectedObject(
-          object ?? null
-        );
-      };
-
-    const handleSelectionCreated =
-      (event: any) => {
-        const object =
-          event.selected?.[0] ??
-          null;
-
-        setSelectedObject(
-          object
-        );
-      };
-
-    const handleSelectionUpdated =
-      (event: any) => {
-        const object =
-          event.selected?.[0] ??
-          canvas.getActiveObject() ??
-          null;
-
-        setSelectedObject(
-          object
-        );
-      };
-
-    const handleSelectionCleared =
-      () => {
-        setSelectedObject(
-          null
-        );
-      };
-
-    const handleObjectModified =
-      () => {
-        updateEditorFromCanvas();
-      };
-
-    const handleTextChanged =
-      () => {
-        updateEditorFromCanvas();
-      };
-
-    const handleMouseDown =
-      (event: any) => {
-        const object =
-          event.target;
-
-        if (!object) return;
-
-        setSelectedObject(
-          object
-        );
-      };
-
-    const handleDoubleClick =
-      (event: any) => {
-        const object =
-          event.target;
-
-        if (!object) return;
-
-        setSelectedObject(
-          object
-        );
-
-        if (
-          object.type ===
-            "i-text" ||
-          object.type ===
-            "textbox"
-        ) {
-          const textObject =
-            object as IText;
-
-          canvas.setActiveObject(
-            textObject
-          );
-
-          textObject.enterEditing();
-
-          textObject.selectAll();
-
-          canvas.renderAll();
-        }
-      };
-
-    canvas.on(
-      "selection:created",
-      handleSelectionCreated
+  function applyZoom(nextZoom: number) {
+    const clampedZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(MAX_ZOOM, Math.round(nextZoom * 100) / 100),
     );
 
-    canvas.on(
-      "selection:updated",
-      handleSelectionUpdated
+    userZoomRef.current = clampedZoom;
+    setCanvasScale(clampedZoom);
+    setZoomPercent(Math.round(clampedZoom * 100));
+  }
+
+  function zoomIn() {
+    applyZoom(userZoomRef.current + ZOOM_STEP);
+  }
+
+  function zoomOut() {
+    applyZoom(userZoomRef.current - ZOOM_STEP);
+  }
+
+  function fitToScreen() {
+    const viewport = viewportRef.current;
+
+    if (!viewport) return;
+
+    const availableWidth = Math.max(1, viewport.clientWidth - 32);
+    const availableHeight = Math.max(1, viewport.clientHeight - 32);
+
+    const nextScale = Math.min(
+      1,
+      availableWidth / safeWidth,
+      availableHeight / safeHeight,
     );
 
-    canvas.on(
-      "selection:cleared",
-      handleSelectionCleared
-    );
+    const fittedScale = Math.max(0.01, nextScale);
 
-    canvas.on(
-      "object:modified",
-      handleObjectModified
-    );
+    userZoomRef.current = fittedScale;
+    setCanvasScale(fittedScale);
+    setZoomPercent(Math.round(fittedScale * 100));
+  }
 
-    canvas.on(
-      "text:changed",
-      handleTextChanged
-    );
+  useEffect(() => {
+    const htmlCanvas = htmlCanvasRef.current;
 
-    canvas.on(
-      "mouse:down",
-      handleMouseDown
-    );
+    if (!htmlCanvas || mountedRef.current) return;
 
-    canvas.on(
-      "mouse:dblclick",
-      handleDoubleClick
-    );
+    mountedRef.current = true;
+
+    const canvas = new FabricCanvasInstance(htmlCanvas, {
+      width: safeWidth,
+      height: safeHeight,
+      backgroundColor: backgroundColor || "#ffffff",
+      preserveObjectStacking: true,
+      selection: true,
+      stopContextMenu: true,
+      fireRightClick: true,
+    });
+
+    canvasRef.current = canvas;
+
+    const handleSelection = () => {
+      setSelectedObject(canvas.getActiveObject() ?? null);
+    };
+
+    const handleSelectionCleared = () => {
+      setSelectedObject(null);
+    };
+
+    const handleObjectModified = () => {
+      syncCanvasToEditor();
+    };
+
+    const handleTextChanged = () => {
+      syncCanvasToEditor();
+    };
+
+    // Fabric can finish committing an actively edited Textbox only when editing
+    // exits (for example, when the user clicks Copy Page). Sync once more here
+    // so the latest typed content is stored before the page is duplicated.
+    const handleTextEditingExited = () => {
+      syncCanvasToEditor();
+    };
+
+    const handleObjectAdded = (event: { target: FabricObject }) => {
+      // Apply the custom cursor to new objects, including objects restored
+      // while rebuilding a page. This does not change rotation behaviour.
+      applyRotationCursor(event.target);
+
+      if (
+        internalChangeRef.current ||
+        rebuildingCanvasRef.current
+      ) {
+        return;
+      }
+
+      syncCanvasToEditor();
+    };
+
+    const handleMouseDown = () => {
+      setSelectedObject(canvas.getActiveObject() ?? null);
+    };
+
+    const handleDoubleClick = (event: any) => {
+      const target = event.target as
+        | FabricObjectWithMeta
+        | undefined;
+
+      // Double-clicking a table selects the exact cell.
+      if (target?.elementType === "table" && target.tableData) {
+        const pointer =
+          event.scenePoint ?? canvas.getScenePoint(event.e);
+
+        // Convert scene coordinates into the table's local coordinates.
+        const matrix = target.calcTransformMatrix();
+
+        const [a, b, c, d, e, f] = matrix;
+
+        const determinant = a * d - b * c;
+
+        if (!determinant) return;
+
+        const dx = pointer.x - e;
+        const dy = pointer.y - f;
+
+        const localX = (d * dx - c * dy) / determinant;
+        const localY = (-b * dx + a * dy) / determinant;
+
+        const x = localX + (target.width ?? 0) / 2;
+        const y = localY + (target.height ?? 0) / 2;
+
+        const rows = Math.max(1, target.tableData.rows);
+        const columns = Math.max(1, target.tableData.columns);
+
+        const cellWidth = (target.width ?? 1) / columns;
+        const cellHeight = (target.height ?? 1) / rows;
+
+        const row = Math.max(
+          0,
+          Math.min(rows - 1, Math.floor(y / cellHeight)),
+        );
+
+        const column = Math.max(
+          0,
+          Math.min(columns - 1, Math.floor(x / cellWidth)),
+        );
+
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        setActiveTableCell({ row, column });
+
+        // Place a real textarea over the selected cell. The table stays a single
+        // Fabric Group, so its move/rotate/resize behaviour remains unchanged.
+        const cellLeft =
+          -(target.width ?? 1) / 2 + column * cellWidth;
+
+        const cellTop =
+          -(target.height ?? 1) / 2 + row * cellHeight;
+
+        const left = a * cellLeft + c * cellTop + e;
+        const top = b * cellLeft + d * cellTop + f;
+
+        const existingText =
+          target.tableData.cells?.[row]?.[column]?.text ?? "";
+
+        setInlineTableEditor({
+          row,
+          column,
+          text: existingText,
+          width: cellWidth,
+          height: cellHeight,
+          matrix: [a, b, c, d, left, top],
+        });
+
+        canvas.requestRenderAll();
+
+        return;
+      }
+
+      // Preserve existing text double-click editing.
+      if (target instanceof IText || target instanceof Textbox) {
+        canvas.setActiveObject(target);
+        setSelectedObject(target);
+        target.enterEditing();
+        target.selectAll();
+        canvas.requestRenderAll();
+      }
+    };
+
+    canvas.on("selection:created", handleSelection);
+    canvas.on("selection:updated", handleSelection);
+    canvas.on("selection:cleared", handleSelectionCleared);
+    canvas.on("object:modified", handleObjectModified);
+    canvas.on("text:changed", handleTextChanged);
+    canvas.on("text:editing:exited", handleTextEditingExited);
+    canvas.on("object:added", handleObjectAdded);
+    canvas.on("mouse:down", handleMouseDown);
+    canvas.on("mouse:dblclick", handleDoubleClick);
 
     return () => {
-      canvas.off(
-        "selection:created",
-        handleSelectionCreated
-      );
+      imageLoadTokenRef.current += 1;
 
-      canvas.off(
-        "selection:updated",
-        handleSelectionUpdated
-      );
+      canvas.off("selection:created", handleSelection);
+      canvas.off("selection:updated", handleSelection);
+      canvas.off("selection:cleared", handleSelectionCleared);
+      canvas.off("object:modified", handleObjectModified);
+      canvas.off("text:changed", handleTextChanged);
+      canvas.off("text:editing:exited", handleTextEditingExited);
+      canvas.off("object:added", handleObjectAdded);
+      canvas.off("mouse:down", handleMouseDown);
+      canvas.off("mouse:dblclick", handleDoubleClick);
 
-      canvas.off(
-        "selection:cleared",
-        handleSelectionCleared
-      );
+      void canvas.dispose();
 
-      canvas.off(
-        "object:modified",
-        handleObjectModified
-      );
+      if (canvasRef.current === canvas) {
+        canvasRef.current = null;
+      }
 
-      canvas.off(
-        "text:changed",
-        handleTextChanged
-      );
-
-      canvas.off(
-        "mouse:down",
-        handleMouseDown
-      );
-
-      canvas.off(
-        "mouse:dblclick",
-        handleDoubleClick
-      );
-
-      canvas.dispose();
-
-      canvasRef.current =
-        null;
-
-      setSelectedObject(
-        null
-      );
+      rebuildingCanvasRef.current = false;
+      mountedRef.current = false;
     };
   }, []);
 
   useEffect(() => {
-    const canvas =
-      canvasRef.current;
+    const canvas = canvasRef.current;
 
     if (!canvas) return;
 
-    canvas.backgroundColor =
-      backgroundColor;
+    canvas.setDimensions({
+      width: safeWidth,
+      height: safeHeight,
+    });
 
     canvas.requestRenderAll();
-  }, [
-    backgroundColor,
-  ]);
+  }, [safeWidth, safeHeight]);
 
   useEffect(() => {
-    const canvas =
-      canvasRef.current;
+    const canvas = canvasRef.current;
 
     if (!canvas) return;
 
-    if (
-      internalChangeRef.current
-    ) {
-      internalChangeRef.current =
-        false;
+    canvas.backgroundColor = backgroundColor || "#ffffff";
+    canvas.requestRenderAll();
+  }, [backgroundColor]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    const incomingSignature = getElementSignature(elements);
+
+    const currentSignature = getElementSignature(
+      convertCanvasToElements(),
+    );
+
+    if (incomingSignature === currentSignature) {
+      internalChangeRef.current = false;
+      lastSyncedSignatureRef.current = "";
       return;
     }
 
-    let cancelled = false;
-
-    async function renderElements() {
-      canvas.clear();
-
-      canvas.backgroundColor =
-        backgroundColor;
-
-      for (
-        const element of elements
-      ) {
-        if (cancelled) return;
-
-        /*
-         * TEXT
-         */
-        if (
-          element.type ===
-            "heading" ||
-          element.type ===
-            "subheading" ||
-          element.type ===
-            "text"
-        ) {
-          const textObject =
-            new Textbox(
-              element.text ?? "",
-              {
-                left:
-                  element.x,
-
-                top:
-                  element.y,
-
-                width:
-                  Math.max(
-                    80,
-                    element.width ||
-                      (
-                        element.type ===
-                        "heading"
-                          ? 500
-                          : element.type ===
-                              "subheading"
-                            ? 450
-                            : 400
-                      )
-                  ),
-
-                fontSize:
-                  element.fontSize ??
-                  18,
-
-                fontFamily:
-                  element.fontFamily ??
-                  "Arial",
-
-                fill:
-                  element.color ??
-                  "#111827",
-
-                fontWeight:
-                  element.fontWeight ??
-                  "normal",
-
-                fontStyle:
-                  element.fontStyle ??
-                  "normal",
-
-                lineHeight:
-                  element.lineHeight ??
-                  1.16,
-
-                charSpacing:
-                  element.charSpacing ??
-                  0,
-
-                textAlign:
-                  element.textAlign ??
-                  "left",
-
-                originX:
-                  "left",
-
-                originY:
-                  "top",
-
-                scaleX:
-                  element.scaleX ??
-                  1,
-
-                scaleY:
-                  element.scaleY ??
-                  1,
-
-                angle:
-                  element.angle ??
-                  0,
-
-                opacity:
-                  element.opacity ??
-                  1,
-
-                editable:
-                  true,
-
-                selectable:
-                  true,
-
-                evented:
-                  true,
-
-                padding:
-                  4,
-
-                transparentCorners:
-                  false,
-
-                cornerColor:
-                  "#111827",
-
-                cornerStyle:
-                  "circle",
-
-                borderColor:
-                  "#111827",
-
-                splitByGrapheme:
-                  false,
-              }
-            );
-
-          textObject.set({
-            lineHeight:
-              element.lineHeight ??
-              1.16,
-
-            charSpacing:
-              element.charSpacing ??
-              0,
-
-            textAlign:
-              element.textAlign ??
-              "left",
-          });
-
-          textObject.initDimensions();
-
-          textObject.setCoords();
-
-          const meta =
-            textObject as typeof textObject &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            element.type;
-
-          canvas.add(
-            textObject
-          );
-
-          continue;
-        }
-
-        /*
-         * RECTANGLE
-         */
-        if (
-          element.type ===
-          "rectangle"
-        ) {
-          const rectangle =
-            new Rect({
-              left:
-                element.x,
-
-              top:
-                element.y,
-
-              width:
-                element.width ||
-                180,
-
-              height:
-                element.height ||
-                100,
-
-              scaleX:
-                element.scaleX ??
-                1,
-
-              scaleY:
-                element.scaleY ??
-                1,
-
-              angle:
-                element.angle ??
-                0,
-
-              opacity:
-                element.opacity ??
-                1,
-
-              fill:
-                element.backgroundColor ??
-                "#2563eb",
-
-              originX:
-                "left",
-
-              originY:
-                "top",
-            });
-
-          applyControls(
-            rectangle
-          );
-
-          const meta =
-            rectangle as typeof rectangle &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            element.type;
-
-          canvas.add(
-            rectangle
-          );
-
-          continue;
-        }
-
-        /*
-         * SQUARE
-         */
-        if (
-          element.type ===
-          "square"
-        ) {
-          const size =
-            Math.max(
-              40,
-              element.width ||
-                element.height ||
-                140
-            );
-
-          const square =
-            new Rect({
-              left:
-                element.x,
-
-              top:
-                element.y,
-
-              width:
-                size,
-
-              height:
-                size,
-
-              scaleX:
-                element.scaleX ??
-                1,
-
-              scaleY:
-                element.scaleY ??
-                1,
-
-              angle:
-                element.angle ??
-                0,
-
-              opacity:
-                element.opacity ??
-                1,
-
-              fill:
-                element.backgroundColor ??
-                "#2563eb",
-
-              originX:
-                "left",
-
-              originY:
-                "top",
-            });
-
-          applyControls(
-            square
-          );
-
-          const meta =
-            square as typeof square &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            "square";
-
-          canvas.add(
-            square
-          );
-
-          continue;
-        }
-
-        /*
-         * CIRCLE
-         */
-        if (
-          element.type ===
-          "circle"
-        ) {
-          const radius =
-            70;
-
-          const circle =
-            new Circle({
-              left:
-                element.x,
-
-              top:
-                element.y,
-
-              radius,
-
-              scaleX:
-                element.scaleX ??
-                (
-                  element.width
-                    ? element.width /
-                      (radius * 2)
-                    : 1
-                ),
-
-              scaleY:
-                element.scaleY ??
-                (
-                  element.height
-                    ? element.height /
-                      (radius * 2)
-                    : 1
-                ),
-
-              angle:
-                element.angle ??
-                0,
-
-              opacity:
-                element.opacity ??
-                1,
-
-              fill:
-                element.backgroundColor ??
-                "#2563eb",
-
-              originX:
-                "left",
-
-              originY:
-                "top",
-            });
-
-          applyControls(
-            circle
-          );
-
-          const meta =
-            circle as typeof circle &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            "circle";
-
-          canvas.add(
-            circle
-          );
-
-          continue;
-        }
-
-        /*
-         * TRIANGLE
-         */
-        if (
-          element.type ===
-          "triangle"
-        ) {
-          const triangle =
-            new Triangle({
-              left:
-                element.x,
-
-              top:
-                element.y,
-
-              width:
-                element.width ||
-                150,
-
-              height:
-                element.height ||
-                120,
-
-              scaleX:
-                element.scaleX ??
-                1,
-
-              scaleY:
-                element.scaleY ??
-                1,
-
-              angle:
-                element.angle ??
-                0,
-
-              opacity:
-                element.opacity ??
-                1,
-
-              fill:
-                element.backgroundColor ??
-                "#2563eb",
-
-              originX:
-                "left",
-
-              originY:
-                "top",
-            });
-
-          applyControls(
-            triangle
-          );
-
-          const meta =
-            triangle as typeof triangle &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            "triangle";
-
-          canvas.add(
-            triangle
-          );
-
-          continue;
-        }
-
-        /*
-         * POLYGON FAMILY
-         */
-        if (
-          element.type ===
-            "polygon" ||
-          element.type ===
-            "pentagon" ||
-          element.type ===
-            "hexagon" ||
-          element.type ===
-            "heptagon" ||
-          element.type ===
-            "octagon"
-        ) {
-          const sides =
-            element.shapeSides ??
-            (
-              element.type ===
-              "pentagon"
-                ? 5
-                : element.type ===
-                    "hexagon"
-                  ? 6
-                  : element.type ===
-                      "heptagon"
-                    ? 7
-                    : element.type ===
-                        "octagon"
-                      ? 8
-                      : 6
-            );
-
-          const radius =
-            Math.max(
-              30,
-              Math.max(
-                element.width ||
-                  140,
-                element.height ||
-                  140
-              ) / 2
-            );
-
-          const polygon =
-            new Polygon(
-              getPolygonPoints(
-                sides,
-                radius
-              ),
-              {
-                left:
-                  element.x,
-
-                top:
-                  element.y,
-
-                scaleX:
-                  element.scaleX ??
-                  1,
-
-                scaleY:
-                  element.scaleY ??
-                  1,
-
-                angle:
-                  element.angle ??
-                  0,
-
-                opacity:
-                  element.opacity ??
-                  1,
-
-                fill:
-                  element.backgroundColor ??
-                  "#2563eb",
-
-                originX:
-                  "left",
-
-                originY:
-                  "top",
-              }
-            );
-
-          applyControls(
-            polygon
-          );
-
-          const meta =
-            polygon as typeof polygon &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            element.type;
-
-          meta.shapeSides =
-            sides;
-
-          canvas.add(
-            polygon
-          );
-
-          continue;
-        }
-
-        /*
-         * LINES
-         */
-        if (
-          element.type ===
-            "line" ||
-          element.type ===
-            "arrow" ||
-          element.type ===
-            "double-arrow" ||
-          element.type ===
-            "dashed-line" ||
-          element.type ===
-            "dotted-line"
-        ) {
-          const line =
-            createLineObject({
-              type:
-                element.type,
-
-              x:
-                element.x,
-
-              y:
-                element.y,
-
-              width:
-                element.width,
-
-              height:
-                element.height,
-
-              scaleX:
-                element.scaleX,
-
-              scaleY:
-                element.scaleY,
-
-              angle:
-                element.angle,
-
-              opacity:
-                element.opacity,
-
-              strokeColor:
-                element.strokeColor,
-
-              strokeWidth:
-                element.strokeWidth,
-
-              lineDash:
-                element.lineDash,
-            });
-
-          applyControls(
-            line
-          );
-
-          const meta =
-            line as typeof line &
-              FabricObjectWithMeta;
-
-          meta.elementId =
-            element.id;
-
-          meta.elementType =
-            element.type;
-
-          canvas.add(
-            line
-          );
-
-          continue;
-        }
-
-        /*
-         * IMAGE
-         */
-        if (
-          element.type ===
-            "image" &&
-          element.src
-        ) {
-          try {
-            const image =
-              await FabricImage.fromURL(
-                element.src
-              );
-
-            if (cancelled)
-              return;
-
-            const originalWidth =
-              image.width || 1;
-
-            const originalHeight =
-              image.height || 1;
-
-            image.set({
-              left:
-                element.x,
-
-              top:
-                element.y,
-
-              scaleX:
-                element.scaleX ??
-                (
-                  element.width /
-                  originalWidth
-                ),
-
-              scaleY:
-                element.scaleY ??
-                (
-                  element.height /
-                  originalHeight
-                ),
-
-              angle:
-                element.angle ??
-                0,
-
-              opacity:
-                element.opacity ??
-                1,
-
-              selectable:
-                true,
-
-              evented:
-                true,
-
-              transparentCorners:
-                false,
-
-              cornerColor:
-                "#111827",
-
-              cornerStyle:
-                "circle",
-
-              borderColor:
-                "#111827",
-
-              originX:
-                "left",
-
-              originY:
-                "top",
-            });
-
-            const meta =
-              image as typeof image &
-                FabricObjectWithMeta;
-
-            meta.elementId =
-              element.id;
-
-            meta.elementType =
-              "image";
-
-            meta.imageSrc =
-              element.src;
-
-            canvas.add(
-              image
-            );
-          } catch (error) {
-            console.error(
-              "Could not restore image:",
-              error
-            );
-          }
-        }
-      }
-
-      if (cancelled)
-        return;
-
-      canvas.discardActiveObject();
-
-      setSelectedObject(
-        null
-      );
-
-      canvas.renderAll();
+    if (incomingSignature === lastSyncedSignatureRef.current) {
+      internalChangeRef.current = false;
+      lastSyncedSignatureRef.current = "";
+      return;
     }
 
-    renderElements();
+    internalChangeRef.current = false;
+
+    const loadToken = ++imageLoadTokenRef.current;
+    let cancelled = false;
+
+    const isCurrentRebuild = () =>
+      !cancelled && imageLoadTokenRef.current === loadToken;
+
+    const rebuildCanvas = async () => {
+      rebuildingCanvasRef.current = true;
+      canvasPageIdRef.current = activePageId;
+
+      try {
+        const activeObject = canvas.getActiveObject();
+
+        const activeId = activeObject
+          ? getObjectMeta(activeObject).elementId
+          : undefined;
+
+        canvas.discardActiveObject();
+        canvas.clear();
+        canvas.backgroundColor = backgroundColor || "#ffffff";
+
+        for (const element of elements) {
+          if (!isCurrentRebuild()) return;
+
+          if (element.type === "image") {
+            if (!element.src) continue;
+
+            try {
+              const image = await FabricImage.fromURL(
+                element.src,
+                { crossOrigin: "anonymous" },
+              );
+
+              if (!isCurrentRebuild()) return;
+
+              const imageWidth = image.width || element.width || 1;
+              const imageHeight = image.height || element.height || 1;
+
+              image.set({
+                originX: "left",
+                originY: "top",
+                left: element.x,
+                top: element.y,
+                scaleX:
+                  element.scaleX ??
+                  (element.width
+                    ? element.width / imageWidth
+                    : 1),
+                scaleY:
+                  element.scaleY ??
+                  (element.height
+                    ? element.height / imageHeight
+                    : 1),
+                angle: element.angle ?? 0,
+                opacity: element.opacity ?? 1,
+                selectable: true,
+                evented: true,
+                objectCaching: false,
+              });
+
+              applyElementMetadata(image, element);
+              canvas.add(image);
+            } catch (error) {
+              if (isCurrentRebuild()) {
+                console.error(
+                  "Unable to load canvas image:",
+                  error,
+                );
+              }
+            }
+
+            continue;
+          }
+
+          const object = createElementObject(element);
+
+          if (object) {
+            canvas.add(object);
+          }
+        }
+
+        if (!isCurrentRebuild()) return;
+
+        const objectToRestore = activeId
+          ? canvas.getObjects().find(
+              (object) =>
+                getObjectMeta(object).elementId === activeId,
+            )
+          : undefined;
+
+        if (objectToRestore) {
+          canvas.setActiveObject(objectToRestore);
+          setSelectedObject(objectToRestore);
+        } else {
+          canvas.discardActiveObject();
+          setSelectedObject(null);
+        }
+
+        canvas.requestRenderAll();
+
+        lastSyncedSignatureRef.current =
+          getElementSignature(convertCanvasToElements());
+      } finally {
+        if (imageLoadTokenRef.current === loadToken) {
+          rebuildingCanvasRef.current = false;
+        }
+      }
+    };
+
+    void rebuildCanvas();
 
     return () => {
       cancelled = true;
     };
   }, [
     elements,
+    backgroundColor,
+    activePageId,
   ]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    if (!selectedObject) {
+      if (canvas.getActiveObject()) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+      }
+
+      return;
+    }
+
+    const selectedMeta = getObjectMeta(selectedObject);
+
+    if (!selectedMeta.elementId) return;
+
+    const matchingObject = canvas.getObjects().find(
+      (object) =>
+        getObjectMeta(object).elementId === selectedMeta.elementId,
+    );
+
+    if (
+      matchingObject &&
+      canvas.getActiveObject() !== matchingObject
+    ) {
+      canvas.setActiveObject(matchingObject);
+      canvas.requestRenderAll();
+    }
+  }, [selectedObject]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+
+    if (!viewport) return;
+
+    let animationFrame = 0;
+    let secondAnimationFrame = 0;
+
+    const updateFitScale = () => {
+      // Wait for the editor flex layout to settle. This is important when
+      // DevTools is docked/undocked or the browser viewport changes.
+      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(secondAnimationFrame);
+
+      animationFrame = requestAnimationFrame(() => {
+        secondAnimationFrame = requestAnimationFrame(() => {
+          const currentViewport = viewportRef.current;
+          if (!currentViewport) return;
+
+          // On a normal laptop/desktop viewport, keep the editor at its
+          // natural 100% zoom. Do not shrink the page just because the
+          // available vertical workspace is shorter than the paper.
+          // On narrow viewports (mobile, tablet, or a docked side DevTools
+          // viewport), automatically fit the page into the available area.
+          let nextScale = 1;
+
+          if (window.innerWidth < 1024) {
+            const availableWidth = Math.max(
+              1,
+              currentViewport.clientWidth - 32,
+            );
+
+            const availableHeight = Math.max(
+              1,
+              currentViewport.clientHeight - 32,
+            );
+
+            nextScale = Math.min(
+              1,
+              availableWidth / safeWidth,
+              availableHeight / safeHeight,
+            );
+          }
+
+          if (!Number.isFinite(nextScale)) return;
+
+          const fittedScale = Math.max(0.01, nextScale);
+
+          userZoomRef.current = fittedScale;
+          setCanvasScale(fittedScale);
+          setZoomPercent(Math.round(fittedScale * 100));
+        });
+      });
+    };
+
+    updateFitScale();
+
+    const observer = new ResizeObserver(updateFitScale);
+    observer.observe(viewport);
+
+    // Observe the parent too: flex siblings (sidebar/panel) can change the
+    // available canvas area without changing the outer browser dimensions.
+    if (viewport.parentElement) {
+      observer.observe(viewport.parentElement);
+    }
+
+    window.addEventListener("resize", updateFitScale);
+    window.addEventListener("orientationchange", updateFitScale);
+    window.visualViewport?.addEventListener("resize", updateFitScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateFitScale);
+      window.removeEventListener("orientationchange", updateFitScale);
+      window.visualViewport?.removeEventListener("resize", updateFitScale);
+      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(secondAnimationFrame);
+    };
+  }, [safeWidth, safeHeight]);
+
   return (
-    <div className="flex-1 overflow-auto bg-gray-200">
-      <div className="min-h-full flex items-center justify-center p-10">
-        <div
-          className="bg-white shadow-2xl"
-          style={{
-            width: "900px",
-
-            height: "650px",
-
-            flexShrink: 0,
-          }}
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-100">
+      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+        <button
+          type="button"
+          onClick={zoomOut}
+          disabled={zoomPercent <= MIN_ZOOM * 100}
+          title="Zoom out"
+          aria-label="Zoom out"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-lg text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <canvas
-            ref={
-              canvasElementRef
-            }
+          −
+        </button>
 
-            width={900}
+        <span
+          className="min-w-[58px] text-center text-sm font-medium text-slate-700"
+          aria-live="polite"
+        >
+          {zoomPercent}%
+        </span>
 
-            height={650}
+        <button
+          type="button"
+          onClick={zoomIn}
+          disabled={zoomPercent >= MAX_ZOOM * 100}
+          title="Zoom in"
+          aria-label="Zoom in"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-lg text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          +
+        </button>
 
+        <span className="mx-1 h-5 w-px bg-slate-200" />
+
+        <button
+          type="button"
+          onClick={fitToScreen}
+          title="Fit page to screen"
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+        >
+          Fit to screen
+        </button>
+      </div>
+
+      <div
+        ref={viewportRef}
+        className="min-h-0 w-full flex-1 overflow-auto"
+      >
+        {/* This inner flex surface centers the page whenever it fits.
+            If the page is wider than the viewport, it starts at the
+            left edge so the beginning of the canvas never gets clipped. */}
+        <div className="flex min-h-full w-max min-w-full items-start justify-center box-border p-3">
+          <div
+            className="relative shrink-0 bg-white"
             style={{
-              display: "block",
-
-              width: "900px",
-
-              height: "650px",
+              width: safeWidth * canvasScale,
+              height: safeHeight * canvasScale,
             }}
-          />
+          >
+          <div
+            className="absolute left-0 top-0"
+            style={{
+              width: safeWidth,
+              height: safeHeight,
+              transform: `scale(${canvasScale})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <canvas
+              ref={htmlCanvasRef}
+              aria-label="Certificate editor canvas"
+            />
+
+            {inlineTableEditor && (
+              <textarea
+                ref={inlineTableEditorRef}
+                aria-label={`Edit table cell row ${inlineTableEditor.row + 1}, column ${inlineTableEditor.column + 1}`}
+                value={inlineTableEditor.text}
+                onChange={(event) =>
+                  setInlineTableEditor((current) =>
+                    current
+                      ? {
+                          ...current,
+                          text: event.target.value,
+                        }
+                      : current,
+                  )
+                }
+                onBlur={commitInlineTableEdit}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelInlineTableEdit();
+                  } else if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                  ) {
+                    event.preventDefault();
+                    commitInlineTableEdit();
+                  }
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  position: "absolute",
+                  zIndex: 20,
+                  left: 0,
+                  top: 0,
+                  width: inlineTableEditor.width,
+                  height: inlineTableEditor.height,
+                  boxSizing: "border-box",
+                  padding: "7px 8px",
+                  margin: 0,
+                  resize: "none",
+                  overflow: "auto",
+                  border: "2px solid #2563eb",
+                  borderRadius: 0,
+                  outline: "none",
+                  background: "rgba(255,255,255,0.97)",
+                  color: "#1f2937",
+                  font: "14px Arial, sans-serif",
+                  textAlign: "center",
+                  transformOrigin: "top left",
+                  transform: `matrix(${inlineTableEditor.matrix.join(",")})`,
+                }}
+              />
+            )}
+
+            {borderAsset && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute"
+                style={{
+                  zIndex: 25,
+                  inset: borderInset,
+                  border: `${borderWidth}px ${borderLineStyle} ${borderColor}`,
+                  borderRadius,
+                  boxSizing: "border-box",
+                }}
+              >
+                {secondaryBorderColor && (
+                  <span
+                    className="absolute pointer-events-none"
+                    style={{
+                      inset: secondaryBorderGap,
+                      border: `${secondaryBorderWidth}px solid ${secondaryBorderColor}`,
+                      borderRadius: Math.max(0, borderRadius - secondaryBorderGap),
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+          </div>
+          </div>
         </div>
       </div>
     </div>
