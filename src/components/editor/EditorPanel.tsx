@@ -1,5 +1,4 @@
 
-import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Check,
@@ -14,6 +13,7 @@ import TextPanel from "./TextPanel";
 import UploadsPanel from "./UploadsPanel";
 import ToolsPanel from "./ToolsPanel";
 import HTMLImportPanel from "./HTMLImportPanel";
+import CertificatePreview from "../common/CertificatePreview";
 
 import { templates } from "../../data/templates";
 import type {
@@ -28,10 +28,6 @@ interface EditorPanelProps {
   onPaperSizeChange: (size: PaperSize) => void;
   onOrientationChange: (orientation: PageOrientation) => void;
 }
-
-const PREVIEW_WIDTH = 900;
-const PREVIEW_HEIGHT = 650;
-const PREVIEW_SCALE = 240 / PREVIEW_WIDTH;
 
 const paperSizes: {
   id: PaperSize;
@@ -287,101 +283,11 @@ export default function EditorPanel({
               className="group w-full rounded-2xl border border-slate-200 bg-white p-2.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               title={`Edit ${template.name}`}
             >
-              <div
-                className="relative w-full overflow-hidden rounded-lg bg-slate-100 ring-1 ring-black/5"
-                style={{
-                  aspectRatio: `${PREVIEW_WIDTH} / ${PREVIEW_HEIGHT}`,
-                }}
-              >
-                <div
-                  className="absolute left-0 top-0 origin-top-left"
-                  style={{
-                    width: `${PREVIEW_WIDTH}px`,
-                    height: `${PREVIEW_HEIGHT}px`,
-                    transform: `scale(${PREVIEW_SCALE})`,
-                  }}
-                >
-                  <div
-                    className="absolute inset-0 overflow-hidden"
-                    style={{
-                      backgroundColor: template.backgroundColor,
-                    }}
-                  >
-                    {template.elements.map((element) => {
-                      const isShape =
-                        element.type === "rectangle" ||
-                        element.type === "circle" ||
-                        element.type === "triangle";
-
-                      const isText =
-                        element.type === "heading" ||
-                        element.type === "subheading" ||
-                        element.type === "text";
-
-                      if (!isShape && !isText) {
-                        return null;
-                      }
-
-                      const style: CSSProperties = {
-                        position: "absolute",
-                        left: element.x,
-                        top: element.y,
-                        width: element.width,
-                        height: element.height,
-                        boxSizing: "border-box",
-                      };
-
-                      if (isShape) {
-                        if (element.type === "circle") {
-                          style.borderRadius = "50%";
-                        }
-
-                        if (element.type === "triangle") {
-                          style.backgroundColor =
-                            element.backgroundColor ||
-                            element.color ||
-                            "#000000";
-
-                          style.clipPath =
-                            "polygon(50% 0%, 100% 100%, 0% 100%)";
-                        } else if (
-                          element.backgroundColor &&
-                          element.backgroundColor !== "transparent"
-                        ) {
-                          style.backgroundColor =
-                            element.backgroundColor;
-                        } else if (element.color) {
-                          style.border = `2px solid ${element.color}`;
-                        }
-                      }
-
-                      if (isText) {
-                        style.display = "flex";
-                        style.alignItems = "center";
-                        style.justifyContent = "center";
-                        style.textAlign = "center";
-                        style.fontFamily =
-                          element.fontFamily || "Arial, sans-serif";
-                        style.fontSize = element.fontSize || 16;
-                        style.fontWeight =
-                          element.fontWeight === "bold" ? 700 : 400;
-                        style.color = element.color || "#222222";
-                        style.lineHeight = 1.15;
-                        style.whiteSpace = "normal";
-                        style.overflow = "hidden";
-                        style.overflowWrap = "break-word";
-                        style.wordBreak = "normal";
-                        style.padding = 0;
-                      }
-
-                      return (
-                        <div key={element.id} style={style}>
-                          {isText ? element.text : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              <div className="relative aspect-[900/650] w-full overflow-hidden rounded-lg border border-slate-200/80 bg-slate-100 shadow-sm">
+                <CertificatePreview
+                  backgroundColor={template.backgroundColor}
+                  elements={template.elements}
+                />
               </div>
 
               <div className="px-1 pb-1 pt-3">
@@ -390,9 +296,11 @@ export default function EditorPanel({
                     {template.name}
                   </h3>
 
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
-                    Certificate
-                  </span>
+                  {template.category && (
+                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200/50">
+                      {template.category}
+                    </span>
+                  )}
                 </div>
 
                 <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-500">

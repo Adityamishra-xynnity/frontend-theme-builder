@@ -128,8 +128,7 @@ export default function Toolbar() {
     maxHeight: 400,
   });
 
-  const [showSpacingPopover, setShowSpacingPopover] = useState(false);
-  const spacingRef = useRef<HTMLDivElement>(null);
+
 
   const isText =
     selectedObject?.type === "i-text" ||
@@ -214,18 +213,10 @@ export default function Toolbar() {
       ) {
         setShowDownloadMenu(false);
       }
-
-      if (
-        spacingRef.current &&
-        !spacingRef.current.contains(target)
-      ) {
-        setShowSpacingPopover(false);
-      }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setShowSpacingPopover(false);
         setShowDownloadMenu(false);
       }
     }
@@ -238,11 +229,6 @@ export default function Toolbar() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
-
-  // Reset popovers when selected object changes
-  useEffect(() => {
-    setShowSpacingPopover(false);
-  }, [selectedObject]);
 
   // Position dropdown BELOW the toolbar button, inside the canvas area.
   function updateDownloadMenuPosition() {
@@ -601,9 +587,6 @@ export default function Toolbar() {
   const toolBtn =
     "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-slate-600 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-35 select-none";
 
-  const toolBtnActive =
-    "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2 font-semibold text-indigo-700 shadow-xs transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 select-none";
-
   const divider = "mx-1 h-5 w-px shrink-0 bg-slate-200";
 
   const field =
@@ -871,69 +854,90 @@ export default function Toolbar() {
                   </button>
                 </div>
 
-                {/* Spacing Popover */}
-                <div className="relative" ref={spacingRef}>
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => setShowSpacingPopover((prev) => !prev)}
-                    className={showSpacingPopover ? toolBtnActive : toolBtn}
-                    title="Letter and line spacing"
-                    aria-expanded={showSpacingPopover}
-                  >
-                    <BetweenVerticalStart size={15} className="text-slate-500" />
-                    <span className="hidden xl:inline text-xs">Spacing</span>
-                    <ChevronDown size={11} className={`transition-transform duration-150 ${showSpacingPopover ? "rotate-180" : ""}`} />
-                  </button>
+                <div className={divider} />
 
-                  {showSpacingPopover && (
-                    <div className="absolute left-0 top-full mt-1.5 z-[150] w-64 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xl shadow-slate-900/10 space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                            <LetterText size={14} className="text-slate-400" /> Letter spacing
-                          </span>
-                          <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                            {letterSpacing}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={letterSpacing}
-                          onChange={(e) => handleLetterSpacingChange(e.target.value)}
-                          className="w-full accent-indigo-600 h-1.5 bg-slate-100 rounded-lg cursor-pointer"
-                        />
-                      </div>
-                      <div className="pt-2 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                            <BetweenVerticalStart size={14} className="text-slate-400" /> Line spacing
-                          </span>
-                          <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                            {lineSpacing}
-                          </span>
-                        </div>
-                        <select
-                          value={lineSpacing}
-                          onChange={(e) => handleLineSpacingChange(e.target.value)}
-                          className="w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-                        >
-                          <option value={0.75}>0.75</option>
-                          <option value={1}>1.0</option>
-                          <option value={1.16}>1.16</option>
-                          <option value={1.25}>1.25</option>
-                          <option value={1.5}>1.5</option>
-                          <option value={1.75}>1.75</option>
-                          <option value={2}>2.0</option>
-                          <option value={2.5}>2.5</option>
-                          <option value={3}>3.0</option>
-                        </select>
-                      </div>
+                {/* Visible Text Spacing Controls: Line Spacing & Letter Spacing */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Line Spacing */}
+                  <div className="flex items-center gap-1 shrink-0" title="Line spacing">
+                    <span className="flex items-center text-slate-500" title="Line spacing" aria-hidden="true">
+                      <BetweenVerticalStart size={15} />
+                    </span>
+                    <div className="relative">
+                      <select
+                        aria-label="Line spacing"
+                        value={lineSpacing}
+                        onChange={(e) => handleLineSpacingChange(e.target.value)}
+                        className={`${field} w-16 cursor-pointer appearance-none pr-5 text-xs font-medium`}
+                        title="Line spacing"
+                      >
+                        {![0.75, 1, 1.16, 1.25, 1.5, 1.75, 2, 2.5, 3].includes(lineSpacing) && (
+                          <option value={lineSpacing}>{lineSpacing}</option>
+                        )}
+                        <option value={0.75}>0.75</option>
+                        <option value={1}>1.0</option>
+                        <option value={1.16}>1.16</option>
+                        <option value={1.25}>1.25</option>
+                        <option value={1.5}>1.5</option>
+                        <option value={1.75}>1.75</option>
+                        <option value={2}>2.0</option>
+                        <option value={2.5}>2.5</option>
+                        <option value={3}>3.0</option>
+                      </select>
+                      <ChevronDown size={11} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     </div>
-                  )}
+                  </div>
+
+                  {/* Letter Spacing (- / input / +) */}
+                  <div className="flex items-center gap-1 shrink-0" title="Letter spacing">
+                    <span className="flex items-center text-slate-500" title="Letter spacing" aria-hidden="true">
+                      <LetterText size={15} />
+                    </span>
+                    <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+                      <button
+                        type="button"
+                        onMouseDown={preserveSelection}
+                        onClick={() => {
+                          const next = Math.max(0, letterSpacing - 5);
+                          handleLetterSpacingChange(String(next));
+                        }}
+                        className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
+                        title="Decrease letter spacing"
+                        aria-label="Decrease letter spacing"
+                      >
+                        <Minus size={11} />
+                      </button>
+
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={letterSpacing}
+                        onChange={(event) => handleLetterSpacingChange(event.target.value)}
+                        className="h-full w-9 border-x border-slate-200 text-center text-xs font-semibold text-slate-700 outline-none focus:bg-indigo-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        title="Letter spacing (0-100)"
+                        aria-label="Letter spacing"
+                      />
+
+                      <button
+                        type="button"
+                        onMouseDown={preserveSelection}
+                        onClick={() => {
+                          const next = Math.min(100, letterSpacing + 5);
+                          handleLetterSpacingChange(String(next));
+                        }}
+                        className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
+                        title="Increase letter spacing"
+                        aria-label="Increase letter spacing"
+                      >
+                        <Plus size={11} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
+                <div className={divider} />
 
                 {/* Lists and Indents */}
                 <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
