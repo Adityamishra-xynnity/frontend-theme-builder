@@ -2,6 +2,7 @@ import { createContext, useContext, type MutableRefObject } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
 import type { EditorElement } from "../types/editor";
 import type { GraphicAsset } from "../types/graphics";
+import type { EmojiAsset } from "../types/emoji";
 
 export type ToolMode =
   | "select"
@@ -40,7 +41,7 @@ export interface FabricContextType {
   selectObjectById: (id: string) => void;
 
   addText: (type?: TextElementType) => void;
-  addEmoji: (emoji: string) => void;
+  addEmoji: (emoji: string | EmojiAsset) => void;
   addTextCombination: (items: Array<{
     text: string;
     fontSize: number;

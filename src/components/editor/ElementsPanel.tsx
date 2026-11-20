@@ -18,11 +18,6 @@ import {
   Palette,
   Smile,
   Images,
-  PartyPopper,
-  Trophy,
-  GraduationCap,
-  PawPrint,
-  Briefcase,
   Medal,
   BookOpen,
   Trees,
@@ -35,6 +30,8 @@ import BordersPanel from "./BordersPanel";
 import AnimationsPanel from "./AnimationsPanel";
 import GraphicsBrowser from "./graphics/GraphicsBrowser";
 import StaticGraphicsBrowser from "./graphics/StaticGraphicsBrowser";
+import EmojiBrowser from "./emojis/EmojiBrowser";
+import type { EmojiAsset } from "../../types/emoji";
 
 // --------------------------------------------------
 // TYPES
@@ -143,6 +140,7 @@ type PanelView =
   | "items"
   | "emoji-categories"
   | "emoji-items"
+  | "emojis"
   | "photo-categories"
   | "photo-items"
   | "borders"
@@ -932,6 +930,9 @@ export default function ElementsPanel() {
         size: String(PAGE_SIZE),
         category,
       });
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
 
       const response = await fetch(`${API_URL}/page?${params.toString()}`, {
         method: "GET",
@@ -1052,6 +1053,9 @@ export default function ElementsPanel() {
         size: String(PAGE_SIZE),
         category,
       });
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
 
       const response = await fetch(
         `${EMOJI_API_URL}/page?${params.toString()}`,
@@ -1182,6 +1186,9 @@ export default function ElementsPanel() {
         size: String(PAGE_SIZE),
         category,
       });
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
 
       const response = await fetch(
         `${PHOTO_API_URL}/page?${params.toString()}`,
@@ -1424,6 +1431,28 @@ export default function ElementsPanel() {
   ]);
 
   // --------------------------------------------------
+  // BACKEND-POWERED SEARCH EFFECTS FOR SHAPES & PHOTOS
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (view === "items" && selectedCategory) {
+      const timer = setTimeout(() => {
+        void loadShapes(selectedCategory, 0, true);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [search, view, selectedCategory]);
+
+  useEffect(() => {
+    if (view === "photo-items" && selectedPhotoCategory) {
+      const timer = setTimeout(() => {
+        void loadPhotos(selectedPhotoCategory, 0, true);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [search, view, selectedPhotoCategory]);
+
+  // --------------------------------------------------
   // SEARCH
   // --------------------------------------------------
 
@@ -1450,16 +1479,6 @@ export default function ElementsPanel() {
       item.label.toLowerCase().includes(normalizedSearch),
     ) ?? [];
 
-  const filteredEmojiCategories = EMOJI_CATEGORIES.filter((category) =>
-    category.title.toLowerCase().includes(normalizedSearch),
-  );
-
-  const visibleEmojiAssets = emojiAssets.filter(
-    (asset) =>
-      asset.name.toLowerCase().includes(normalizedSearch) ||
-      (asset.assetData.emoji || "").includes(search.trim()),
-  );
-
   const filteredPhotoCategories = PHOTO_CATEGORIES.filter((category) =>
     category.title.toLowerCase().includes(normalizedSearch),
   );
@@ -1479,7 +1498,7 @@ export default function ElementsPanel() {
   };
 
   const handleOpenEmojis = () => {
-    setView("emoji-categories");
+    setView("emojis");
     setSelectedEmojiCategory(null);
     setSearch("");
     setEmojiError("");
@@ -1522,35 +1541,6 @@ export default function ElementsPanel() {
     setLoading(true);
 
     void loadShapes(categoryName, 0, true);
-  };
-
-  const handleOpenEmojiCategory = (category: string) => {
-    emojiActiveCategoryRef.current = category;
-    setSelectedEmojiCategory(category);
-    setView("emoji-items");
-    setSearch("");
-    setEmojiError("");
-
-    const cached = emojiCacheRef.current.get(category);
-
-    if (cached) {
-      setEmojiAssets(cached.assets);
-      emojiPageRef.current = cached.page;
-      emojiHasMoreRef.current = cached.hasMore;
-      setEmojiHasMore(cached.hasMore);
-      setEmojiLoading(false);
-      setEmojiLoadingMore(false);
-      return;
-    }
-
-    setEmojiAssets([]);
-    emojiPageRef.current = 0;
-    emojiHasMoreRef.current = false;
-    setEmojiHasMore(false);
-    setEmojiLoading(true);
-    setEmojiLoadingMore(false);
-
-    void loadEmojis(category, 0, true);
   };
 
   const handleOpenPhotoCategory = (category: string) => {
@@ -1627,7 +1617,7 @@ export default function ElementsPanel() {
     addShape(type);
   };
 
-  const handleAddEmoji = (emoji: string) => {
+  const handleAddEmoji = (emoji: string | EmojiAsset) => {
     if (!emoji) return;
 
     addEmoji(emoji);
@@ -1700,21 +1690,6 @@ export default function ElementsPanel() {
     setError("");
 
     void loadShapes(category, 0, true);
-  };
-
-  const handleEmojiRetry = () => {
-    const category = emojiActiveCategoryRef.current;
-
-    if (!category || emojiLoading) return;
-
-    emojiCacheRef.current.delete(category);
-    setEmojiAssets([]);
-    emojiPageRef.current = 0;
-    emojiHasMoreRef.current = false;
-    setEmojiHasMore(false);
-    setEmojiError("");
-
-    void loadEmojis(category, 0, true);
   };
 
   const handlePhotoRetry = () => {
@@ -1866,126 +1841,6 @@ export default function ElementsPanel() {
     );
   };
 
-
-  // --------------------------------------------------
-  // EMOJI UI HELPERS
-  // --------------------------------------------------
-
-
-  const renderEmojiCategoryList = () => {
-    const colors = [
-      {
-        bg: "bg-pink-50",
-        hover: "group-hover:bg-pink-100",
-        ring: "group-focus-visible:ring-pink-200",
-        label: "group-hover:text-pink-700",
-      },
-      {
-        bg: "bg-orange-50",
-        hover: "group-hover:bg-orange-100",
-        ring: "group-focus-visible:ring-orange-200",
-        label: "group-hover:text-orange-700",
-      },
-      {
-        bg: "bg-sky-50",
-        hover: "group-hover:bg-sky-100",
-        ring: "group-focus-visible:ring-sky-200",
-        label: "group-hover:text-sky-700",
-      },
-      {
-        bg: "bg-amber-50",
-        hover: "group-hover:bg-amber-100",
-        ring: "group-focus-visible:ring-amber-200",
-        label: "group-hover:text-amber-700",
-      },
-      {
-        bg: "bg-indigo-50",
-        hover: "group-hover:bg-indigo-100",
-        ring: "group-focus-visible:ring-indigo-200",
-        label: "group-hover:text-indigo-700",
-      },
-      {
-        bg: "bg-green-50",
-        hover: "group-hover:bg-green-100",
-        ring: "group-focus-visible:ring-green-200",
-        label: "group-hover:text-green-700",
-      },
-      {
-        bg: "bg-purple-50",
-        hover: "group-hover:bg-purple-100",
-        ring: "group-focus-visible:ring-purple-200",
-        label: "group-hover:text-purple-700",
-      },
-      {
-        bg: "bg-teal-50",
-        hover: "group-hover:bg-teal-100",
-        ring: "group-focus-visible:ring-teal-200",
-        label: "group-hover:text-teal-700",
-      },
-    ];
-
-    return (
-      <div className="grid grid-cols-3 gap-2.5">
-        {filteredEmojiCategories.map((category, index) => {
-          const color = colors[index % colors.length];
-
-          return (
-            <button
-              key={category.title}
-              type="button"
-              onClick={() => handleOpenEmojiCategory(category.title)}
-              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
-            >
-              <div
-                className={`flex aspect-square w-full items-center justify-center rounded-xl p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 ${color.bg} ${color.hover} ${color.ring}`}
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm transition-transform group-hover:scale-105">
-                  {category.title === "Faces" && <Smile size={24} className="text-pink-600" />}
-                  {category.title === "Celebration" && <PartyPopper size={24} className="text-orange-600" />}
-                  {category.title === "Symbols" && <Shapes size={24} className="text-sky-600" />}
-                  {category.title === "Awards" && <Trophy size={24} className="text-amber-600" />}
-                  {category.title === "Education" && <GraduationCap size={24} className="text-indigo-600" />}
-                  {category.title === "Nature" && <Leaf size={24} className="text-green-600" />}
-                  {category.title === "Animals" && <PawPrint size={24} className="text-purple-600" />}
-                  {category.title === "Business" && <Briefcase size={24} className="text-teal-600" />}
-                </span>
-              </div>
-
-              <span
-                className={`text-center text-xs font-semibold text-slate-700 transition-colors ${color.label}`}
-              >
-                {category.title}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-
-
-  const renderEmojiGrid = () => (
-    <div className="grid grid-cols-4 gap-2">
-      {visibleEmojiAssets.map((asset) => (
-        <button
-          key={asset.id}
-          type="button"
-          title={`Add ${asset.name}`}
-          aria-label={`Add ${asset.name}`}
-          onClick={() => handleAddEmoji(asset.assetData.emoji || "")}
-          className="group flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-100 bg-white p-2 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
-        >
-          <span className="text-3xl leading-none transition-transform group-hover:scale-110">
-            {asset.assetData.emoji}
-          </span>
-
-          <span className="w-full truncate text-center text-[9px] font-medium text-slate-500 group-hover:text-blue-700">
-            {asset.name}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
 
   // --------------------------------------------------
   // PHOTO UI HELPERS
@@ -2200,6 +2055,18 @@ export default function ElementsPanel() {
     );
   }
 
+  if (view === "emojis" || view === "emoji-categories" || view === "emoji-items") {
+    return (
+      <EmojiBrowser
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectEmoji={handleAddEmoji}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800">
       {/* HEADER */}
@@ -2240,15 +2107,11 @@ export default function ElementsPanel() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={
-                view === "emoji-items"
-                  ? "Search emojis..."
-                  : view === "emoji-categories"
-                    ? "Search emoji categories..."
-                    : view === "photo-items"
-                      ? "Search photos..."
-                      : view === "photo-categories"
-                        ? "Search photo categories..."
-                        : "Search elements..."
+                view === "photo-items"
+                  ? "Search photos..."
+                  : view === "photo-categories"
+                    ? "Search photo categories..."
+                    : "Search elements..."
               }
               aria-label="Search elements"
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/80"
@@ -2386,130 +2249,6 @@ export default function ElementsPanel() {
               {!photoHasMore && photoAssets.length > 0 && (
                 <p className="py-4 text-center text-[11px] text-slate-400">
                   You have reached the end of the photos.
-                </p>
-              )}
-            </>
-          )
-
-          /* EMOJI CATEGORIES */
-
-        ) : view === "emoji-categories" ? (
-          filteredEmojiCategories.length > 0 ? (
-            renderEmojiCategoryList()
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
-              <Search size={28} className="mb-3 text-slate-300" />
-
-              <p className="text-sm font-semibold text-slate-700">
-                No emoji categories found
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Try a different search term.
-              </p>
-            </div>
-          )
-
-          /* EMOJI ITEMS */
-
-        ) : view === "emoji-items" ? (
-          emojiLoading && emojiAssets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center">
-              <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
-
-              <p className="text-sm font-semibold text-slate-700">
-                Loading emojis...
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Database se emojis load ho rahe hain.
-              </p>
-            </div>
-          ) : emojiError && emojiAssets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-red-100 bg-white px-4 py-12 text-center">
-              <p className="text-sm font-semibold text-slate-700">
-                Emojis load nahi hue
-              </p>
-
-              <p className="mt-2 break-words text-xs text-slate-500">
-                {emojiError}
-              </p>
-
-              <button
-                type="button"
-                onClick={handleEmojiRetry}
-                className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
-              >
-                Retry
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-                <span className="text-xl">
-                  {
-                    EMOJI_CATEGORIES.find(
-                      (category) =>
-                        category.title === selectedEmojiCategory,
-                    )?.emoji
-                  }
-                </span>
-
-                <span className="text-sm font-semibold text-slate-800">
-                  {selectedEmojiCategory}
-                </span>
-
-                <span className="ml-auto rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
-                  {visibleEmojiAssets.length} emojis
-                </span>
-              </div>
-
-              {visibleEmojiAssets.length > 0 ? (
-                renderEmojiGrid()
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
-                  <p className="text-sm font-semibold text-slate-700">
-                    No emojis found
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Try another search term.
-                  </p>
-                </div>
-              )}
-
-              {emojiLoadingMore && (
-                <div className="flex items-center justify-center gap-2 py-5 text-xs font-medium text-slate-500">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600" />
-                  Loading more emojis...
-                </div>
-              )}
-
-              {emojiError && emojiAssets.length > 0 && (
-                <div className="my-3 rounded-xl border border-red-100 bg-white p-3 text-center">
-                  <p className="text-xs text-red-600">{emojiError}</p>
-
-                  <button
-                    type="button"
-                    onClick={loadNextEmojiPage}
-                    className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    Try again
-                  </button>
-                </div>
-              )}
-
-              {emojiHasMore && !emojiLoading && !emojiError && (
-                <div
-                  ref={emojiSentinelRef}
-                  className="h-8 w-full"
-                  aria-hidden="true"
-                />
-              )}
-
-              {!emojiHasMore && emojiAssets.length > 0 && (
-                <p className="py-4 text-center text-[11px] text-slate-400">
-                  You have reached the end of the emojis.
                 </p>
               )}
             </>
