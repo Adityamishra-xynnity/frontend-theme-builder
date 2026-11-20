@@ -37,6 +37,7 @@ import type {
   GraphicAnimationConfig,
   GraphicAnimationType,
 } from "../types/graphics";
+import type { EmojiAsset } from "../types/emoji";
 import { graphicAnimationRuntime } from "../utils/graphicAnimationRuntime";
 
 import {
@@ -76,6 +77,7 @@ type FabricObjectWithMeta = {
   isAnimated?: boolean;
   animationConfig?: GraphicAnimationConfig;
   animationType?: GraphicAnimationType;
+  isEmoji?: boolean;
 };
 
 
@@ -1253,6 +1255,7 @@ export function FabricProvider({
       isAnimated?: boolean;
       animationConfig?: GraphicAnimationConfig;
       animationType?: GraphicAnimationType;
+      isEmoji?: boolean;
     },
   ) {
     const item = object as FabricObjectWithMeta;
@@ -1346,11 +1349,108 @@ export function FabricProvider({
     syncCanvasToEditor();
   }
 
-  function addEmoji(emoji: string) {
+  async function addEmoji(emoji: string | EmojiAsset) {
     const canvas = canvasRef.current;
-    const value = emoji.trim();
+    if (!canvas || !emoji) return;
 
-    if (!canvas || !value) return;
+    // Check if emoji is an SVG object or SVG string
+    const isAssetObject = typeof emoji === "object" && emoji !== null;
+    const svgContent = isAssetObject
+      ? emoji.assetData?.svgContent
+      : typeof emoji === "string" && emoji.trim().startsWith("<svg")
+      ? emoji.trim()
+      : null;
+
+    if (svgContent) {
+      saveCanvasState();
+      try {
+        const { objects, options } = await loadSVGFromString(svgContent);
+        const validObjects = objects.filter((o): o is FabricObject => o !== null);
+        if (validObjects.length === 0) {
+          console.warn("No valid objects parsed from SVG for emoji");
+          return;
+        }
+
+        const group = util.groupSVGElements(validObjects, options);
+
+        // Disarm inner child objects so the group acts as a single atomic interactive object
+        if (typeof (group as any).forEachObject === "function") {
+          (group as any).forEachObject((child: any) => {
+            child.set({
+              selectable: false,
+              evented: false,
+            });
+          });
+        }
+
+        // Standard sensible size: ~120px width/height for emojis, preserving aspect ratio
+        const origWidth = group.width || 100;
+        const origHeight = group.height || 100;
+        const targetDimension = 120;
+        const scale = targetDimension / Math.max(origWidth, origHeight);
+
+        const canvasWidth = canvas.getWidth();
+        const canvasHeight = canvas.getHeight();
+        const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
+        const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
+
+        group.set({
+          originX: "left",
+          originY: "top",
+          left,
+          top,
+          scaleX: scale,
+          scaleY: scale,
+          angle: 0,
+          opacity: 1,
+          selectable: true,
+          evented: true,
+          subTargetCheck: false,
+          interactive: false,
+          hasControls: true,
+          hasBorders: true,
+          lockMovementX: false,
+          lockMovementY: false,
+          lockScalingX: false,
+          lockScalingY: false,
+          lockRotation: false,
+          cornerSize: 12,
+          touchCornerSize: 24,
+          objectCaching: false,
+        });
+
+        applyObjectControls(group);
+        group.setCoords();
+
+        const elementId = crypto.randomUUID();
+        const emojiCat = isAssetObject ? emoji.category : "Emojis";
+
+        attachMetadata(group, "graphic", elementId, {
+          graphicId: isAssetObject ? emoji.id : undefined,
+          graphicKey: isAssetObject ? emoji.assetKey : undefined,
+          graphicCategory: emojiCat,
+          svgContent: svgContent,
+          isEmoji: true,
+        });
+
+        canvas.add(group);
+        activateObject(group);
+        group.setCoords();
+        canvas.requestRenderAll();
+        syncCanvasToEditor();
+        return;
+      } catch (error) {
+        console.error("Error loading SVG emoji:", error);
+      }
+    }
+
+    // Fallback for plain unicode emojis (e.g. "😀")
+   const rawValue = isAssetObject
+  ? (emoji.assetData?.unicode || emoji.name || "")
+  : emoji;
+
+const value = String(rawValue).trim();
+    if (!value) return;
 
     saveCanvasState();
 

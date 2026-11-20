@@ -42,6 +42,14 @@ export default function BordersPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,7 +61,14 @@ export default function BordersPanel() {
         let page = 0;
         let last = false;
         while (!last) {
-          const params = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) });
+          const params = new URLSearchParams({
+            page: String(page),
+            size: String(PAGE_SIZE),
+          });
+          if (debouncedSearch.trim()) {
+            params.set("search", debouncedSearch.trim());
+          }
+
           const response = await fetch(`${API_URL}/page?${params}`, {
             headers: { Accept: "application/json" },
             signal: controller.signal,
@@ -75,11 +90,9 @@ export default function BordersPanel() {
     };
     void load();
     return () => controller.abort();
-  }, []);
+  }, [debouncedSearch]);
 
-  const visible = assets.filter((asset) =>
-    `${asset.name} ${asset.category} ${asset.assetKey}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const visible = assets;
 
   return (
     <section className="h-full bg-white">

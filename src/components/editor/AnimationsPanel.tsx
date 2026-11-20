@@ -36,6 +36,14 @@ export default function AnimationsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,8 +55,18 @@ export default function AnimationsPanel() {
         let page = 0;
         let last = false;
         while (!last) {
-          const params = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) });
-          const response = await fetch(`${API_URL}/page?${params}`, { headers: { Accept: "application/json" }, signal: controller.signal });
+          const params = new URLSearchParams({
+            page: String(page),
+            size: String(PAGE_SIZE),
+          });
+          if (debouncedSearch.trim()) {
+            params.set("search", debouncedSearch.trim());
+          }
+
+          const response = await fetch(`${API_URL}/page?${params}`, {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
           if (!response.ok) throw new Error(`Animation assets load nahi hue (${response.status})`);
           const data: PageResponse = await response.json();
           if (!Array.isArray(data.content)) throw new Error("Backend se valid animation list nahi mili.");
@@ -66,9 +84,9 @@ export default function AnimationsPanel() {
     };
     void load();
     return () => controller.abort();
-  }, []);
+  }, [debouncedSearch]);
 
-  const visible = assets.filter((asset) => `${asset.name} ${asset.category} ${asset.assetKey}`.toLowerCase().includes(search.toLowerCase()));
+  const visible = assets;
 
   return (
     <section className="h-full bg-white">
