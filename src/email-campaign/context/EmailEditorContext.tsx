@@ -1,73 +1,59 @@
-
 import {
   createContext,
   useContext,
   useState,
   type ReactNode,
 } from "react";
+import type {
+  EmailBounds,
+  EmailNode,
+  EmailNodeType,
+  EmailSection,
+  EmailSectionTemplate,
+  EmailTemplateResponse,
+} from "../types/campaign";
 
-export type EmailNodeType =
-  | "logo"
-  | "heading"
-  | "text"
-  | "button"
-  | "image"
-  | "link"
-  | "container";
+// Re-export types for backward compatibility across existing components
+export type {
+  EmailBounds,
+  EmailNode,
+  EmailNodeType,
+  EmailSection,
+  EmailSectionTemplate,
+};
 
-// Position and size of an object on the canvas
-export interface EmailBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-// Individual editable elements
-export interface EmailNode extends EmailBounds {
-  id: string;
-  type: EmailNodeType;
-  content: string;
-  fontSize?: number;
-  url?: string;
-  tagName?: "div" | "section";
-  backgroundColor?: string;
-}
-
-// Complete section on the canvas
-export interface EmailSection extends EmailBounds {
-  id: string;
-  templateId: string;
-  category: string;
-  name: string;
-  backgroundColor: string;
-  padding: string;
-  nodes: EmailNode[];
-}
-
-// Ready-made section template
-export interface EmailSectionTemplate {
-  id: string;
-  category: string;
-  name: string;
-  backgroundColor: string;
-  padding: string;
-  nodes: Omit<EmailNode, "id" | "x" | "y" | "width" | "height">[];
-}
-
-interface EmailEditorContextType {
+export interface EmailEditorContextType {
   sections: EmailSection[];
+  setSections: React.Dispatch<React.SetStateAction<EmailSection[]>>;
   selectedSectionId: string | null;
   selectedNodeId: string | null;
 
+  campaignName: string;
+  setCampaignName: (name: string) => void;
+  campaignSubject: string;
+  setCampaignSubject: (subject: string) => void;
+  currentCampaignId: number | null;
+  setCurrentCampaignId: (id: number | null) => void;
+
   addSection: (template: EmailSectionTemplate) => void;
   addImage: (imageUrl: string) => void;
+
+  loadTemplate: (template: EmailTemplateResponse) => void;
+  resetToBlank: () => void;
 
   updateNodeContent: (
     sectionId: string,
     nodeId: string,
     content: string
   ) => void;
+
+  updateNodeLink: (
+    sectionId: string,
+    nodeId: string,
+    url: string | undefined
+  ) => void;
+
+  duplicateNode: (sectionId: string, nodeId: string) => void;
 
   updateSectionBounds: (
     sectionId: string,
@@ -100,16 +86,97 @@ export function EmailEditorProvider({
   children: ReactNode;
 }) {
   const [sections, setSections] = useState<EmailSection[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const [selectedSectionId, setSelectedSectionId] =
-    useState<string | null>(null);
+  // Campaign metadata
+  const [campaignName, setCampaignName] = useState<string>("Untitled Campaign");
+  const [campaignSubject, setCampaignSubject] = useState<string>("");
+  const [currentCampaignId, setCurrentCampaignId] = useState<number | null>(null);
 
-  const [selectedNodeId, setSelectedNodeId] =
-    useState<string | null>(null);
+  /**
+   * Load an email template into the editor canvas:
+   * - Deep clones all sections and nodes.
+   * - Regenerates fresh unique UUIDs for every section and node.
+   * - Preserves coordinates, dimensions, typography, styles, and background colors.
+   * - Sets template name as campaign name/subject.
+   * - Clears currentCampaignId to prevent overwriting unrelated saved campaigns.
+   */
+  const loadTemplate = (template: EmailTemplateResponse) => {
+    if (!template) return;
+
+    const sourceSections = Array.isArray(template.sectionsData)
+      ? template.sectionsData
+      : [];
+
+    const clonedSections: EmailSection[] = sourceSections.map((sec, sIdx) => {
+      const freshSectionId = crypto.randomUUID();
+      const clonedNodes: EmailNode[] = (sec.nodes || []).map((node, nIdx) => ({
+        ...node,
+        id: crypto.randomUUID(),
+        type: node.type || "text",
+        content: node.content ?? "",
+        fontSize: node.fontSize ?? (node.type === "heading" ? 24 : 14),
+        url: node.url,
+        linkUrl: node.linkUrl || node.url,
+        textAlign: node.textAlign,
+        tagName: node.tagName,
+        backgroundColor: node.backgroundColor,
+        color: node.color,
+        x: typeof node.x === "number" ? node.x : 24,
+        y: typeof node.y === "number" ? node.y : 24 + nIdx * 50,
+        width: typeof node.width === "number" ? node.width : 552,
+        height: typeof node.height === "number" ? node.height : 40,
+      }));
+
+      return {
+        ...sec,
+        id: freshSectionId,
+        templateId: sec.templateId || `sec-template-${sIdx}`,
+        category: sec.category || "custom",
+        name: sec.name || `Section ${sIdx + 1}`,
+        backgroundColor: sec.backgroundColor || "#ffffff",
+        padding: sec.padding || "24px",
+        x: typeof sec.x === "number" ? sec.x : 0,
+        y: typeof sec.y === "number" ? sec.y : sIdx * 240,
+        width: typeof sec.width === "number" ? sec.width : 600,
+        height: typeof sec.height === "number" ? sec.height : 240,
+        nodes: clonedNodes,
+      };
+    });
+
+    setSections(clonedSections);
+    setSelectedSectionId(clonedSections[0]?.id ?? null);
+    setSelectedNodeId(null);
+
+    // Reset campaign ID so new design doesn't overwrite any existing campaign
+    setCurrentCampaignId(null);
+    setCampaignName(template.name || "Untitled Campaign");
+    setCampaignSubject(template.name || "New Email Campaign");
+  };
+
+  /**
+   * Reset the editor canvas safely to a blank state.
+   */
+  const resetToBlank = () => {
+    setSections([]);
+    setSelectedSectionId(null);
+    setSelectedNodeId(null);
+    setCurrentCampaignId(null);
+    setCampaignName("Untitled Campaign");
+    setCampaignSubject("");
+  };
 
   // Add a complete section with initial positions and dimensions
   const addSection = (template: EmailSectionTemplate) => {
     const sectionId = crypto.randomUUID();
+    const sectionHeight = template.height ?? 240;
+
+    // Place section immediately below the lowest existing section
+    const nextY = sections.reduce(
+      (acc, sec) => Math.max(acc, (sec.y || 0) + (sec.height || 200)),
+      0
+    );
 
     const newSection: EmailSection = {
       id: sectionId,
@@ -120,13 +187,22 @@ export function EmailEditorProvider({
       padding: template.padding,
 
       x: 0,
-      y: sections.length * 280,
+      y: nextY,
       width: 600,
-      height: 260,
+      height: sectionHeight,
 
       nodes: template.nodes.map((node, index) => ({
         ...node,
         id: crypto.randomUUID(),
+        type: node.type,
+        content: node.content,
+        color: node.color,
+        backgroundColor: node.backgroundColor,
+        borderRadius: node.borderRadius,
+        url: node.url,
+        linkUrl: node.linkUrl || node.url,
+        textAlign: node.textAlign,
+        tagName: node.tagName,
 
         fontSize:
           node.fontSize ??
@@ -138,10 +214,10 @@ export function EmailEditorProvider({
                 ? 14
                 : 14),
 
-        x: 24,
-        y: 24 + index * 52,
-        width: 552,
-        height: 44,
+        x: typeof node.x === "number" ? node.x : 24,
+        y: typeof node.y === "number" ? node.y : 24 + index * 52,
+        width: typeof node.width === "number" ? node.width : 552,
+        height: typeof node.height === "number" ? node.height : 44,
       })),
     };
 
@@ -204,6 +280,64 @@ export function EmailEditorProvider({
           : section
       )
     );
+  };
+
+  // Update or remove hyperlink on an individual element
+  const updateNodeLink = (
+    sectionId: string,
+    nodeId: string,
+    url: string | undefined
+  ) => {
+    const cleanUrl = url && url.trim() ? url.trim() : undefined;
+
+    setSections((current) =>
+      current.map((section) =>
+        section.id === sectionId
+          ? {
+            ...section,
+            nodes: section.nodes.map((node) =>
+              node.id === nodeId
+                ? {
+                  ...node,
+                  linkUrl: cleanUrl,
+                  url: cleanUrl,
+                }
+                : node
+            ),
+          }
+          : section
+      )
+    );
+  };
+
+  // Duplicate an individual element with a slight offset
+  const duplicateNode = (sectionId: string, nodeId: string) => {
+    const targetSection = sections.find((s) => s.id === sectionId);
+    if (!targetSection) return;
+
+    const targetNode = targetSection.nodes.find((n) => n.id === nodeId);
+    if (!targetNode) return;
+
+    const freshNodeId = crypto.randomUUID();
+    const clonedNode: EmailNode = {
+      ...targetNode,
+      id: freshNodeId,
+      x: Math.min(Math.max(0, targetSection.width - targetNode.width), targetNode.x + 16),
+      y: Math.min(Math.max(0, targetSection.height - targetNode.height), targetNode.y + 16),
+    };
+
+    setSections((current) =>
+      current.map((section) =>
+        section.id === sectionId
+          ? {
+            ...section,
+            nodes: [...section.nodes, clonedNode],
+          }
+          : section
+      )
+    );
+
+    setSelectedNodeId(freshNodeId);
   };
 
   // Resize or move an entire section
@@ -293,11 +427,22 @@ export function EmailEditorProvider({
     <EmailEditorContext.Provider
       value={{
         sections,
+        setSections,
         selectedSectionId,
         selectedNodeId,
+        campaignName,
+        setCampaignName,
+        campaignSubject,
+        setCampaignSubject,
+        currentCampaignId,
+        setCurrentCampaignId,
+        loadTemplate,
+        resetToBlank,
         addSection,
         addImage,
         updateNodeContent,
+        updateNodeLink,
+        duplicateNode,
         updateSectionBounds,
         updateNodeBounds,
         selectSection,
