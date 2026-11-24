@@ -1,9 +1,9 @@
-
 import { useState } from "react";
 import {
   Link,
   NavLink,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 
 import {
@@ -24,6 +24,9 @@ export default function Navbar() {
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isEmailCampaign = location.pathname.startsWith("/email-campaign");
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${isActive
@@ -39,6 +42,14 @@ export default function Navbar() {
   const openEditor = () => {
     closeMenus();
     navigate("/editor");
+  };
+
+  const handleCreateEmail = () => {
+    closeMenus();
+    navigate("/email-campaign", {
+      state: { newBlank: Date.now() },
+      replace: location.pathname === "/email-campaign",
+    });
   };
 
   return (
@@ -90,78 +101,94 @@ export default function Navbar() {
 
         {/* Desktop Create Menu */}
         <div className="relative hidden md:block">
-          <button
-            type="button"
-            onClick={() => setCreateMenuOpen((open) => !open)}
-            aria-expanded={createMenuOpen}
-            aria-haspopup="menu"
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-violet-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-violet-200 active:translate-y-0"
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            Create Design
-
-            <ChevronDown
-              size={16}
-              className={`transition-transform duration-200 ${createMenuOpen ? "rotate-180" : ""
-                }`}
-            />
-          </button>
-
-          {createMenuOpen && (
+          {isEmailCampaign ? (
+            /* Inside Email Campaign section: Create Design directly opens a new blank email campaign */
+            <button
+              type="button"
+              onClick={handleCreateEmail}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-violet-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-violet-200 active:translate-y-0"
+              title="Create new blank email campaign"
+            >
+              <Plus size={18} strokeWidth={2.5} />
+              Create Design
+            </button>
+          ) : (
+            /* Everywhere else: General Theme Builder Create Design menu */
             <>
               <button
                 type="button"
-                aria-label="Close create menu"
-                className="fixed inset-0 z-40 cursor-default"
-                onClick={() => setCreateMenuOpen(false)}
-              />
-
-              <div
-                role="menu"
-                className="absolute right-0 top-full z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-xl shadow-gray-200/70"
+                onClick={() => setCreateMenuOpen((open) => !open)}
+                aria-expanded={createMenuOpen}
+                aria-haspopup="menu"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-violet-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-violet-200 active:translate-y-0"
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={openEditor}
-                  className="flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors hover:bg-violet-50"
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                    <FilePlus2 size={20} />
-                  </span>
+                <Plus size={18} strokeWidth={2.5} />
+                Create Design
 
-                  <span>
-                    <span className="block text-sm font-bold text-gray-900">
-                      Blank Certificate
-                    </span>
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform duration-200 ${createMenuOpen ? "rotate-180" : ""
+                    }`}
+                />
+              </button>
 
-                    <span className="mt-1 block text-xs text-gray-500">
-                      Start with a fresh design
-                    </span>
-                  </span>
-                </button>
+              {createMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close create menu"
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setCreateMenuOpen(false)}
+                  />
 
-                <Link
-                  to="/templates"
-                  onClick={closeMenus}
-                  role="menuitem"
-                  className="flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-violet-50"
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
-                    <LayoutTemplate size={20} />
-                  </span>
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-xl shadow-gray-200/70"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openEditor}
+                      className="flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors hover:bg-violet-50"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                        <FilePlus2 size={20} />
+                      </span>
 
-                  <span>
-                    <span className="block text-sm font-bold text-gray-900">
-                      Use a Template
-                    </span>
+                      <span>
+                        <span className="block text-sm font-bold text-gray-900">
+                          Blank Certificate
+                        </span>
 
-                    <span className="mt-1 block text-xs text-gray-500">
-                      Choose a ready-made design
-                    </span>
-                  </span>
-                </Link>
-              </div>
+                        <span className="mt-1 block text-xs text-gray-500">
+                          Start with a fresh design
+                        </span>
+                      </span>
+                    </button>
+
+                    <Link
+                      to="/templates"
+                      onClick={closeMenus}
+                      role="menuitem"
+                      className="flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-violet-50"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                        <LayoutTemplate size={20} />
+                      </span>
+
+                      <span>
+                        <span className="block text-sm font-bold text-gray-900">
+                          Use a Template
+                        </span>
+
+                        <span className="mt-1 block text-xs text-gray-500">
+                          Choose a ready-made design
+                        </span>
+                      </span>
+                    </Link>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -225,7 +252,7 @@ export default function Navbar() {
 
             <button
               type="button"
-              onClick={openEditor}
+              onClick={isEmailCampaign ? handleCreateEmail : openEditor}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-md shadow-violet-200 transition-all hover:shadow-lg"
             >
               <Plus size={19} />

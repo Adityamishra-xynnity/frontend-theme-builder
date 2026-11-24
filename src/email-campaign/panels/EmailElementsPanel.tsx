@@ -21,6 +21,7 @@ import {
 
 import { useState } from "react";
 import { useEmailEditor } from "../context/EmailEditorContext";
+import type { EmailSectionTemplate } from "../types/campaign";
 import { headerTemplates } from "../elements/headerTemplates";
 import { footerTemplates } from "../elements/footerTemplates";
 import { buttonTemplates } from "../elements/buttonTemplates";
@@ -120,51 +121,27 @@ export default function EmailElementsPanel() {
 
 
           {selectedCategory === "header" ? (
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+            <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
+              <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
+                <span>{headerTemplates.length} Header layouts</span>
+                <span>Click to insert</span>
+              </div>
               {headerTemplates.map((template) => (
                 <button
                   key={template.id}
                   type="button"
                   onClick={() => addSection(template)}
-                  className="group w-full overflow-hidden rounded-xl border border-gray-200 text-left transition hover:border-violet-400 hover:shadow-md"
+                  className="group w-full overflow-hidden rounded-2xl border border-gray-200/90 text-left transition-all hover:border-violet-400 hover:shadow-lg active:scale-[0.99] bg-white"
                 >
-                  <div
-                    className="min-h-[145px] p-5 text-center"
-                    style={{ backgroundColor: template.backgroundColor }}
-                  >
-                    {template.nodes.map((node, index) => (
-                      <div key={index}>
-                        {node.type === "logo" && (
-                          <p className="mb-3 text-xs font-bold tracking-[0.2em] text-gray-700">
-                            {node.content}
-                          </p>
-                        )}
-                        {node.type === "heading" && (
-                          <p className="mb-2 text-lg font-bold text-gray-900">
-                            {node.content}
-                          </p>
-                        )}
-                        {node.type === "text" && (
-                          <p className="mb-3 text-xs text-gray-600">
-                            {node.content}
-                          </p>
-                        )}
-                        {node.type === "button" && (
-                          <span className="inline-block rounded-md bg-violet-600 px-4 py-2 text-xs font-semibold text-white">
-                            {node.content}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <HeaderMiniaturePreview template={template} />
 
-                  <div className="flex items-center justify-between bg-white px-3 py-3">
-                    <span className="text-sm font-semibold text-gray-700">
+                  <div className="flex items-center justify-between bg-white px-3.5 py-2.5 border-t border-gray-100">
+                    <span className="text-xs font-semibold text-gray-800 truncate">
                       {template.name}
                     </span>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-violet-700">
-                      <Plus size={14} />
-                      Add
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 transition-opacity">
+                      <Plus size={13} strokeWidth={2.5} />
+                      Insert
                     </span>
                   </div>
                 </button>
@@ -294,6 +271,133 @@ export default function EmailElementsPanel() {
 
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Pixel-accurate miniature preview of header templates for the Elements panel.
+ * Uses exact proportional scaling (scale = 328px / 600px ≈ 0.5467)
+ * so the thumbnail card matches the Canva design and the inserted canvas layout.
+ */
+function HeaderMiniaturePreview({
+  template,
+}: {
+  template: EmailSectionTemplate;
+}) {
+  const height = template.height || 100;
+  const scale = 0.5467;
+
+  return (
+    <div
+      className="relative w-full overflow-hidden select-none"
+      style={{
+        height: `${Math.round(height * scale)}px`,
+        backgroundColor: template.backgroundColor,
+      }}
+    >
+      <div
+        style={{
+          width: "600px",
+          height: `${height}px`,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          position: "relative",
+          backgroundColor: template.backgroundColor,
+        }}
+      >
+        {template.nodes.map((node, index) => {
+          const fontSize = node.fontSize || 14;
+          const left = node.x ?? 24;
+          const top = node.y ?? 24;
+          const width = node.width ?? 552;
+          const nodeHeight = node.height ?? 40;
+
+          if (node.type === "image") {
+            const src = node.content || node.url || "";
+            return (
+              <div
+                key={index}
+                style={{
+                  position: "absolute",
+                  left: `${left}px`,
+                  top: `${top}px`,
+                  width: `${width}px`,
+                  height: `${nodeHeight}px`,
+                  overflow: "hidden",
+                  borderRadius:
+                    typeof node.borderRadius === "number"
+                      ? `${node.borderRadius}px`
+                      : node.borderRadius || undefined,
+                }}
+              >
+                {src ? (
+                  <img
+                    src={src}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: width <= 64 ? "contain" : "cover",
+                      borderRadius:
+                        typeof node.borderRadius === "number"
+                          ? `${node.borderRadius}px`
+                          : node.borderRadius || undefined,
+                    }}
+                  />
+                ) : null}
+              </div>
+            );
+          }
+
+          if (node.type === "container") {
+            return (
+              <div
+                key={index}
+                style={{
+                  position: "absolute",
+                  left: `${left}px`,
+                  top: `${top}px`,
+                  width: `${width}px`,
+                  height: `${nodeHeight}px`,
+                  backgroundColor:
+                    node.backgroundColor || "rgba(255, 255, 255, 0.4)",
+                  borderRadius:
+                    typeof node.borderRadius === "number"
+                      ? `${node.borderRadius}px`
+                      : node.borderRadius || undefined,
+                }}
+              />
+            );
+          }
+
+          return (
+            <div
+              key={index}
+              style={{
+                position: "absolute",
+                left: `${left}px`,
+                top: `${top}px`,
+                width: `${width}px`,
+                height: `${nodeHeight}px`,
+                fontSize: `${fontSize}px`,
+                color: node.color || "#ffffff",
+                fontWeight:
+                  node.type === "heading" || node.type === "logo"
+                    ? "bold"
+                    : "normal",
+                lineHeight: 1.25,
+                whiteSpace: "pre-wrap",
+                textDecoration: node.type === "link" ? "underline" : "none",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {node.content}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
