@@ -32,7 +32,7 @@ import GraphicCard from "./GraphicCard";
 
 interface StaticGraphicsBrowserProps {
   onBack: () => void;
-  onSelectGraphic?: (graphic: GraphicAsset) => void;
+  onSelectGraphic?: (graphic: GraphicAsset) => void | Promise<void>;
 }
 
 const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
@@ -40,6 +40,7 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "organic-summer": <Sun size={14} />,
   "camping-rustic-drawing": <Tent size={14} />,
   "vivid-leaves": <Leaf size={14} />,
+  featured: <Sparkles size={14} />,
   "handdrawn-animals": <PawPrint size={14} />,
   "pastel-travel-accessories": <Compass size={14} />,
   "simple-drawn-objects": <Coffee size={14} />,
@@ -48,6 +49,62 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "business-graphics": <Briefcase size={14} />,
   "lines-dividers": <Minus size={14} />,
 };
+
+/**
+ * Canva-style sections: many small collections are merged into a handful of
+ * topic sections. A merged section's id is a comma-separated list of the
+ * backend category ids it contains, which /api/graphics understands.
+ */
+const SECTION_GROUPS: { name: string; members: string[] }[] = [
+  { name: "Featured", members: ["featured"] },
+  { name: "Social Media", members: ["social-media"] },
+  { name: "Animals & Birds", members: ["realistic-animals", "handdrawn-animals", "birds"] },
+  {
+    name: "Nature & Plants",
+    members: ["bold-foliage", "vivid-leaves", "organic-summer", "camping-rustic-drawing"],
+  },
+  {
+    name: "Food & Objects",
+    members: ["organic-sketched-fruit", "simple-drawn-objects", "pastel-travel-accessories"],
+  },
+  {
+    name: "Shapes & Backgrounds",
+    members: ["abstract-shapes", "gradients-blurs", "lines-dividers"],
+  },
+  { name: "Education & Business", members: ["educational-graphics", "business-graphics"] },
+];
+
+function groupCategories(cats: GraphicCategory[]): GraphicCategory[] {
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const used = new Set<string>();
+  const sections: GraphicCategory[] = [];
+
+  for (const group of SECTION_GROUPS) {
+    const present = group.members
+      .map((id) => byId.get(id))
+      .filter((c): c is GraphicCategory => Boolean(c));
+    if (present.length === 0) continue;
+    present.forEach((c) => used.add(c.id));
+    sections.push({
+      id: present.map((c) => c.id).join(","),
+      name: group.name,
+      count: present.reduce((sum, c) => sum + c.count, 0),
+      iconKey: present[0].iconKey,
+      previewSvg: present[0].previewSvg,
+    });
+  }
+
+  // Any collection added later that isn't mapped yet goes into one catch-all section
+  const rest = cats.filter((c) => !used.has(c.id));
+  if (rest.length > 0) {
+    sections.push({
+      id: rest.map((c) => c.id).join(","),
+      name: "More Graphics",
+      count: rest.reduce((sum, c) => sum + c.count, 0),
+    });
+  }
+  return sections;
+}
 
 export default function StaticGraphicsBrowser({
   onBack,
@@ -92,7 +149,9 @@ export default function StaticGraphicsBrowser({
       setInitialError(null);
 
       // 1. Fetch static categories summary
-      const fetchedCats = await getGraphicCategories("static");
+      const rawCats = await getGraphicCategories("static");
+      // Merge the many small collections into a few Canva-style sections
+      const fetchedCats = groupCategories(rawCats);
       setCategories(fetchedCats);
 
       // 2. Fetch top recommended static graphics
@@ -113,7 +172,7 @@ export default function StaticGraphicsBrowser({
               size: 10,
             });
             const content = pageResp.content || [];
-            railsCacheRef.current[cat.id] = content;
+            if (content.length > 0) railsCacheRef.current[cat.id] = content;
             return [cat.id, content];
           } catch {
             return [cat.id, []];

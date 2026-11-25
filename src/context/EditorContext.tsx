@@ -136,6 +136,23 @@ interface EditorContextType {
   registerCanvasSnapshotProvider: (
     provider: (() => EditorElement[]) | null
   ) => void;
+
+  /** Tell the draft autosave what this editing session was opened from (e.g. "new", "design:12"). */
+  setDraftSource: (source: string) => void;
+  /** Restore the autosaved draft if it belongs to `source`. Returns true when restored. */
+  restoreDraft: (source: string) => boolean;
+}
+
+const DRAFT_STORAGE_KEY = "theme-builder:editor-draft:v1";
+
+interface EditorDraft {
+  v: 1;
+  source: string;
+  designId: number | null;
+  name: string;
+  activePageId: string;
+  pages: EditorPage[];
+  savedAt: number;
 }
 
 const EditorContext =
@@ -258,6 +275,13 @@ export function EditorProvider({
 
   const [currentDesignName, setCurrentDesignName] =
     useState("");
+
+  const currentDesignIdRef = useRef<number | null>(null);
+  const currentDesignNameRef = useRef("");
+  useEffect(() => {
+    currentDesignIdRef.current = currentDesignId;
+    currentDesignNameRef.current = currentDesignName;
+  }, [currentDesignId, currentDesignName]);
 
   const [pageSize, setPageSize] =
     useState<PaperSize>(DEFAULT_PAGE_SIZE);
@@ -1051,6 +1075,138 @@ export function EditorProvider({
     setPages(nextPages);
   };
 
+  // ---------------------------------------------------------------------
+  // Draft autosave: keeps the in-progress design across page refreshes.
+  // ---------------------------------------------------------------------
+  const draftSourceRef = useRef("new");
+
+  const setDraftSource = useCallback((source: string) => {
+    draftSourceRef.current = source;
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        // Prefer the live Fabric snapshot for the active page.
+        const liveElements = canvasSnapshotProviderRef.current?.();
+        const pagesToSave = pagesRef.current.map((page) =>
+          page.id === activePageIdRef.current && Array.isArray(liveElements)
+            ? { ...page, elements: liveElements }
+            : page
+        );
+
+        const hasContent = pagesToSave.some((page) => page.elements.length > 0);
+        if (!hasContent) {
+          localStorage.removeItem(DRAFT_STORAGE_KEY);
+          return;
+        }
+
+        const draft: EditorDraft = {
+          v: 1,
+          source: draftSourceRef.current,
+          designId: currentDesignId,
+          name: currentDesignName,
+          activePageId: activePageIdRef.current,
+          pages: pagesToSave,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch (error) {
+        // Quota exceeded / storage unavailable: autosave is best-effort.
+        console.warn("Draft autosave skipped:", error);
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    pages,
+    elements,
+    backgroundColor,
+    pageSize,
+    orientation,
+    currentDesignId,
+    currentDesignName,
+    activePageId,
+  ]);
+
+  // Also flush right before the tab closes/refreshes so the last edit is never lost.
+  useEffect(() => {
+    const flush = () => {
+      try {
+        const liveElements = canvasSnapshotProviderRef.current?.();
+        const pagesToSave = pagesRef.current.map((page) =>
+          page.id === activePageIdRef.current && Array.isArray(liveElements)
+            ? { ...page, elements: liveElements }
+            : page
+        );
+        if (!pagesToSave.some((page) => page.elements.length > 0)) return;
+        const draft: EditorDraft = {
+          v: 1,
+          source: draftSourceRef.current,
+          designId: currentDesignIdRef.current,
+          name: currentDesignNameRef.current,
+          activePageId: activePageIdRef.current,
+          pages: pagesToSave,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch {
+        /* best effort */
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, []);
+
+  const restoreDraft = useCallback(
+    (source: string): boolean => {
+      try {
+        const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) return false;
+        const draft = JSON.parse(raw) as EditorDraft;
+        if (
+          !draft ||
+          draft.v !== 1 ||
+          draft.source !== source ||
+          !Array.isArray(draft.pages) ||
+          draft.pages.length === 0
+        ) {
+          return false;
+        }
+
+        const first = draft.pages[0];
+        loadSavedDesign({
+          id: draft.designId ?? 0,
+          name: draft.name,
+          elements: first.elements,
+          backgroundColor: first.backgroundColor,
+          pageSize: first.pageSize,
+          orientation: first.orientation,
+          pages: draft.pages,
+          createdAt: "",
+          updatedAt: "",
+        });
+        // loadSavedDesign marks the design as saved; a draft without a backend id is not.
+        if (draft.designId == null) {
+          setCurrentDesignId(null);
+        }
+        if (!draft.name) {
+          setCurrentDesignName("");
+        }
+        draftSourceRef.current = source;
+        return true;
+      } catch (error) {
+        console.warn("Failed to restore draft:", error);
+        return false;
+      }
+    },
+    [loadSavedDesign]
+  );
+
   return (
     <EditorContext.Provider
       value={{
@@ -1097,6 +1253,8 @@ export function EditorProvider({
 
         syncElementsFromCanvas,
         registerCanvasSnapshotProvider,
+        setDraftSource,
+        restoreDraft,
       }}
     >
       {children}

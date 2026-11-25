@@ -68,6 +68,58 @@ export async function getRecommendedGraphics(
 export async function getGraphics(
   params: GraphicFilterParams = {}
 ): Promise<GraphicPageResponse> {
+  const result = await fetchGraphicsPage(params);
+
+  // Merged sections pass several category ids ("a,b,c"). Older backend builds don't
+  // understand that and return nothing, so fall back to merging per category here.
+  const ids = (params.categoryId ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (ids.length > 1 && result.totalElements === 0) {
+    return mergeCategoryPages(params, ids);
+  }
+  return result;
+}
+
+async function mergeCategoryPages(
+  params: GraphicFilterParams,
+  ids: string[]
+): Promise<GraphicPageResponse> {
+  const pages = await Promise.all(
+    ids.map((id) =>
+      fetchGraphicsPage({ ...params, categoryId: id, page: 0, size: 100 }).catch(
+        () => null
+      )
+    )
+  );
+  const lists = pages.map((p) => p?.content ?? []);
+  const mixed: GraphicAsset[] = [];
+  for (let i = 0; mixed.length < lists.reduce((n, l) => n + l.length, 0); i++) {
+    for (const list of lists) if (i < list.length) mixed.push(list[i]);
+  }
+
+  const size = typeof params.size === "number" && params.size > 0 ? params.size : 20;
+  const page = typeof params.page === "number" && params.page >= 0 ? params.page : 0;
+  const totalPages = Math.max(1, Math.ceil(mixed.length / size));
+  const content = mixed.slice(page * size, page * size + size);
+  return {
+    content,
+    pageable: { pageNumber: page, pageSize: size },
+    totalElements: mixed.length,
+    totalPages,
+    last: page >= totalPages - 1,
+    size,
+    number: page,
+    numberOfElements: content.length,
+    first: page === 0,
+    empty: content.length === 0,
+  };
+}
+
+async function fetchGraphicsPage(
+  params: GraphicFilterParams = {}
+): Promise<GraphicPageResponse> {
   const queryParams = new URLSearchParams();
 
   if (params.categoryId && params.categoryId !== "all") {

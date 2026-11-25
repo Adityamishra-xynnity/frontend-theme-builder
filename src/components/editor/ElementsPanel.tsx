@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { elementDragProps } from "../../utils/elementDrag";
 import type { ReactNode } from "react";
 import {
   Search,
@@ -1719,6 +1720,7 @@ export default function ElementsPanel() {
           type="button"
           title={`Add ${item.label}`}
           onClick={() => handleAddShape(item.type)}
+          {...elementDragProps(() => handleAddShape(item.type))}
           className="group flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white px-1.5 py-3 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-200 active:scale-95"
         >
           <span className="flex h-12 w-full items-center justify-center rounded-lg text-slate-600 transition-colors duration-200 group-hover:text-blue-600">
@@ -1942,6 +1944,7 @@ export default function ElementsPanel() {
             title={`Add ${asset.name}`}
             aria-label={`Add ${asset.name}`}
             onClick={() => void handleAddPhoto(asset)}
+            {...elementDragProps(() => handleAddPhoto(asset))}
             className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md active:scale-95"
           >
             <div className="aspect-[4/3] overflow-hidden bg-slate-100">
@@ -2038,7 +2041,7 @@ export default function ElementsPanel() {
           setView("root");
           setSearch("");
         }}
-        onSelectGraphic={(graphic) => void addGraphic(graphic)}
+        onSelectGraphic={(graphic) => addGraphic(graphic)}
       />
     );
   }
@@ -2050,7 +2053,7 @@ export default function ElementsPanel() {
           setView("root");
           setSearch("");
         }}
-        onSelectGraphic={(graphic) => void addGraphic(graphic)}
+        onSelectGraphic={(graphic) => addGraphic(graphic)}
       />
     );
   }

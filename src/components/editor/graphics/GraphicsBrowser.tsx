@@ -31,7 +31,7 @@ import GraphicCard from "./GraphicCard";
 
 interface GraphicsBrowserProps {
   onBack: () => void;
-  onSelectGraphic?: (graphic: GraphicAsset) => void;
+  onSelectGraphic?: (graphic: GraphicAsset) => void | Promise<void>;
 }
 
 const CATEGORY_ICONS: Record<string, ReactNode> = {
@@ -112,7 +112,7 @@ export default function GraphicsBrowser({
               size: 10,
             });
             const content = pageResp.content || [];
-            railsCacheRef.current[cat.id] = content;
+            if (content.length > 0) railsCacheRef.current[cat.id] = content;
             return [cat.id, content];
           } catch {
             return [cat.id, []];

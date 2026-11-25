@@ -1,10 +1,11 @@
 import { useMemo } from "react";
+import { elementDragProps } from "../../../utils/elementDrag";
 import type { GraphicAsset } from "../../../types/graphics";
 import { Sparkles } from "lucide-react";
 
 interface GraphicCardProps {
   graphic: GraphicAsset;
-  onClick?: (graphic: GraphicAsset) => void;
+  onClick?: (graphic: GraphicAsset) => void | Promise<void>;
   compact?: boolean;
 }
 
@@ -20,7 +21,7 @@ export default function GraphicCard({
 }: GraphicCardProps) {
   const isAnimated =
     graphic.assetData?.type === "animated" ||
-    graphic.assetData?.animationConfig !== undefined;
+    Boolean(graphic.assetData?.animationConfig);
 
   // Safe data URI representation of the SVG string
   const svgDataUri = useMemo(() => {
@@ -40,6 +41,7 @@ export default function GraphicCard({
       title={`${graphic.name}${isAnimated ? " (Animated)" : ""}`}
       aria-label={`Add ${graphic.name}`}
       onClick={() => onClick?.(graphic)}
+      {...elementDragProps(() => onClick?.(graphic))}
       className={`group relative flex items-center justify-center overflow-hidden rounded-lg bg-[#f1f3f4] transition-colors duration-150 hover:bg-[#e8eaed] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8b3dff] ${
         compact ? "h-[88px] w-[88px] shrink-0" : "aspect-square w-full"
       }`}

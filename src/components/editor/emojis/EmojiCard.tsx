@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { elementDragProps } from "../../../utils/elementDrag";
 import type { EmojiAsset } from "../../../types/emoji";
 
 interface EmojiCardProps {
@@ -32,6 +33,7 @@ export default function EmojiCard({
       title={emoji.name}
       aria-label={`Insert emoji: ${emoji.name}`}
       onClick={() => onClick?.(emoji)}
+      {...elementDragProps(() => onClick?.(emoji))}
       className={`group relative flex flex-col items-center justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
         compact ? "w-24 shrink-0 p-2" : "w-full p-2"
       }`}

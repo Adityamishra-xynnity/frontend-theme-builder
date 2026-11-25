@@ -15,7 +15,7 @@ import GraphicCard from "./GraphicCard";
 interface CategorySeeAllViewProps {
   category: GraphicCategory;
   onBack: () => void;
-  onSelectGraphic?: (graphic: GraphicAsset) => void;
+  onSelectGraphic?: (graphic: GraphicAsset) => void | Promise<void>;
 }
 
 export default function CategorySeeAllView({

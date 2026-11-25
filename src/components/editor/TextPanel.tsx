@@ -1,4 +1,5 @@
 
+import { elementDragProps } from "../../utils/elementDrag";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Type,
@@ -386,6 +387,7 @@ export default function TextPanel() {
           <button
             type="button"
             onClick={() => addText("heading")}
+            {...elementDragProps(() => addText("heading"))}
             className="flex w-full items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
@@ -403,6 +405,7 @@ export default function TextPanel() {
           <button
             type="button"
             onClick={() => addText("subheading")}
+            {...elementDragProps(() => addText("subheading"))}
             className="flex w-full items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
@@ -422,6 +425,7 @@ export default function TextPanel() {
           <button
             type="button"
             onClick={() => addText("text")}
+            {...elementDragProps(() => addText("text"))}
             className="flex w-full items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
@@ -510,6 +514,7 @@ export default function TextPanel() {
                   key={combination.id}
                   type="button"
                   onClick={() => addTextCombination(combination.styles)}
+                  {...elementDragProps(() => addTextCombination(combination.styles))}
                   className="group relative flex min-h-28 w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 px-3 py-4 transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm"
                   title={`Add ${combination.name} to canvas`}
                 >

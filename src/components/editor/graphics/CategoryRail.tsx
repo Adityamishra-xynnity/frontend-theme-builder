@@ -13,7 +13,7 @@ interface CategoryRailProps {
   loading?: boolean;
   error?: string | null;
   onSeeAll?: () => void;
-  onSelectGraphic?: (graphic: GraphicAsset) => void;
+  onSelectGraphic?: (graphic: GraphicAsset) => void | Promise<void>;
   onRetry?: () => void;
 }
 
