@@ -76,6 +76,21 @@ export interface EmailTemplateResponse {
   updatedAt?: string;
 }
 
+// Backend Email Campaign Header Template DTO matching EmailCampaignHeaderTemplateResponse
+export interface EmailCampaignHeaderTemplateResponse {
+  id: number;
+  templateKey: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  thumbnailUrl?: string | null;
+  templateData: EmailSectionTemplate;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // Backend Email Campaign DTO matching EmailCampaignResponse
 export interface EmailCampaignResponse {
   id: number;
