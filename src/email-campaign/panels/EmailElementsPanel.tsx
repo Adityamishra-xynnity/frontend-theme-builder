@@ -16,13 +16,16 @@ import {
   Table2,
   ArrowLeft,
   Plus,
-  Code2
+  Code2,
+  RefreshCw,
+  AlertCircle,
+  FolderOpen
 } from "lucide-react";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useEmailEditor } from "../context/EmailEditorContext";
 import type { EmailSectionTemplate } from "../types/campaign";
-import { headerTemplates } from "../elements/headerTemplates";
+import { fetchEmailCampaignHeaderTemplates } from "../services/emailCampaignApi";
 import { footerTemplates } from "../elements/footerTemplates";
 import { buttonTemplates } from "../elements/buttonTemplates";
 import { elementTemplates } from "../elements/elementTemplates";
@@ -50,6 +53,43 @@ const categories = [
 export default function EmailElementsPanel() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { addSection } = useEmailEditor();
+
+  const [headerTemplates, setHeaderTemplates] = useState<EmailSectionTemplate[]>([]);
+  const [isHeadersLoading, setIsHeadersLoading] = useState<boolean>(false);
+  const [headersError, setHeadersError] = useState<string | null>(null);
+  const [hasLoadedHeaders, setHasLoadedHeaders] = useState<boolean>(false);
+
+  const loadHeaderTemplates = useCallback(async () => {
+    setIsHeadersLoading(true);
+    setHeadersError(null);
+    try {
+      const data = await fetchEmailCampaignHeaderTemplates();
+      const mapped: EmailSectionTemplate[] = data.map((item) => ({
+        ...(item.templateData || {}),
+        id: item.templateKey,
+        category: item.category || item.templateData?.category || "header",
+        name: item.name || item.templateData?.name || "Header",
+        backgroundColor: item.templateData?.backgroundColor || "#ffffff",
+        padding: item.templateData?.padding || "16px 24px",
+        height: item.templateData?.height,
+        nodes: Array.isArray(item.templateData?.nodes) ? item.templateData.nodes : [],
+      }));
+      setHeaderTemplates(mapped);
+      setHasLoadedHeaders(true);
+    } catch (err) {
+      setHeadersError(
+        err instanceof Error ? err.message : "Failed to load header templates from server"
+      );
+    } finally {
+      setIsHeadersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCategory === "header" && !hasLoadedHeaders && !isHeadersLoading) {
+      loadHeaderTemplates();
+    }
+  }, [selectedCategory, hasLoadedHeaders, isHeadersLoading, loadHeaderTemplates]);
 
   const selectedCategoryLabel = categories.find(
     (category) => category.id === selectedCategory
@@ -122,30 +162,77 @@ export default function EmailElementsPanel() {
 
           {selectedCategory === "header" ? (
             <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
-              <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
-                <span>{headerTemplates.length} Header layouts</span>
-                <span>Click to insert</span>
-              </div>
-              {headerTemplates.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => addSection(template)}
-                  className="group w-full overflow-hidden rounded-2xl border border-gray-200/90 text-left transition-all hover:border-violet-400 hover:shadow-lg active:scale-[0.99] bg-white"
-                >
-                  <HeaderMiniaturePreview template={template} />
-
-                  <div className="flex items-center justify-between bg-white px-3.5 py-2.5 border-t border-gray-100">
-                    <span className="text-xs font-semibold text-gray-800 truncate">
-                      {template.name}
-                    </span>
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 transition-opacity">
-                      <Plus size={13} strokeWidth={2.5} />
-                      Insert
-                    </span>
+              {isHeadersLoading ? (
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>Loading header layouts...</span>
                   </div>
-                </button>
-              ))}
+                  {[1, 2, 3, 4].map((skeleton) => (
+                    <div
+                      key={skeleton}
+                      className="h-20 w-full animate-pulse rounded-2xl border border-gray-100 bg-gray-100"
+                    />
+                  ))}
+                </div>
+              ) : headersError ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-red-100 bg-red-50/50 p-6 text-center">
+                  <AlertCircle size={24} className="mb-2 text-red-500" />
+                  <p className="text-xs font-semibold text-gray-800">
+                    Could not load header templates
+                  </p>
+                  <p className="mt-1 text-[11px] text-gray-500">{headersError}</p>
+                  <button
+                    type="button"
+                    onClick={loadHeaderTemplates}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                  >
+                    <RefreshCw size={12} />
+                    Retry
+                  </button>
+                </div>
+              ) : headerTemplates.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-100 bg-gray-50 p-6 text-center">
+                  <FolderOpen size={24} className="mb-2 text-gray-400" />
+                  <p className="text-xs font-semibold text-gray-700">
+                    No header templates available
+                  </p>
+                  <button
+                    type="button"
+                    onClick={loadHeaderTemplates}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <RefreshCw size={12} />
+                    Refresh
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
+                    <span>{headerTemplates.length} Header layouts</span>
+                    <span>Click to insert</span>
+                  </div>
+                  {headerTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => addSection(template)}
+                      className="group w-full overflow-hidden rounded-2xl border border-gray-200/90 text-left transition-all hover:border-violet-400 hover:shadow-lg active:scale-[0.99] bg-white"
+                    >
+                      <HeaderMiniaturePreview template={template} />
+
+                      <div className="flex items-center justify-between bg-white px-3.5 py-2.5 border-t border-gray-100">
+                        <span className="text-xs font-semibold text-gray-800 truncate">
+                          {template.name}
+                        </span>
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 transition-opacity">
+                          <Plus size={13} strokeWidth={2.5} />
+                          Insert
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           ) : selectedCategory === "footer" ? (
             <div className="flex-1 space-y-4 overflow-y-auto p-4">

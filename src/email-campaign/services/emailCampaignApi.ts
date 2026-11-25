@@ -1,5 +1,6 @@
 import type {
   EmailTemplateResponse,
+  EmailCampaignHeaderTemplateResponse,
   EmailCampaignResponse,
   EmailCampaignRequest,
   EmailCampaignSendRequest,
@@ -129,6 +130,42 @@ export async function fetchEmailTemplateByKey(templateKey: string): Promise<Emai
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || `Failed to fetch template by key "${templateKey}"`);
+  }
+
+  return response.json();
+}
+
+// ==========================================
+// HEADER TEMPLATE API SERVICES
+// ==========================================
+
+/**
+ * Fetch active pre-built email campaign header templates from dedicated table.
+ */
+export async function fetchEmailCampaignHeaderTemplates(
+  category?: string
+): Promise<EmailCampaignHeaderTemplateResponse[]> {
+  const params = new URLSearchParams();
+  if (category && category !== "all") {
+    params.append("category", category);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-header-templates${query}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch header templates (${response.status})`
+    );
   }
 
   return response.json();
