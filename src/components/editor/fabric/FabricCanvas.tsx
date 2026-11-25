@@ -129,6 +129,8 @@ type FabricObjectWithMeta = FabricObject & {
   elementId?: string;
   elementType?: ElementType;
   imageSrc?: string;
+  pendingUploadId?: string;
+  isPendingUpload?: boolean;
   shapeSides?: number;
   isFreehand?: boolean;
   tableData?: {
@@ -278,6 +280,10 @@ function applyElementMetadata(
 
   if (element.type === "image" && element.src) {
     meta.imageSrc = element.src;
+    if (element.pendingUploadId) {
+      meta.pendingUploadId = element.pendingUploadId;
+      meta.isPendingUpload = true;
+    }
   }
 
   if (element.shapeSides !== undefined) {
@@ -1044,8 +1050,8 @@ export default function FabricEditorCanvas({
   const borderInset = Math.max(0, Number(borderConfig.inset ?? 18));
   const borderWidth = Math.max(1, Number(borderConfig.width ?? 4));
   const borderColor = String(borderConfig.color ?? "#C9A227");
-  const borderLineStyle = String(borderConfig.lineStyle ?? "solid");
-  const borderRadius = Math.max(0, Number(borderConfig.radius ?? 0));
+  const borderLineStyle = String(borderConfig.lineStyle ?? borderConfig.kind ?? "solid");
+  const borderRadius = Math.max(0, Number(borderConfig.radius ?? (borderConfig.corner === "rounded" ? 16 : 0)));
   const secondaryBorderColor = borderConfig.secondaryColor
     ? String(borderConfig.secondaryColor)
     : "";
@@ -1212,7 +1218,9 @@ export default function FabricEditorCanvas({
     setInlineTableEditor(null);
   }
 
-  function syncCanvasToEditor() {
+  const syncScheduledRef = useRef<number | null>(null);
+
+  function syncCanvasToEditor(immediate = false) {
     const canvas = canvasRef.current;
 
     if (
@@ -1228,14 +1236,28 @@ export default function FabricEditorCanvas({
       return;
     }
 
-    const converted = convertCanvasToElements();
+    const performSync = () => {
+      syncScheduledRef.current = null;
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas || rebuildingCanvasRef.current) return;
 
-    lastSyncedSignatureRef.current =
-      getElementSignature(converted);
+      const converted = convertCanvasToElements();
+      lastSyncedSignatureRef.current = getElementSignature(converted);
+      internalChangeRef.current = true;
+      latestSyncRef.current(converted, canvasPageIdRef.current);
+    };
 
-    internalChangeRef.current = true;
+    if (immediate) {
+      if (syncScheduledRef.current !== null) {
+        cancelAnimationFrame(syncScheduledRef.current);
+        syncScheduledRef.current = null;
+      }
+      performSync();
+      return;
+    }
 
-    latestSyncRef.current(converted, canvasPageIdRef.current);
+    if (syncScheduledRef.current !== null) return;
+    syncScheduledRef.current = requestAnimationFrame(performSync);
   }
 
   // Expose a live, synchronous canvas snapshot to Copy Page. If a text box is

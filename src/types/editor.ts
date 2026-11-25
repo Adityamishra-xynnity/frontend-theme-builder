@@ -85,4 +85,8 @@ export interface EditorElement {
   isAnimated?: boolean;
   animationConfig?: GraphicAnimationConfig;
   animationType?: GraphicAnimationType;
+
+  // Deferred Cloudinary upload tracking
+  pendingUploadId?: string;
+  isPendingUpload?: boolean;
 }

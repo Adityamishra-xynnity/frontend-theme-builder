@@ -25,14 +25,18 @@ import {
   Building2,
   Gift,
   Wallpaper,
+  Check,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useFabric, type ShapeElementType } from "../../context/useFabric";
+import { useEditor, type EditorPageAsset } from "../../context/EditorContext";
 import BordersPanel from "./BordersPanel";
 import AnimationsPanel from "./AnimationsPanel";
 import GraphicsBrowser from "./graphics/GraphicsBrowser";
 import StaticGraphicsBrowser from "./graphics/StaticGraphicsBrowser";
 import EmojiBrowser from "./emojis/EmojiBrowser";
 import type { EmojiAsset } from "../../types/emoji";
+import type { GraphicAsset } from "../../types/graphics";
 
 // --------------------------------------------------
 // TYPES
@@ -135,6 +139,67 @@ interface PhotoCategory {
   description: string;
 }
 
+interface SearchApiAsset {
+  id: number;
+  assetKey: string;
+  name: string;
+  assetType: string;
+  category: string;
+  assetData: {
+    type?: string;
+    iconKey?: string;
+    svgContent?: string;
+    emoji?: string;
+    style?: Record<string, unknown>;
+    config?: Record<string, unknown>;
+    animationConfig?: {
+      type?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+const FLOWER_TYPE_MAP: Record<string, ShapeElementType> = {
+  "flower-5-petal": "flower-5",
+  "flower-8-petal": "flower-8",
+  "flower-12-petal": "flower-12",
+};
+
+function previewSearchBorder(asset: SearchApiAsset): CSSProperties {
+  const style = (asset.assetData?.style ?? {}) as Record<string, unknown>;
+  const lineStyle = String(style.lineStyle ?? style.kind ?? "solid");
+  const color = String(style.color ?? "#C9A227");
+  const width = Number(style.width ?? 4);
+  const radius = Number(style.radius ?? (style.corner === "rounded" ? 16 : 0));
+  return {
+    border: `${Math.max(1, Math.min(width, 7))}px ${lineStyle} ${color}`,
+    borderRadius: `${Math.max(0, Math.min(radius, 24))}px`,
+    outline: style.secondaryColor
+      ? `1px solid ${String(style.secondaryColor)}`
+      : undefined,
+    outlineOffset: style.secondaryColor ? "4px" : undefined,
+  };
+}
+
+function previewSearchAnimation(asset: SearchApiAsset): string {
+  const config = asset.assetData?.config as Record<string, unknown> | undefined;
+  const effect = String(config?.effect ?? asset.assetKey).toLowerCase();
+  const supported: Record<string, string> = {
+    "fade-in": "tb-fade-in 1.2s ease-in-out infinite alternate",
+    float: "tb-float 2.4s ease-in-out infinite",
+    pulse: "tb-pulse 1.4s ease-in-out infinite",
+    "soft-glow": "tb-soft-glow 1.8s ease-in-out infinite alternate",
+    shimmer: "tb-shimmer 2.2s linear infinite",
+    "slide-up": "tb-slide-up 1s ease-out infinite alternate",
+    "gentle-zoom": "tb-gentle-zoom 2.6s ease-in-out infinite alternate",
+    sparkle: "tb-sparkle 1.8s ease-in-out infinite",
+  };
+  return supported[effect] ?? "tb-pulse 1.4s ease-in-out infinite";
+}
+
 type PanelView =
   | "root"
   | "categories"
@@ -176,7 +241,7 @@ const CATEGORY_ICONS: Record<string, ReactNode> = {
   "Lines & Arrows": <Minus size={17} />,
 };
 
-const EMOJI_CATEGORIES = [
+export const EMOJI_CATEGORIES = [
   { title: "Faces", emoji: "😀", description: "Smileys and expressions" },
   { title: "Celebration", emoji: "🎉", description: "Celebrate special moments" },
   { title: "Symbols", emoji: "❤️", description: "Useful symbols and icons" },
@@ -737,12 +802,6 @@ function ShapePreview({ type }: { type: ShapeElementType }) {
 function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
   const categoryMap = new Map<string, ShapeItem[]>();
 
-  const flowerTypeMap: Record<string, ShapeElementType> = {
-    "flower-5-petal": "flower-5",
-    "flower-8-petal": "flower-8",
-    "flower-12-petal": "flower-12",
-  };
-
   [...assets]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .forEach((asset) => {
@@ -751,7 +810,7 @@ function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
       if (!categoryName) return;
 
       const apiType = asset.assetData?.type || asset.assetKey;
-      const mappedType = flowerTypeMap[asset.assetKey] || apiType;
+      const mappedType = FLOWER_TYPE_MAP[asset.assetKey] || apiType;
 
       const item: ShapeItem = {
         label: asset.name,
@@ -780,6 +839,72 @@ function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
 
 export default function ElementsPanel() {
   const { addShape, addEmoji, addImage, addGraphic } = useFabric();
+  const {
+    borderAsset,
+    setPageBorderAsset,
+    animationAsset,
+    setPageAnimationAsset,
+  } = useEditor();
+
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<PanelView>("root");
+
+  // --------------------------------------------------
+  // GLOBAL SEARCH STATE (cross-element search for root view)
+  // --------------------------------------------------
+
+  const [globalSearchResults, setGlobalSearchResults] = useState<SearchApiAsset[]>([]);
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [globalSearchError, setGlobalSearchError] = useState("");
+  const [debouncedGlobalSearch, setDebouncedGlobalSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedGlobalSearch(search.trim());
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (view !== "root" || !debouncedGlobalSearch) {
+      setGlobalSearchResults([]);
+      setGlobalSearchLoading(false);
+      setGlobalSearchError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    const fetchSearch = async () => {
+      setGlobalSearchLoading(true);
+      setGlobalSearchError("");
+      try {
+        const res = await fetch(
+          `http://localhost:8080/api/assets/search?search=${encodeURIComponent(debouncedGlobalSearch)}&size=60`,
+          {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          }
+        );
+        if (!res.ok) throw new Error(`Search failed (${res.status})`);
+        const data = await res.json();
+        const items: SearchApiAsset[] = Array.isArray(data.content) ? data.content : [];
+        setGlobalSearchResults(items.filter((item) => item.isActive !== false));
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setGlobalSearchError(
+            err instanceof Error ? err.message : "Search failed"
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setGlobalSearchLoading(false);
+        }
+      }
+    };
+
+    void fetchSearch();
+    return () => controller.abort();
+  }, [debouncedGlobalSearch, view]);
 
   // --------------------------------------------------
   // SHAPES STATE
@@ -791,8 +916,6 @@ export default function ElementsPanel() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [view, setView] = useState<PanelView>("root");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -944,7 +1067,7 @@ export default function ElementsPanel() {
 
       if (!response.ok) {
         throw new Error(
-          `Shapes load nahi ho paye. Server response: ${response.status}`,
+          `Unable to load shapes. Please try again. Server response: ${response.status}`,
         );
       }
 
@@ -952,7 +1075,7 @@ export default function ElementsPanel() {
 
       if (!data || !Array.isArray(data.content)) {
         throw new Error(
-          "Backend se shapes ka valid paginated data nahi mila.",
+          "Unable to retrieve valid paginated shape data. Please try again later.",
         );
       }
 
@@ -986,7 +1109,7 @@ export default function ElementsPanel() {
         setError("");
 
         if (replace && activeAssets.length === 0) {
-          setError("Is category mein koi active shape available nahi hai.");
+          setError("No active shapes are available in this category.");
         }
       }
     } catch (err) {
@@ -994,7 +1117,7 @@ export default function ElementsPanel() {
         setError(
           err instanceof Error
             ? err.message
-            : "Shapes load karte waqt kuch error aa gaya.",
+            : "We couldn’t load the shapes. Please try again in a moment.",
         );
       }
     } finally {
@@ -1070,7 +1193,7 @@ export default function ElementsPanel() {
 
       if (!response.ok) {
         throw new Error(
-          `Emojis load nahi ho paye. Server response: ${response.status}`,
+          `We couldn’t load the emojis. Please try again in a moment. Server response: ${response.status}`,
         );
       }
 
@@ -1078,7 +1201,7 @@ export default function ElementsPanel() {
 
       if (!data || !Array.isArray(data.content)) {
         throw new Error(
-          "Backend se emojis ka valid paginated data nahi mila.",
+          "We couldn’t retrieve the emojis correctly. Please try again later.",
         );
       }
 
@@ -1116,7 +1239,7 @@ export default function ElementsPanel() {
 
         if (replace && activeAssets.length === 0) {
           setEmojiError(
-            "Is category mein koi active emoji available nahi hai.",
+            "No emojis are currently available in this category.",
           );
         }
       }
@@ -1125,7 +1248,7 @@ export default function ElementsPanel() {
         setEmojiError(
           err instanceof Error
             ? err.message
-            : "Emojis load karte waqt kuch error aa gaya.",
+            : "We encountered an issue while loading the emojis. Please try again.",
         );
       }
     } finally {
@@ -1203,14 +1326,14 @@ export default function ElementsPanel() {
 
       if (!response.ok) {
         throw new Error(
-          `Photos load nahi ho payi. Server response: ${response.status}`,
+          `We couldn’t load the photos. Please try again in a moment.. Server response: ${response.status}`,
         );
       }
 
       const data: PhotoPageResponse = await response.json();
 
       if (!data || !Array.isArray(data.content)) {
-        throw new Error("Backend se valid photo data nahi mila.");
+        throw new Error("We couldn’t retrieve the photos correctly. Please try again later.");
       }
 
       const activeAssets = data.content.filter(
@@ -1247,7 +1370,7 @@ export default function ElementsPanel() {
 
         if (replace && activeAssets.length === 0) {
           setPhotoError(
-            "Is category mein koi active photo available nahi hai.",
+            "No photos are currently available in this category.",
           );
         }
       }
@@ -1256,7 +1379,7 @@ export default function ElementsPanel() {
         setPhotoError(
           err instanceof Error
             ? err.message
-            : "Photos load karte waqt error aa gaya.",
+            : "We encountered an issue while loading the photos. Please try again.",
         );
       }
     } finally {
@@ -1628,7 +1751,7 @@ export default function ElementsPanel() {
     const imageUrl = getPhotoUrl(asset);
 
     if (!imageUrl) {
-      setPhotoError("Is photo ka valid image URL nahi mila.");
+      setPhotoError("We couldn’t retrieve a valid image URL for this photo.");
       return;
     }
 
@@ -1636,13 +1759,13 @@ export default function ElementsPanel() {
       const response = await fetch(imageUrl);
 
       if (!response.ok) {
-        throw new Error("Photo download nahi ho payi.");
+        throw new Error("We couldn’t download the photo. Please try again.");
       }
 
       const blob = await response.blob();
 
       if (!blob.type.startsWith("image/")) {
-        throw new Error("Selected URL ek valid image nahi hai.");
+        throw new Error("The selected URL does not point to a valid image.");
       }
 
       const dataUrl: string = await new Promise((resolve, reject) => {
@@ -1652,12 +1775,12 @@ export default function ElementsPanel() {
           if (typeof reader.result === "string") {
             resolve(reader.result);
           } else {
-            reject(new Error("Image convert nahi ho payi."));
+            reject(new Error("We couldn’t convert the image. Please try again."));
           }
         };
 
         reader.onerror = () => {
-          reject(new Error("Image read nahi ho payi."));
+          reject(new Error("We couldn’t read the image. Please try again."));
         };
 
         reader.readAsDataURL(blob);
@@ -1669,9 +1792,178 @@ export default function ElementsPanel() {
       setPhotoError(
         err instanceof Error
           ? err.message
-          : "Photo canvas par add nahi ho payi.",
+          : "We couldn’t add the photo to the canvas. Please try again.",
       );
     }
+  };
+
+  const handleSelectSearchResult = async (asset: SearchApiAsset) => {
+    const type = (asset.assetType || "").toUpperCase();
+    if (type === "BORDER") {
+      setPageBorderAsset(asset as unknown as EditorPageAsset);
+    } else if (type === "ANIMATION") {
+      setPageAnimationAsset(asset as unknown as EditorPageAsset);
+    } else if (type === "GRAPHIC") {
+      await addGraphic(asset as unknown as GraphicAsset);
+    } else if (type === "EMOJI") {
+      handleAddEmoji(asset as unknown as EmojiAsset);
+    } else if (type === "SHAPE") {
+      const apiType = (
+        asset.assetData?.type || asset.assetKey.replace(/^shape-/, "")
+      ) as ShapeElementType;
+      const mappedType = FLOWER_TYPE_MAP[asset.assetKey] || apiType;
+      handleAddShape(mappedType);
+    } else if (type === "PHOTO") {
+      await handleAddPhoto(asset as unknown as PhotoApiAsset);
+    }
+  };
+
+  const renderSearchResultCard = (asset: SearchApiAsset) => {
+    const type = (asset.assetType || "").toUpperCase();
+    const isSelectedBorder =
+      type === "BORDER" && borderAsset?.assetKey === asset.assetKey;
+    const isSelectedAnimation =
+      type === "ANIMATION" && animationAsset?.assetKey === asset.assetKey;
+    const isSelected = isSelectedBorder || isSelectedAnimation;
+
+    const badgeConfig: Record<string, { label: string; badgeClass: string }> = {
+      BORDER: { label: "Border", badgeClass: "bg-violet-100 text-violet-700" },
+      ANIMATION: {
+        label: "Animation",
+        badgeClass: "bg-purple-100 text-purple-700",
+      },
+      GRAPHIC: {
+        label: "Graphic",
+        badgeClass: "bg-orange-100 text-orange-700",
+      },
+      EMOJI: { label: "Emoji", badgeClass: "bg-amber-100 text-amber-700" },
+      SHAPE: { label: "Shape", badgeClass: "bg-blue-100 text-blue-700" },
+      PHOTO: { label: "Photo", badgeClass: "bg-sky-100 text-sky-700" },
+    };
+    const badge = badgeConfig[type] || {
+      label: type,
+      badgeClass: "bg-slate-100 text-slate-700",
+    };
+
+    const rawSvg = asset.assetData?.svgContent;
+    const svgDataUri =
+      rawSvg && typeof rawSvg === "string"
+        ? `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`
+        : null;
+
+    const isAnimatedGraphic = asset.assetData?.type === "animated";
+    const animType = isAnimatedGraphic
+      ? asset.assetData?.animationConfig?.type || "pulse"
+      : null;
+
+    const mappedShapeType = (
+      FLOWER_TYPE_MAP[asset.assetKey] ||
+      asset.assetData?.type ||
+      asset.assetKey.replace(/^shape-/, "")
+    ) as ShapeElementType;
+
+    const photoUrl =
+      type === "PHOTO" ? getPhotoUrl(asset as unknown as PhotoApiAsset) : "";
+
+    return (
+      <button
+        key={`${asset.assetType}-${asset.id}-${asset.assetKey}`}
+        type="button"
+        title={`${asset.name} (${badge.label})`}
+        aria-label={`Select ${asset.name}`}
+        onClick={() => void handleSelectSearchResult(asset)}
+        className={`group relative flex flex-col items-center justify-between overflow-hidden rounded-2xl border bg-white p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-200 ${isSelected
+            ? "border-violet-500 ring-2 ring-violet-300 shadow-sm"
+            : "border-slate-200/80"
+          }`}
+      >
+        {/* PREVIEW CONTAINER */}
+        <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-slate-50/70 p-2 transition-colors group-hover:bg-blue-50/40">
+          {/* Top-Right Badge */}
+          <span
+            className={`absolute top-1.5 right-1.5 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide shadow-xs ${badge.badgeClass}`}
+          >
+            {badge.label}
+          </span>
+
+          {/* Selected indicator */}
+          {isSelected && (
+            <span className="absolute top-1.5 left-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-white shadow-xs">
+              <Check size={11} strokeWidth={3} />
+            </span>
+          )}
+
+          {/* Asset Preview */}
+          {type === "BORDER" ? (
+            <div className="flex h-full w-full items-center justify-center p-1">
+              <div
+                className="flex h-full w-full items-center justify-center bg-white shadow-xs"
+                style={previewSearchBorder(asset)}
+              >
+                <span className="select-none text-[9px] font-semibold text-slate-400">
+                  Border
+                </span>
+              </div>
+            </div>
+          ) : type === "ANIMATION" ? (
+            <div className="flex h-full w-full items-center justify-center">
+              <div
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm"
+                style={{ animation: previewSearchAnimation(asset) }}
+              >
+                <Sparkles size={22} />
+              </div>
+            </div>
+          ) : type === "PHOTO" ? (
+            photoUrl ? (
+              <img
+                src={photoUrl}
+                alt={asset.name}
+                loading="lazy"
+                className="h-full w-full rounded-lg object-cover transition-transform duration-300 group-hover:scale-105"
+                onError={(e) => {
+                  e.currentTarget.style.opacity = "0.25";
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
+                Photo
+              </div>
+            )
+          ) : type === "SHAPE" ? (
+            <div className="flex h-full w-full items-center justify-center text-blue-600">
+              <ShapePreview type={mappedShapeType} />
+            </div>
+          ) : svgDataUri ? (
+            <img
+              src={svgDataUri}
+              alt={asset.name}
+              loading="lazy"
+              className={`pointer-events-none max-h-full max-w-full select-none object-contain p-1 transition-transform duration-300 ${animType ? `anim-preview-${animType}` : "group-hover:scale-105"
+                }`}
+            />
+          ) : asset.assetData?.emoji ? (
+            <span className="select-none text-4xl transition-transform duration-200 group-hover:scale-110">
+              {String(asset.assetData.emoji)}
+            </span>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
+              Preview
+            </div>
+          )}
+        </div>
+
+        {/* ASSET TITLE */}
+        <div className="mt-1.5 w-full text-center">
+          <p className="truncate text-xs font-semibold text-slate-800 transition-colors group-hover:text-blue-700">
+            {asset.name}
+          </p>
+          <p className="mt-0.5 truncate text-[10px] text-slate-400">
+            {asset.category || badge.label}
+          </p>
+        </div>
+      </button>
+    );
   };
 
   // --------------------------------------------------
@@ -2164,13 +2456,13 @@ export default function ElementsPanel() {
               </p>
 
               <p className="mt-1 text-xs text-slate-500">
-                Database se photos load ho rahi hain.
+                Photos are being loaded from the database.
               </p>
             </div>
           ) : photoError && photoAssets.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-red-100 bg-white px-4 py-12 text-center">
               <p className="text-sm font-semibold text-slate-700">
-                Photos load nahi hui
+                We couldn’t load the photos. Please try again in a moment.
               </p>
 
               <p className="mt-2 break-words text-xs text-slate-500">
@@ -2268,7 +2560,7 @@ export default function ElementsPanel() {
             </p>
 
             <p className="mt-1 text-xs text-slate-500">
-              Database se shapes load ho rahe hain.
+              Shapes are being loaded from the database.
             </p>
           </div>
         ) : error && assets.length === 0 ? (
@@ -2276,7 +2568,7 @@ export default function ElementsPanel() {
             <Shapes size={30} className="mb-3 text-red-300" />
 
             <p className="text-sm font-semibold text-slate-700">
-              Shapes load nahi hue
+              We couldn’t load the shapes. Please try again in a moment.
             </p>
 
             <p className="mt-2 break-words text-xs text-slate-500">
@@ -2294,9 +2586,82 @@ export default function ElementsPanel() {
 
           /* SEARCH RESULTS */
 
+        ) : normalizedSearch && view === "root" ? (
+          <div>
+            {/* SEARCH HEADER */}
+            <div className="mb-3 flex items-center justify-between px-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-700">
+                  Results for &ldquo;{search}&rdquo;
+                </span>
+                {!globalSearchLoading && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                    {globalSearchResults.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+
+            {/* LOADING STATE */}
+            {globalSearchLoading ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center shadow-sm">
+                <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+                <p className="text-sm font-semibold text-slate-700">
+                  Searching elements...
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Finding matching graphics, borders, animations, and more
+                </p>
+              </div>
+            ) : globalSearchError ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-red-100 bg-white px-4 py-10 text-center shadow-sm">
+                <p className="text-sm font-semibold text-slate-800">
+                  Search error
+                </p>
+                <p className="mt-1 text-xs text-red-600">
+                  {globalSearchError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDebouncedGlobalSearch(search.trim())}
+                  className="mt-3 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : globalSearchResults.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
+                <Search size={28} className="mb-3 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-700">
+                  No elements found
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  We couldn&apos;t find anything matching &ldquo;{search}&rdquo;.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  Clear search
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                {globalSearchResults.map((asset) => renderSearchResultCard(asset))}
+              </div>
+            )}
+          </div>
         ) : normalizedSearch ? (
           <div className="space-y-3">
-            {filteredCategories.length > 0 &&
+            {filteredCategories.length > 0 ? (
               filteredCategories.map((category) => {
                 const matchingItems = category.items.filter((item) =>
                   item.label.toLowerCase().includes(normalizedSearch),
@@ -2333,138 +2698,18 @@ export default function ElementsPanel() {
                     )}
                   </section>
                 );
-              })}
-
-            {view === "root" &&
-              ("emoji".includes(normalizedSearch) ||
-                EMOJI_CATEGORIES.some((category) =>
-                  category.title.toLowerCase().includes(normalizedSearch),
-                )) && (
-                <button
-                  type="button"
-                  onClick={handleOpenEmojis}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md"
-                >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 text-2xl">
-                    😀
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-slate-900">
-                      Emojis
-                    </span>
-
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Explore emoji categories
-                    </span>
-                  </span>
-
-                  <ChevronRight size={18} className="text-slate-400" />
-                </button>
-              )}
-
-            {view === "root" &&
-              ("photo".includes(normalizedSearch) ||
-                PHOTO_CATEGORIES.some((category) =>
-                  category.title.toLowerCase().includes(normalizedSearch),
-                )) && (
-                <button
-                  type="button"
-                  onClick={handleOpenPhotos}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md"
-                >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-100 text-2xl">
-                    🖼️
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-slate-900">
-                      Photos
-                    </span>
-
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Explore photo categories
-                    </span>
-                  </span>
-
-                  <ChevronRight size={18} className="text-slate-400" />
-                </button>
-              )}
-
-            {view === "root" &&
-              ("graphic".includes(normalizedSearch) ||
-                "graphics".includes(normalizedSearch)) && (
-                <button
-                  type="button"
-                  onClick={() => { setSearch(""); setView("graphics"); }}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md"
-                >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
-                    <Palette size={22} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-slate-900">
-                      Graphics
-                    </span>
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Flowers, foliage, animals, fruit & objects
-                    </span>
-                  </span>
-                  <ChevronRight size={18} className="text-slate-400" />
-                </button>
-              )}
-
-            {view === "root" &&
-              ("animation".includes(normalizedSearch) ||
-                "animated".includes(normalizedSearch)) && (
-                <button
-                  type="button"
-                  onClick={() => { setSearch(""); setView("animated-designs"); }}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-md"
-                >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-sm transition-transform group-hover:scale-105">
-                    <Sparkles size={22} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-slate-900">
-                      Animated Designs
-                    </span>
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Animated arrows, shapes, words & decorative art
-                    </span>
-                  </span>
-                  <ChevronRight size={18} className="text-slate-400" />
-                </button>
-              )}
-
-            {filteredCategories.length === 0 &&
-              !(
-                view === "root" &&
-                (
-                  "emoji".includes(normalizedSearch) ||
-                  "photo".includes(normalizedSearch) ||
-                  "graphic".includes(normalizedSearch) ||
-                  "animation".includes(normalizedSearch) ||
-                  EMOJI_CATEGORIES.some((category) =>
-                    category.title.toLowerCase().includes(normalizedSearch),
-                  ) ||
-                  PHOTO_CATEGORIES.some((category) =>
-                    category.title.toLowerCase().includes(normalizedSearch),
-                  )
-                )
-              ) && (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
-                  <Search size={28} className="mb-3 text-slate-300" />
-
-                  <p className="text-sm font-semibold text-slate-700">
-                    No elements found
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Try a different search term.
-                  </p>
-                </div>
-              )}
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
+                <Search size={28} className="mb-3 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-700">
+                  No shapes found
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Try a different search term.
+                </p>
+              </div>
+            )}
           </div>
 
           /* ROOT VIEW */

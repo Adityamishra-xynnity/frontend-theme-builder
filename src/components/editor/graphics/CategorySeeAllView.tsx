@@ -4,7 +4,6 @@ import {
   Search,
   X,
   AlertCircle,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -30,7 +29,6 @@ export default function CategorySeeAllView({
   // Filters & Pagination
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "animated" | "static">("all");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
@@ -49,9 +47,9 @@ export default function CategorySeeAllView({
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch graphics whenever category, debouncedSearch, typeFilter, or page changes
+  // Fetch graphics whenever category, debouncedSearch, or page changes
   const fetchCategoryGraphics = useCallback(async () => {
-    const cacheKey = `${category.id}|${debouncedSearch}|${typeFilter}|${page}`;
+    const cacheKey = `${category.id}|${debouncedSearch}|${page}`;
 
     if (cacheRef.current.has(cacheKey)) {
       const cached = cacheRef.current.get(cacheKey)!;
@@ -69,7 +67,6 @@ export default function CategorySeeAllView({
       const response = await getGraphics({
         categoryId: category.id,
         search: debouncedSearch.trim() || undefined,
-        type: typeFilter,
         page,
         size: 18,
       });
@@ -88,16 +85,11 @@ export default function CategorySeeAllView({
     } finally {
       setLoading(false);
     }
-  }, [category.id, debouncedSearch, typeFilter, page]);
+  }, [category.id, debouncedSearch, page]);
 
   useEffect(() => {
     void fetchCategoryGraphics();
   }, [fetchCategoryGraphics]);
-
-  const handleFilterChange = (filter: "all" | "animated" | "static") => {
-    setTypeFilter(filter);
-    setPage(0);
-  };
 
   return (
     <div className="flex h-full flex-col">
@@ -146,44 +138,6 @@ export default function CategorySeeAllView({
             </button>
           )}
         </div>
-
-        {/* TYPE FILTER PILLS */}
-        <div className="mt-2.5 flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => handleFilterChange("all")}
-            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-              typeFilter === "all"
-                ? "bg-[#0e1318] text-white"
-                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-            }`}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => handleFilterChange("animated")}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-              typeFilter === "animated"
-                ? "bg-[#0e1318] text-white"
-                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-            }`}
-          >
-            <Sparkles size={11} />
-            Animated
-          </button>
-          <button
-            type="button"
-            onClick={() => handleFilterChange("static")}
-            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-              typeFilter === "static"
-                ? "bg-[#0e1318] text-white"
-                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-            }`}
-          >
-            Static
-          </button>
-        </div>
       </div>
 
       {/* CONTENT GRID */}
@@ -223,16 +177,15 @@ export default function CategorySeeAllView({
             <p className="mt-1 text-xs text-slate-500">
               Try adjusting your search or filters.
             </p>
-            {(search || typeFilter !== "all") && (
+            {search && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  setTypeFilter("all");
                 }}
                 className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-700"
               >
-                Clear filters
+                Clear search
               </button>
             )}
           </div>
