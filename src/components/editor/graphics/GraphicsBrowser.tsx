@@ -58,7 +58,6 @@ export default function GraphicsBrowser({
   // Search State
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [searchType, setSearchType] = useState<"all" | "animated" | "static">("all");
   const [searchResults, setSearchResults] = useState<GraphicAsset[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -178,7 +177,7 @@ export default function GraphicsBrowser({
     return () => {
       isMounted = false;
     };
-  }, [debouncedSearch, searchType]);
+  }, [debouncedSearch]);
 
   // If user clicked "See All" on a category, render the dedicated CategorySeeAllView
   if (activeSeeAllCategory) {
@@ -237,46 +236,6 @@ export default function GraphicsBrowser({
             </button>
           )}
         </div>
-
-        {/* SEARCH FILTER PILLS (When searching) */}
-        {isSearchActive && (
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSearchType("all")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                searchType === "all"
-                  ? "bg-[#0e1318] text-white"
-                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-              }`}
-            >
-              All ({searchTotal})
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchType("animated")}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                searchType === "animated"
-                  ? "bg-[#0e1318] text-white"
-                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-              }`}
-            >
-              <Sparkles size={11} />
-              Animated
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchType("static")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                searchType === "static"
-                  ? "bg-[#0e1318] text-white"
-                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
-              }`}
-            >
-              Static
-            </button>
-          </div>
-        )}
       </div>
 
       {/* BODY CONTENT */}

@@ -58,7 +58,10 @@ export interface FabricContextType {
     textStrokeWidth?: number;
   }>) => void;
   addShape: (type: ShapeElementType) => void;
-  addImage: (dataUrl: string) => void;
+  addImage: (
+    dataUrl: string,
+    options?: { pendingUploadId?: string; offsetIndex?: number }
+  ) => Promise<void>;
   addGraphic: (graphic: GraphicAsset) => Promise<void>;
   setGraphicColor: (colorIndex: number, newColor: string) => void;
 

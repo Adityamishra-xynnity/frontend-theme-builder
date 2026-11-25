@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import {
   ArrowLeft,
   Search,
@@ -13,6 +13,7 @@ import {
   BookOpen,
   Briefcase,
   Minus,
+  Bird,
   Sparkles,
   AlertCircle,
   RefreshCw,
@@ -48,6 +49,7 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "educational-graphics": <BookOpen size={14} />,
   "business-graphics": <Briefcase size={14} />,
   "lines-dividers": <Minus size={14} />,
+  "birds": <Bird size={14} />,
 };
 
 /**
@@ -106,6 +108,11 @@ function groupCategories(cats: GraphicCategory[]): GraphicCategory[] {
   return sections;
 }
 
+// Global module-level caches so re-opening Static Graphics or switching categories is 0ms instant
+let cachedStaticCategories: GraphicCategory[] | null = null;
+let cachedStaticRecommended: GraphicAsset[] | null = null;
+const globalStaticRailsCache = new Map<string, GraphicAsset[]>();
+
 export default function StaticGraphicsBrowser({
   onBack,
   onSelectGraphic,
@@ -122,17 +129,22 @@ export default function StaticGraphicsBrowser({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchTotal, setSearchTotal] = useState(0);
 
-  // Rails Data
-  const [categories, setCategories] = useState<GraphicCategory[]>([]);
-  const [recommended, setRecommended] = useState<GraphicAsset[]>([]);
-  const [categoryRailMap, setCategoryRailMap] = useState<
-    Record<string, GraphicAsset[]>
-  >({});
-  const [initialLoading, setInitialLoading] = useState(true);
+  // Rails Data initialized with cached data if available for instant display
+  const [categories, setCategories] = useState<GraphicCategory[]>(() => cachedStaticCategories || []);
+  const [recommended, setRecommended] = useState<GraphicAsset[]>(() => cachedStaticRecommended || []);
+  const [categoryRailMap, setCategoryRailMap] = useState<Record<string, GraphicAsset[]>>(() => {
+    const map: Record<string, GraphicAsset[]> = {};
+    if (cachedStaticCategories) {
+      for (const cat of cachedStaticCategories) {
+        if (globalStaticRailsCache.has(cat.id)) {
+          map[cat.id] = globalStaticRailsCache.get(cat.id)!;
+        }
+      }
+    }
+    return map;
+  });
+  const [initialLoading, setInitialLoading] = useState(() => !cachedStaticCategories || !cachedStaticRecommended);
   const [initialError, setInitialError] = useState<string | null>(null);
-
-  // Cache refs
-  const railsCacheRef = useRef<Record<string, GraphicAsset[]>>({});
 
   // Debounce search
   useEffect(() => {
@@ -145,46 +157,60 @@ export default function StaticGraphicsBrowser({
   // Load static categories and static recommendations from backend
   const loadInitialData = useCallback(async () => {
     try {
-      setInitialLoading(true);
+      if (!cachedStaticCategories || !cachedStaticRecommended) {
+        setInitialLoading(true);
+      }
       setInitialError(null);
 
-      // 1. Fetch static categories summary
-      const rawCats = await getGraphicCategories("static");
-      // Merge the many small collections into a few Canva-style sections
+      // 1 & 2. Fetch categories summary and top recommended graphics in parallel
+      const [rawCats, fetchedRecs] = await Promise.all([
+        getGraphicCategories("static"),
+        getRecommendedGraphics(20, "static"),
+      ]);
       const fetchedCats = groupCategories(rawCats);
+
+      cachedStaticCategories = fetchedCats;
+      cachedStaticRecommended = fetchedRecs;
       setCategories(fetchedCats);
-
-      // 2. Fetch top recommended static graphics
-      const fetchedRecs = await getRecommendedGraphics(20, "static");
       setRecommended(fetchedRecs);
+      setInitialLoading(false); // Unblock UI immediately so user can browse categories
 
-      // 3. Fetch preview graphics for each static category in parallel
-      const railEntries: [string, GraphicAsset[]][] = await Promise.all(
-        fetchedCats.map(async (cat) => {
-          if (railsCacheRef.current[cat.id]) {
-            return [cat.id, railsCacheRef.current[cat.id]];
-          }
-          try {
-            const pageResp = await getGraphics({
-              categoryId: cat.id,
-              type: "static",
-              page: 0,
-              size: 10,
-            });
-            const content = pageResp.content || [];
-            if (content.length > 0) railsCacheRef.current[cat.id] = content;
-            return [cat.id, content];
-          } catch {
-            return [cat.id, []];
-          }
-        })
-      );
+      // 3. Fetch preview graphics for each static category with progressive updates
+      const updatedMap: Record<string, GraphicAsset[]> = {};
+      const missingCats: GraphicCategory[] = [];
 
-      const railMap: Record<string, GraphicAsset[]> = {};
-      for (const [id, items] of railEntries) {
-        railMap[id] = items;
+      for (const cat of fetchedCats) {
+        if (globalStaticRailsCache.has(cat.id)) {
+          updatedMap[cat.id] = globalStaticRailsCache.get(cat.id)!;
+        } else {
+          missingCats.push(cat);
+        }
       }
-      setCategoryRailMap(railMap);
+      setCategoryRailMap((prev) => ({ ...prev, ...updatedMap }));
+
+      // Fetch missing rails concurrently
+      if (missingCats.length > 0) {
+        await Promise.all(
+          missingCats.map(async (cat) => {
+            try {
+              const pageResp = await getGraphics({
+                categoryId: cat.id,
+                type: "static",
+                page: 0,
+                size: 10,
+              });
+              const content = pageResp.content || [];
+              globalStaticRailsCache.set(cat.id, content);
+              setCategoryRailMap((prev) => ({
+                ...prev,
+                [cat.id]: content,
+              }));
+            } catch {
+              // Ignore single category failure
+            }
+          })
+        );
+      }
     } catch (err) {
       setInitialError(
         err instanceof Error ? err.message : "Failed to load static graphics."

@@ -36,7 +36,8 @@ import {
   RotateCw,
   Minus,
   Plus,
-  Mail
+  Mail,
+  Loader2,
 } from "lucide-react";
 
 import { useFabric } from "../../context/useFabric";
@@ -104,6 +105,7 @@ export default function Toolbar() {
   const [lineSpacing, setLineSpacingState] = useState(1.16);
   const [letterSpacing, setLetterSpacingState] = useState(0);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [designName, setDesignName] = useState("");
   const [saveError, setSaveError] = useState("");
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
@@ -379,11 +381,12 @@ export default function Toolbar() {
   }
 
   function closeSaveModal() {
+    if (isSaving) return;
     setShowSaveModal(false);
     setSaveError("");
   }
 
-  function handleSave() {
+  async function handleSave() {
     const name = designName.trim();
 
     if (!name) {
@@ -391,10 +394,22 @@ export default function Toolbar() {
       return;
     }
 
-    saveCurrentDesign(name);
-    setShowSaveModal(false);
-    setDesignName("");
+    setIsSaving(true);
     setSaveError("");
+
+    try {
+      await saveCurrentDesign(name);
+      setShowSaveModal(false);
+      setDesignName("");
+      setSaveError("");
+    } catch (err: any) {
+      console.error("Save error:", err);
+      setSaveError(
+        err.message || "Failed to save design. Please check your connection and try again."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function handleSendCanvasEmail() {
@@ -1525,17 +1540,23 @@ export default function Toolbar() {
               <button
                 type="button"
                 onClick={closeSaveModal}
-                className="h-10 rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                disabled={isSaving}
+                className="h-10 rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-xs font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 active:scale-[0.98]"
+                disabled={isSaving}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-xs font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-70"
               >
-                <Save size={14} />
-                Save Certificate
+                {isSaving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                {isSaving ? "Uploading & Saving..." : "Save Certificate"}
               </button>
             </div>
           </form>

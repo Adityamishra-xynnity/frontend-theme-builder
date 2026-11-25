@@ -22,10 +22,10 @@ function getStyle(asset: EditorPageAsset | null) {
 
 function previewBorder(asset: EditorPageAsset) {
   const style = getStyle(asset);
-  const lineStyle = String(style.lineStyle ?? "solid");
+  const lineStyle = String(style.lineStyle ?? style.kind ?? "solid");
   const color = String(style.color ?? "#C9A227");
   const width = Number(style.width ?? 4);
-  const radius = Number(style.radius ?? 0);
+  const radius = Number(style.radius ?? (style.corner === "rounded" ? 16 : 0));
   return {
     border: `${Math.max(1, Math.min(width, 7))}px ${lineStyle} ${color}`,
     borderRadius: `${Math.max(0, Math.min(radius, 24))}px`,

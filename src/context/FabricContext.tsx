@@ -40,6 +40,12 @@ import type {
 import type { EmojiAsset } from "../types/emoji";
 import { graphicAnimationRuntime } from "../utils/graphicAnimationRuntime";
 import { takeDraggedElement } from "../utils/elementDrag";
+import { createBorderFabricObjects } from "../utils/borderUtils";
+import {
+  uploadPendingImagesForDesign,
+  getPendingUploadByLocalUrl,
+  revokePendingUrl,
+} from "../services/pendingUploadService";
 
 import {
   FabricContext,
@@ -56,6 +62,8 @@ type FabricObjectWithMeta = {
   elementId?: string;
   elementType?: ElementType;
   imageSrc?: string;
+  pendingUploadId?: string;
+  isPendingUpload?: boolean;
   shapeSides?: number;
   isFreehand?: boolean;
   freehandScenePoints?: Array<{ x: number; y: number }>;
@@ -238,6 +246,8 @@ const SERIALIZED_PROPERTIES = [
   "elementId",
   "elementType",
   "imageSrc",
+  "pendingUploadId",
+  "isPendingUpload",
   "shapeSides",
   "isFreehand",
   "backgroundColor",
@@ -649,9 +659,9 @@ function createSpecialShape(type: ShapeElementType): any {
   ) {
     const points =
       type === "star-4" ? 4 :
-      type === "star-6" ? 6 :
-      type === "star-8" ? 8 :
-      type === "star-12" ? 12 : 5;
+        type === "star-6" ? 6 :
+          type === "star-8" ? 8 :
+            type === "star-12" ? 12 : 5;
 
     return new Polygon(getStarPoints(points, 75, 34), {
       ...common,
@@ -926,13 +936,17 @@ export function FabricProvider({
   const drawingHistoryHandlerRef = useRef<((event: any) => void) | null>(null);
   const pathCreatedHandlerRef = useRef<((event: any) => void) | null>(null);
 
+  const isSavingDesignRef = useRef(false);
+
   const {
     saveDesign,
     currentDesignName,
     syncElementsFromCanvas,
+    updatePages,
     pages,
     activePageId,
     selectPage,
+    borderAsset,
   } = useEditor();
 
   const setSelectedObject = (object: any) => {
@@ -941,8 +955,8 @@ export function FabricProvider({
 
   const selectedFontSize =
     selectedObject &&
-    (selectedObject.type === "i-text" ||
-      selectedObject.type === "textbox")
+      (selectedObject.type === "i-text" ||
+        selectedObject.type === "textbox")
       ? selectedObject.fontSize ?? 18
       : null;
 
@@ -965,11 +979,29 @@ export function FabricProvider({
     setFuture([]);
   }
 
-  function syncCanvasToEditor() {
+  const syncScheduledRef = useRef<number | null>(null);
+
+  function syncCanvasToEditor(immediate = false) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    syncElementsFromCanvas(convertCanvasToElements(), activePageId);
+    if (immediate) {
+      if (syncScheduledRef.current !== null) {
+        cancelAnimationFrame(syncScheduledRef.current);
+        syncScheduledRef.current = null;
+      }
+      syncElementsFromCanvas(convertCanvasToElements(), activePageId);
+      return;
+    }
+
+    if (syncScheduledRef.current !== null) return;
+
+    syncScheduledRef.current = requestAnimationFrame(() => {
+      syncScheduledRef.current = null;
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas) return;
+      syncElementsFromCanvas(convertCanvasToElements(), activePageId);
+    });
   }
 
   function convertCanvasToElements(): EditorElement[] {
@@ -1138,6 +1170,10 @@ export function FabricProvider({
 
       if (object.type === "image") {
         element.src = item.imageSrc ?? "";
+        if (item.pendingUploadId) {
+          element.pendingUploadId = item.pendingUploadId;
+          element.isPendingUpload = true;
+        }
       }
 
       if (item.elementType === "table" && item.tableData) {
@@ -1247,6 +1283,8 @@ export function FabricProvider({
     id: string = crypto.randomUUID(),
     extra?: {
       imageSrc?: string;
+      pendingUploadId?: string;
+      isPendingUpload?: boolean;
       shapeSides?: number;
       isFreehand?: boolean;
       graphicId?: number | string;
@@ -1265,6 +1303,8 @@ export function FabricProvider({
     item.elementType = type;
 
     if (extra?.imageSrc) item.imageSrc = extra.imageSrc;
+    if (extra?.pendingUploadId) item.pendingUploadId = extra.pendingUploadId;
+    if (extra?.isPendingUpload !== undefined) item.isPendingUpload = extra.isPendingUpload;
     if (extra?.shapeSides) item.shapeSides = extra.shapeSides;
     if (extra?.isFreehand) item.isFreehand = true;
     if (extra?.graphicId !== undefined) item.graphicId = extra.graphicId;
@@ -1360,8 +1400,8 @@ export function FabricProvider({
     const svgContent = isAssetObject
       ? emoji.assetData?.svgContent
       : typeof emoji === "string" && emoji.trim().startsWith("<svg")
-      ? emoji.trim()
-      : null;
+        ? emoji.trim()
+        : null;
 
     if (svgContent) {
       saveCanvasState();
@@ -1447,11 +1487,11 @@ export function FabricProvider({
     }
 
     // Fallback for plain unicode emojis (e.g. "😀")
-   const rawValue = isAssetObject
-  ? (emoji.assetData?.unicode || emoji.name || "")
-  : emoji;
+    const rawValue = isAssetObject
+      ? (emoji.assetData?.unicode || emoji.name || "")
+      : emoji;
 
-const value = String(rawValue).trim();
+    const value = String(rawValue).trim();
     if (!value) return;
 
     saveCanvasState();
@@ -1527,12 +1567,12 @@ const value = String(rawValue).trim();
         effect === "striped"
           ? new Shadow({ color: "#9A3412", blur: 0, offsetX: 4, offsetY: 4 })
           : effect === "neon"
-          ? new Shadow({ color: item.fill, blur: 22, offsetX: 0, offsetY: 0 })
-          : effect === "3d"
-            ? new Shadow({ color: "#581C87", blur: 0, offsetX: 5, offsetY: 6 })
-            : effect === "retro"
-              ? new Shadow({ color: "#F97316", blur: 0, offsetX: 3, offsetY: 3 })
-              : undefined;
+            ? new Shadow({ color: item.fill, blur: 22, offsetX: 0, offsetY: 0 })
+            : effect === "3d"
+              ? new Shadow({ color: "#581C87", blur: 0, offsetX: 5, offsetY: 6 })
+              : effect === "retro"
+                ? new Shadow({ color: "#F97316", blur: 0, offsetX: 3, offsetY: 3 })
+                : undefined;
 
       const object = new Textbox(item.text, {
         left: center.x,
@@ -1749,12 +1789,20 @@ const value = String(rawValue).trim();
     syncCanvasToEditor();
   }
 
-  async function addImage(dataUrl: string) {
+  async function addImage(
+    dataUrl: string,
+    options?: {
+      pendingUploadId?: string;
+      offsetIndex?: number;
+    }
+  ) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     try {
-      const image = await FabricImage.fromURL(dataUrl);
+      const image = await FabricImage.fromURL(dataUrl, {
+        crossOrigin: "anonymous",
+      });
       const currentCanvas = canvasRef.current;
       if (!currentCanvas) return;
 
@@ -1762,10 +1810,11 @@ const value = String(rawValue).trim();
 
       const originalWidth = image.width || 1;
       const scale = Math.min(1, 350 / originalWidth);
+      const offset = (options?.offsetIndex ?? 0) * 30;
 
       image.set({
-        left: 100,
-        top: 100,
+        left: 100 + offset,
+        top: 100 + offset,
         scaleX: scale,
         scaleY: scale,
         angle: 0,
@@ -1775,6 +1824,8 @@ const value = String(rawValue).trim();
       applyObjectControls(image);
       attachMetadata(image, "image", crypto.randomUUID(), {
         imageSrc: dataUrl,
+        pendingUploadId: options?.pendingUploadId,
+        isPendingUpload: Boolean(options?.pendingUploadId),
       });
 
       currentCanvas.add(image);
@@ -1826,9 +1877,12 @@ const value = String(rawValue).trim();
 
   function extractColorsFromFabricGroup(group: any): string[] {
     const colors = new Set<string>();
+
     const traverse = (obj: any) => {
       if (obj.getObjects && typeof obj.getObjects === "function") {
         obj.getObjects().forEach(traverse);
+      } else if (Array.isArray(obj._objects)) {
+        obj._objects.forEach(traverse);
       }
       const checkColor = (val: unknown) => {
         const parsed = parseCssColor(val);
@@ -1846,78 +1900,194 @@ const value = String(rawValue).trim();
     return Array.from(colors).slice(0, 12);
   }
 
+  // In-memory template cache for parsed SVGs to avoid redundant DOMParser passes
+  const svgParsedTemplateCache = new Map<string, { objects: FabricObject[]; options: any }>();
+
   async function addGraphic(graphic: GraphicAsset) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const imageUrl = (graphic.assetData as any)?.imageUrl;
     const svgString = graphic.assetData?.svgContent;
-    if (!svgString) {
-      console.warn("Cannot add graphic: svgContent is missing.");
+    if (!imageUrl && !svgString) {
+      console.warn("Cannot add graphic: neither imageUrl nor svgContent is present.");
       return;
     }
 
     saveCanvasState();
 
     try {
-      const { objects, options } = await loadSVGFromString(svgString);
-      const validObjects = objects.filter((o): o is FabricObject => o !== null);
-      if (validObjects.length === 0) {
-        console.warn("No valid objects parsed from SVG for graphic:", graphic.name);
-        return;
-      }
+      let graphicObject: FabricObject;
 
-      const group = util.groupSVGElements(validObjects, options);
+      // Check if svgContent contains vector graphic markup
+      const hasVectorSvg = Boolean(
+        svgString &&
+        (svgString.includes("<path") ||
+          svgString.includes("<g") ||
+          svgString.includes("<circle") ||
+          svgString.includes("<polygon") ||
+          svgString.includes("<rect") ||
+          svgString.includes("<ellipse") ||
+          svgString.includes("<polyline")) &&
+        !svgString.includes("<image ")
+      );
 
-      // Disarm inner child objects so the group acts as a single atomic interactive object
-      if (typeof (group as any).forEachObject === "function") {
-        (group as any).forEachObject((child: any) => {
-          child.set({
-            selectable: false,
-            evented: false,
-            // The parent group is cached as ONE bitmap; children must not build their own caches.
-            objectCaching: false,
+      if (hasVectorSvg) {
+        let validObjects: FabricObject[];
+        let options: any;
+
+        const cached = svgParsedTemplateCache.get(svgString!);
+        if (cached) {
+          validObjects = await Promise.all(cached.objects.map((o) => o.clone()));
+          options = { ...cached.options };
+        } else {
+          const { objects, options: opts } = await loadSVGFromString(svgString!);
+          const filtered = objects.filter((o): o is FabricObject => o !== null);
+          if (filtered.length === 0) {
+            console.warn("No valid objects parsed from SVG for graphic:", graphic.name);
+            return;
+          }
+          svgParsedTemplateCache.set(svgString!, { objects: filtered, options: opts });
+          validObjects = await Promise.all(filtered.map((o) => o.clone()));
+          options = opts;
+        }
+
+        const group = util.groupSVGElements(validObjects, options);
+
+        // Disarm inner child objects so the group acts as a single atomic interactive object
+        if (typeof (group as any).forEachObject === "function") {
+          (group as any).forEachObject((child: any) => {
+            child.set({
+              selectable: false,
+              evented: false,
+            });
           });
+        }
+
+        // Default sensible size: ~160px width or height, preserving aspect ratio
+        const origWidth = group.width || 120;
+        const origHeight = group.height || 120;
+        const targetDimension = 160;
+        const scale = targetDimension / Math.max(origWidth, origHeight);
+
+        const canvasWidth = canvas.getWidth();
+        const canvasHeight = canvas.getHeight();
+        const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
+        const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
+
+        group.set({
+          originX: "left",
+          originY: "top",
+          left,
+          top,
+          scaleX: scale,
+          scaleY: scale,
+          angle: 0,
+          opacity: 1,
+          selectable: true,
+          evented: true,
+          subTargetCheck: false,
+          interactive: false,
+          hasControls: true,
+          hasBorders: true,
+          lockMovementX: false,
+          lockMovementY: false,
+          lockScalingX: false,
+          lockScalingY: false,
+          lockRotation: false,
+          cornerSize: 12,
+          touchCornerSize: 24,
+          objectCaching: false,
         });
+
+        applyObjectControls(group);
+        graphicObject = group;
+      } else if (imageUrl) {
+        const image = await FabricImage.fromURL(imageUrl);
+        const origWidth = image.width || 120;
+        const origHeight = image.height || 120;
+        const targetDimension = 200;
+        const scale = targetDimension / Math.max(origWidth, origHeight);
+
+        const canvasWidth = canvas.getWidth();
+        const canvasHeight = canvas.getHeight();
+        const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
+        const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
+
+        image.set({
+          originX: "left",
+          originY: "top",
+          left,
+          top,
+          scaleX: scale,
+          scaleY: scale,
+          angle: 0,
+          opacity: 1,
+          selectable: true,
+          evented: true,
+          hasControls: true,
+          hasBorders: true,
+          cornerSize: 12,
+          touchCornerSize: 24,
+          objectCaching: false,
+        });
+
+        applyObjectControls(image);
+        graphicObject = image;
+      } else {
+        const { objects, options } = await loadSVGFromString(svgString!);
+        const validObjects = objects.filter((o): o is FabricObject => o !== null);
+        if (validObjects.length === 0) {
+          console.warn("No valid objects parsed from SVG for graphic:", graphic.name);
+          return;
+        }
+
+        const group = util.groupSVGElements(validObjects, options);
+
+        if (typeof (group as any).forEachObject === "function") {
+          (group as any).forEachObject((child: any) => {
+            child.set({
+              selectable: false,
+              evented: false,
+            });
+          });
+        }
+
+        const origWidth = group.width || 120;
+        const origHeight = group.height || 120;
+        const targetDimension = 160;
+        const scale = targetDimension / Math.max(origWidth, origHeight);
+
+        const canvasWidth = canvas.getWidth();
+        const canvasHeight = canvas.getHeight();
+        const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
+        const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
+
+        group.set({
+          originX: "left",
+          originY: "top",
+          left,
+          top,
+          scaleX: scale,
+          scaleY: scale,
+          angle: 0,
+          opacity: 1,
+          selectable: true,
+          evented: true,
+          subTargetCheck: false,
+          interactive: false,
+          hasControls: true,
+          hasBorders: true,
+          cornerSize: 12,
+          touchCornerSize: 24,
+          objectCaching: false,
+        });
+
+        applyObjectControls(group);
+        graphicObject = group;
       }
 
-      // Default sensible size: ~160px width or height, preserving aspect ratio
-      const origWidth = group.width || 120;
-      const origHeight = group.height || 120;
-      const targetDimension = 160;
-      const scale = targetDimension / Math.max(origWidth, origHeight);
-
-      const canvasWidth = canvas.getWidth();
-      const canvasHeight = canvas.getHeight();
-      const left = Math.max(20, (canvasWidth - origWidth * scale) / 2);
-      const top = Math.max(20, (canvasHeight - origHeight * scale) / 2);
-
-      group.set({
-        originX: "left",
-        originY: "top",
-        left,
-        top,
-        scaleX: scale,
-        scaleY: scale,
-        angle: 0,
-        opacity: 1,
-        selectable: true,
-        evented: true,
-        subTargetCheck: false,
-        interactive: false,
-        hasControls: true,
-        hasBorders: true,
-        lockMovementX: false,
-        lockMovementY: false,
-        lockScalingX: false,
-        lockScalingY: false,
-        lockRotation: false,
-        cornerSize: 12,
-        touchCornerSize: 24,
-        objectCaching: !(graphic.assetData?.type === "animated" || Boolean(graphic.assetData?.animationConfig)),
-      });
-
-      applyObjectControls(group);
-      group.setCoords();
+      graphicObject.setCoords();
 
       const isAnimated =
         graphic.assetData?.type === "animated" ||
@@ -1929,29 +2099,30 @@ const value = String(rawValue).trim();
 
       // Always derive the palette from the parsed SVG (solid fills, strokes AND
       // gradient stops) so every graphic is recolourable, whatever the stored data says.
-      let palette = extractColorsFromFabricGroup(group);
+      let palette = extractColorsFromFabricGroup(graphicObject);
       if (palette.length === 0 && graphic.assetData?.colorPalette) {
         palette = [...graphic.assetData.colorPalette];
       }
 
-      attachMetadata(group, isAnimated ? "animated-graphic" : "graphic", elementId, {
+      attachMetadata(graphicObject, isAnimated ? "animated-graphic" : "graphic", elementId, {
         graphicId: graphic.id,
         graphicKey: graphic.assetKey,
         graphicCategory: graphic.category,
         svgContent: svgString,
+        imageSrc: imageUrl,
         colorPalette: palette,
         isAnimated,
         animationConfig: animConfig ? { ...animConfig } : undefined,
         animationType: animType,
       });
 
-      canvas.add(group);
-      activateObject(group);
-      group.setCoords();
+      canvas.add(graphicObject);
+      activateObject(graphicObject);
+      graphicObject.setCoords();
       canvas.requestRenderAll();
 
       if (isAnimated && animConfig) {
-        graphicAnimationRuntime.register(group, animConfig, elementId);
+        graphicAnimationRuntime.register(graphicObject, animConfig, elementId);
       }
 
       syncCanvasToEditor();
@@ -1990,23 +2161,45 @@ const value = String(rawValue).trim();
     gesture.target = selectedObject;
     gesture.time = now;
 
-    const normalizeColorStr = (c: string) => {
+    const parseColorToRgb = (c: string): [number, number, number] | null => {
+      if (!c || typeof c !== "string") return null;
       c = c.trim().toLowerCase();
       if (/^#[0-9a-f]{3}$/i.test(c)) {
-        return `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}`;
+        return [
+          parseInt(c[1] + c[1], 16),
+          parseInt(c[2] + c[2], 16),
+          parseInt(c[3] + c[3], 16),
+        ];
       }
-      return c;
+      if (/^#[0-9a-f]{6}$/i.test(c)) {
+        return [
+          parseInt(c.slice(1, 3), 16),
+          parseInt(c.slice(3, 5), 16),
+          parseInt(c.slice(5, 7), 16),
+        ];
+      }
+      const rgbMatch = c.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+      if (rgbMatch) {
+        return [
+          parseInt(rgbMatch[1], 10),
+          parseInt(rgbMatch[2], 10),
+          parseInt(rgbMatch[3], 10),
+        ];
+      }
+      return null;
     };
 
-    const oldNorm = normalizeColorStr(oldColor);
+    const parsedOld = parseCssColor(oldColor);
+    const oldHex = parsedOld ? parsedOld.hex : oldColor.trim().toLowerCase();
 
     const recolorGroupItem = (obj: any) => {
-      if (obj.getObjects && typeof obj.getObjects === "function") {
+      if (typeof obj.getObjects === "function") {
         obj.getObjects().forEach(recolorGroupItem);
+      } else if (Array.isArray(obj._objects)) {
+        obj._objects.forEach(recolorGroupItem);
       }
       const recolorPaint = (prop: "fill" | "stroke") => {
         const paint = obj[prop];
-        const oldHex = parseCssColor(oldColor)?.hex ?? oldNorm;
         if (typeof paint === "string") {
           const parsed = parseCssColor(paint);
           if (parsed && parsed.hex === oldHex) {
@@ -2031,6 +2224,8 @@ const value = String(rawValue).trim();
     };
 
     recolorGroupItem(selectedObject);
+    (selectedObject as any)._cacheCanvas = null;
+    selectedObject.set({ dirty: true });
 
     // Update palette array
     const updatedPalette = [...meta.colorPalette];
@@ -2040,11 +2235,11 @@ const value = String(rawValue).trim();
     // Update svgContent string so future page reconstructions reflect recolor
     if (typeof meta.svgContent === "string") {
       const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regexOld = new RegExp(escapeRegExp(oldColor), "gi");
-      meta.svgContent = meta.svgContent.replace(regexOld, newColor);
-      if (oldNorm !== oldColor.toLowerCase()) {
-        const regexNorm = new RegExp(escapeRegExp(oldNorm), "gi");
-        meta.svgContent = meta.svgContent.replace(regexNorm, newColor);
+      meta.svgContent = meta.svgContent.replace(new RegExp(escapeRegExp(oldColor), "gi"), newColor);
+      const rgb = parseColorToRgb(oldColor);
+      if (rgb) {
+        const rgbPattern = "rgba?\\s*\\(\\s*" + rgb[0] + "\\s*,\\s*" + rgb[1] + "\\s*,\\s*" + rgb[2] + "[^)]*\\)";
+        meta.svgContent = meta.svgContent.replace(new RegExp(rgbPattern, "gi"), newColor);
       }
     }
 
@@ -2094,39 +2289,39 @@ const value = String(rawValue).trim();
   }
 
   function setDrawingSettings(settings: Partial<DrawingSettings>) {
-  const next: DrawingSettings = {
-    ...drawingSettingsRef.current,
-    ...settings,
-  };
+    const next: DrawingSettings = {
+      ...drawingSettingsRef.current,
+      ...settings,
+    };
 
-  next.width = Number.isFinite(next.width)
-    ? Math.max(1, Math.min(50, next.width))
-    : 5;
+    next.width = Number.isFinite(next.width)
+      ? Math.max(1, Math.min(50, next.width))
+      : 5;
 
-  next.opacity = normalizeOpacity(next.opacity);
+    next.opacity = normalizeOpacity(next.opacity);
 
-  drawingSettingsRef.current = next;
-  setDrawingSettingsState(next);
+    drawingSettingsRef.current = next;
+    setDrawingSettingsState(next);
 
-  const canvas = canvasRef.current;
+    const canvas = canvasRef.current;
 
-  if (!canvas) return;
+    if (!canvas) return;
 
-  configureDrawingBrush(canvas, toolModeRef.current, next);
+    configureDrawingBrush(canvas, toolModeRef.current, next);
 
-  // Update the visible eraser cursor immediately when its size changes.
-  if (toolModeRef.current === "eraser" && eraserCursorRef.current) {
-    const cursorSize = Math.max(
-      18,
-      Math.min(110, Math.round(next.width * 2 + 10)),
-    );
+    // Update the visible eraser cursor immediately when its size changes.
+    if (toolModeRef.current === "eraser" && eraserCursorRef.current) {
+      const cursorSize = Math.max(
+        18,
+        Math.min(110, Math.round(next.width * 2 + 10)),
+      );
 
-    eraserCursorRef.current.style.width = `${cursorSize}px`;
-    eraserCursorRef.current.style.height = `${cursorSize}px`;
+      eraserCursorRef.current.style.width = `${cursorSize}px`;
+      eraserCursorRef.current.style.height = `${cursorSize}px`;
+    }
+
+    canvas.requestRenderAll();
   }
-
-  canvas.requestRenderAll();
-}
 
   function handleFreehandPathCreated(event: any) {
     const canvas = canvasRef.current;
@@ -2965,6 +3160,8 @@ const value = String(rawValue).trim();
         newId,
         {
           imageSrc: originalMeta.imageSrc,
+          pendingUploadId: originalMeta.pendingUploadId,
+          isPendingUpload: originalMeta.isPendingUpload,
           shapeSides: originalMeta.shapeSides,
           isFreehand: originalMeta.isFreehand,
           graphicId: originalMeta.graphicId,
@@ -3275,9 +3472,9 @@ const value = String(rawValue).trim();
 
     const object = id
       ? canvas.getObjects().find(
-          (item) =>
-            (item as typeof item & FabricObjectWithMeta).elementId === id,
-        )
+        (item) =>
+          (item as typeof item & FabricObjectWithMeta).elementId === id,
+      )
       : undefined;
 
     if (object) {
@@ -3362,23 +3559,111 @@ const value = String(rawValue).trim();
   }
 
   async function saveCurrentDesign(name: string) {
-    const elements = convertCanvasToElements();
-    const trimmedName = name.trim();
+    if (isSavingDesignRef.current) return;
+    isSavingDesignRef.current = true;
 
-    if (elements.length === 0 || !trimmedName) return;
+    try {
+      const trimmedName = name.trim();
+      if (!trimmedName) return;
 
-    await saveDesign(trimmedName, elements);
-    setHistory([]);
-    setFuture([]);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const canvas = canvasRef.current;
+      // 1. Collect all pending uploads referenced across active canvas and all pages
+      const referencedPendingIds = new Set<string>();
 
-    if (canvas) {
-      canvas.discardActiveObject();
-      canvas.requestRenderAll();
+      const canvasObjects = canvas.getObjects();
+      for (const obj of canvasObjects) {
+        const meta = obj as FabricObjectWithMeta;
+        if (meta.pendingUploadId) {
+          referencedPendingIds.add(meta.pendingUploadId);
+        } else if (meta.imageSrc && meta.imageSrc.startsWith("blob:")) {
+          const found = getPendingUploadByLocalUrl(meta.imageSrc);
+          if (found) referencedPendingIds.add(found.id);
+        }
+      }
+
+      const currentPages = Array.isArray(pages) ? pages : [];
+      for (const page of currentPages) {
+        if (!page.elements) continue;
+        for (const el of page.elements) {
+          if (el.pendingUploadId) {
+            referencedPendingIds.add(el.pendingUploadId);
+          } else if (el.src && el.src.startsWith("blob:")) {
+            const found = getPendingUploadByLocalUrl(el.src);
+            if (found) referencedPendingIds.add(found.id);
+          }
+        }
+      }
+
+      // 2. Upload pending images to Cloudinary via backend API
+      if (referencedPendingIds.size > 0) {
+        const uploadResults = await uploadPendingImagesForDesign(referencedPendingIds);
+
+        // 3. Replace temporary local sources on active canvas objects (preserving all transforms & layers)
+        for (const obj of canvasObjects) {
+          const meta = obj as FabricObjectWithMeta;
+          let pId = meta.pendingUploadId;
+          if (!pId && meta.imageSrc?.startsWith("blob:")) {
+            pId = getPendingUploadByLocalUrl(meta.imageSrc)?.id;
+          }
+
+          if (pId && uploadResults.has(pId)) {
+            const uploaded = uploadResults.get(pId)!;
+            meta.imageSrc = uploaded.secureUrl;
+            meta.pendingUploadId = undefined;
+            meta.isPendingUpload = false;
+          }
+        }
+
+        // 4. Replace temporary sources in all pages via updatePages
+        updatePages((prevPages) =>
+          prevPages.map((page) => ({
+            ...page,
+            elements: (page.elements || []).map((el) => {
+              let pId = el.pendingUploadId;
+              if (!pId && el.src?.startsWith("blob:")) {
+                pId = getPendingUploadByLocalUrl(el.src)?.id;
+              }
+              if (pId && uploadResults.has(pId)) {
+                const uploaded = uploadResults.get(pId)!;
+                return {
+                  ...el,
+                  src: uploaded.secureUrl,
+                  pendingUploadId: undefined,
+                  isPendingUpload: false,
+                };
+              }
+              return el;
+            }),
+          }))
+        );
+
+        // Safely revoke temporary browser object URLs now that they are replaced
+        for (const pId of referencedPendingIds) {
+          revokePendingUrl(pId);
+        }
+
+        // Re-sync canvas to editor state
+        syncCanvasToEditor();
+      }
+
+      const elements = convertCanvasToElements();
+      if (elements.length === 0) return;
+
+      await saveDesign(trimmedName, elements);
+      setHistory([]);
+      setFuture([]);
+
+      if (canvas) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+      }
+
+      setSelectedObject(null);
+    } finally {
+      isSavingDesignRef.current = false;
     }
-
-    setSelectedObject(null);
   }
 
   function getDownloadName() {
@@ -3396,26 +3681,26 @@ const value = String(rawValue).trim();
       const initialCanvas = canvasRef.current;
       if (!initialCanvas) return;
 
-    // Save any text currently being edited before exporting.
-    const editingObject = initialCanvas.getActiveObject();
+      // Save any text currently being edited before exporting.
+      const editingObject = initialCanvas.getActiveObject();
 
-    if (
-      (editingObject instanceof IText || editingObject instanceof Textbox) &&
-      editingObject.isEditing
-    ) {
-      editingObject.exitEditing();
-      initialCanvas.requestRenderAll();
-    }
+      if (
+        (editingObject instanceof IText || editingObject instanceof Textbox) &&
+        editingObject.isEditing
+      ) {
+        editingObject.exitEditing();
+        initialCanvas.requestRenderAll();
+      }
 
-    // Synchronize the currently visible page with EditorContext.
-    syncCanvasToEditor();
+      // Synchronize the currently visible page with EditorContext.
+      syncCanvasToEditor();
 
-    const liveElements = convertCanvasToElements();
+      const liveElements = convertCanvasToElements();
 
-    const sourcePages =
-      Array.isArray(pages) && pages.length > 0
-        ? pages
-        : [
+      const sourcePages =
+        Array.isArray(pages) && pages.length > 0
+          ? pages
+          : [
             {
               id: activePageId,
               name: "Page 1",
@@ -3428,245 +3713,278 @@ const value = String(rawValue).trim();
             },
           ];
 
-    // Always use live canvas data for the currently active page.
-    const pageList = sourcePages.map((page) =>
-      page.id === activePageId
-        ? {
+      // Always use live canvas data for the currently active page.
+      const pageList = sourcePages.map((page) =>
+        page.id === activePageId
+          ? {
             ...page,
             elements: liveElements,
             backgroundColor: String(
               initialCanvas.backgroundColor ||
-                page.backgroundColor ||
-                "#ffffff",
+              page.backgroundColor ||
+              "#ffffff",
             ),
+            borderAsset: borderAsset ?? page.borderAsset ?? null,
           }
-        : page,
-    );
+          : page,
+      );
 
-    // If pageIds is undefined, export all pages.
-    // If an empty array is passed, export nothing.
-    const pagesToExport =
-      pageIds === undefined
-        ? pageList
-        : pageList.filter((page) => pageIds.includes(page.id));
+      // If pageIds is undefined, export all pages.
+      // If an empty array is passed, export nothing.
+      const pagesToExport =
+        pageIds === undefined
+          ? pageList
+          : pageList.filter((page) => pageIds.includes(page.id));
 
-    if (pagesToExport.length === 0) {
-      console.warn("PNG export cancelled: no pages were selected.");
-      return;
-    }
-
-    const originalPageId = activePageId;
-
-    const originalActiveObjectId = (
-      initialCanvas.getActiveObject() as any
-    )?.elementId as string | undefined;
-
-    let currentPageId = activePageId;
-
-    const waitFrame = () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve());
-      });
-
-    const pageIsRendered = (
-      page: (typeof pagesToExport)[number],
-    ) => {
-      const currentCanvas = canvasRef.current;
-      if (!currentCanvas) return false;
-
-      const actual = convertCanvasToElements();
-      const expected = page.elements ?? [];
-
-      if (expected.length !== actual.length) return false;
-
-      const normalizeColor = (value: unknown) => {
-        const color = String(value ?? "#ffffff")
-          .trim()
-          .toLowerCase();
-
-        if (/^#[0-9a-f]{3}$/.test(color)) {
-          return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
-        }
-
-        return color;
-      };
-
-      if (
-        normalizeColor(page.backgroundColor) !==
-        normalizeColor(currentCanvas.backgroundColor)
-      ) {
-        return false;
+      if (pagesToExport.length === 0) {
+        console.warn("PNG export cancelled: no pages were selected.");
+        return;
       }
 
-      const close = (
-        a: number | undefined,
-        b: number | undefined,
-      ) => Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
+      const originalPageId = activePageId;
 
-      return expected.every((item, index) => {
-        const rendered = actual[index];
+      const originalActiveObjectId = (
+        initialCanvas.getActiveObject() as any
+      )?.elementId as string | undefined;
+
+      let currentPageId = activePageId;
+
+      const waitFrame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+
+      const pageIsRendered = (
+        page: (typeof pagesToExport)[number],
+      ) => {
+        const currentCanvas = canvasRef.current;
+        if (!currentCanvas) return false;
+
+        const actual = convertCanvasToElements();
+        const expected = page.elements ?? [];
+
+        if (expected.length !== actual.length) return false;
+
+        const normalizeColor = (value: unknown) => {
+          const color = String(value ?? "#ffffff")
+            .trim()
+            .toLowerCase();
+
+          if (/^#[0-9a-f]{3}$/.test(color)) {
+            return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+          }
+
+          return color;
+        };
 
         if (
-          !rendered ||
-          item.id !== rendered.id ||
-          item.type !== rendered.type
+          normalizeColor(page.backgroundColor) !==
+          normalizeColor(currentCanvas.backgroundColor)
         ) {
           return false;
         }
 
-        return (
-          close(item.x, rendered.x) &&
-          close(item.y, rendered.y)
-        );
-      });
-    };
+        const close = (
+          a: number | undefined,
+          b: number | undefined,
+        ) => Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
 
-    const waitForPage = async (
-      page: (typeof pagesToExport)[number],
-    ) => {
-      const timeoutAt = Date.now() + 15000;
-      let matches = 0;
+        return expected.every((item, index) => {
+          const rendered = actual[index];
 
-      while (Date.now() < timeoutAt) {
-        await waitFrame();
-
-        if (pageIsRendered(page)) {
-          matches += 1;
-
-          if (matches >= 2) {
-            canvasRef.current?.requestRenderAll();
-            await waitFrame();
-            return;
+          if (
+            !rendered ||
+            item.id !== rendered.id ||
+            item.type !== rendered.type
+          ) {
+            return false;
           }
-        } else {
-          matches = 0;
-        }
-      }
 
-      throw new Error(
-        `Page "${page.name}" did not finish rendering for PNG export.`,
-      );
-    };
-
-    try {
-      for (let index = 0; index < pagesToExport.length; index++) {
-        const page = pagesToExport[index];
-
-        // Switch to the page that needs to be exported.
-        if (page.id !== currentPageId) {
-          selectPage(page.id);
-          currentPageId = page.id;
-        }
-
-        // Wait until Fabric has loaded the correct page.
-        await waitForPage(page);
-
-        const currentCanvas = canvasRef.current;
-
-        if (!currentCanvas) {
-          throw new Error(
-            "The editor canvas is unavailable during PNG export.",
+          return (
+            close(item.x, rendered.x) &&
+            close(item.y, rendered.y)
           );
+        });
+      };
+
+      const waitForPage = async (
+        page: (typeof pagesToExport)[number],
+      ) => {
+        const timeoutAt = Date.now() + 15000;
+        let matches = 0;
+
+        while (Date.now() < timeoutAt) {
+          await waitFrame();
+
+          if (pageIsRendered(page)) {
+            matches += 1;
+
+            if (matches >= 2) {
+              canvasRef.current?.requestRenderAll();
+              await waitFrame();
+              return;
+            }
+          } else {
+            matches = 0;
+          }
         }
 
-        // Remove selection borders and controls from the exported image.
-        const active = currentCanvas.getActiveObject();
-
-        if (
-          (active instanceof IText || active instanceof Textbox) &&
-          active.isEditing
-        ) {
-          active.exitEditing();
-        }
-
-        currentCanvas.discardActiveObject();
-        currentCanvas.requestRenderAll();
-
-        await waitFrame();
-        await waitFrame();
-
-        // Capture this page as a separate PNG.
-        const dataUrl = currentCanvas.toDataURL({
-          format: "png",
-          multiplier: 2,
-          quality: 1,
-        });
-
-        const safePageName = String(
-          page.name || `page-${index + 1}`,
-        )
-          .replace(/[^a-zA-Z0-9-_ ]/g, "")
-          .trim()
-          .replace(/\s+/g, "-")
-          .toLowerCase();
-
-        const link = document.createElement("a");
-
-        link.href = dataUrl;
-        link.download = `${getDownloadName()}-${safePageName || `page-${index + 1}`}.png`;
-
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Give the browser time to start this download before
-        // triggering the next page's download.
-        await waitFrame();
-        await new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 250);
-        });
-      }
-    } catch (error) {
-      console.error("Failed to export PNG pages:", error);
-
-      window.alert(
-        "PNG download nahi ho paya. Please console error check karein aur dobara try karein.",
-      );
-    } finally {
-      // Restore the page that was open before exporting.
-      if (originalPageId && originalPageId !== currentPageId) {
-        selectPage(originalPageId);
-        currentPageId = originalPageId;
-
-        const originalPage = pageList.find(
-          (page) => page.id === originalPageId,
+        throw new Error(
+          `Page "${page.name}" did not finish rendering for PNG export.`,
         );
+      };
 
-        if (originalPage) {
-          try {
-            await waitForPage(originalPage);
-          } catch (restoreError) {
-            console.error(
-              "Unable to restore the original page after PNG export:",
-              restoreError,
+      try {
+        for (let index = 0; index < pagesToExport.length; index++) {
+          const page = pagesToExport[index];
+
+          // Switch to the page that needs to be exported.
+          if (page.id !== currentPageId) {
+            selectPage(page.id);
+            currentPageId = page.id;
+          }
+
+          // Wait until Fabric has loaded the correct page.
+          await waitForPage(page);
+
+          const currentCanvas = canvasRef.current;
+
+          if (!currentCanvas) {
+            throw new Error(
+              "The editor canvas is unavailable during PNG export.",
             );
           }
+
+          // Remove selection borders and controls from the exported image.
+          const active = currentCanvas.getActiveObject();
+
+          if (
+            (active instanceof IText || active instanceof Textbox) &&
+            active.isEditing
+          ) {
+            active.exitEditing();
+          }
+
+          currentCanvas.discardActiveObject();
+          currentCanvas.requestRenderAll();
+
+          await waitFrame();
+          await waitFrame();
+
+          const canvasWidth = currentCanvas.getWidth();
+          const canvasHeight = currentCanvas.getHeight();
+          const targetBorderAsset =
+            page.borderAsset ??
+            (page.id === activePageId ? borderAsset : null);
+
+          const borderObjects = targetBorderAsset
+            ? await createBorderFabricObjects(
+              targetBorderAsset,
+              canvasWidth,
+              canvasHeight,
+            )
+            : [];
+
+          if (borderObjects.length > 0) {
+            for (const borderObj of borderObjects) {
+              currentCanvas.add(borderObj);
+            }
+            currentCanvas.requestRenderAll();
+            await waitFrame();
+          }
+
+          let dataUrl = "";
+          try {
+            // Capture this page as a separate PNG.
+            dataUrl = currentCanvas.toDataURL({
+              format: "png",
+              multiplier: 2,
+              quality: 1,
+            });
+          } finally {
+            if (borderObjects.length > 0) {
+              for (const borderObj of borderObjects) {
+                currentCanvas.remove(borderObj);
+              }
+              currentCanvas.requestRenderAll();
+            }
+          }
+
+          const safePageName = String(
+            page.name || `page-${index + 1}`,
+          )
+            .replace(/[^a-zA-Z0-9-_ ]/g, "")
+            .trim()
+            .replace(/\s+/g, "-")
+            .toLowerCase();
+
+          const link = document.createElement("a");
+
+          link.href = dataUrl;
+          link.download = `${getDownloadName()}-${safePageName || `page-${index + 1}`}.png`;
+
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Give the browser time to start this download before
+          // triggering the next page's download.
+          await waitFrame();
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 250);
+          });
         }
-      }
+      } catch (error) {
+        console.error("Failed to export PNG pages:", error);
 
-      // Restore the previously selected object.
-      const restoredCanvas = canvasRef.current;
+        window.alert(
+          "PNG download nahi ho paya. Please console error check karein aur dobara try karein.",
+        );
+      } finally {
+        // Restore the page that was open before exporting.
+        if (originalPageId && originalPageId !== currentPageId) {
+          selectPage(originalPageId);
+          currentPageId = originalPageId;
 
-      if (restoredCanvas && originalActiveObjectId) {
-        const restoredObject = restoredCanvas
-          .getObjects()
-          .find(
-            (object: any) =>
-              object.elementId === originalActiveObjectId,
+          const originalPage = pageList.find(
+            (page) => page.id === originalPageId,
           );
 
-        if (restoredObject) {
-          restoredCanvas.setActiveObject(restoredObject);
-          setSelectedObject(restoredObject);
+          if (originalPage) {
+            try {
+              await waitForPage(originalPage);
+            } catch (restoreError) {
+              console.error(
+                "Unable to restore the original page after PNG export:",
+                restoreError,
+              );
+            }
+          }
         }
-      }
 
-      restoredCanvas?.requestRenderAll();
+        // Restore the previously selected object.
+        const restoredCanvas = canvasRef.current;
+
+        if (restoredCanvas && originalActiveObjectId) {
+          const restoredObject = restoredCanvas
+            .getObjects()
+            .find(
+              (object: any) =>
+                object.elementId === originalActiveObjectId,
+            );
+
+          if (restoredObject) {
+            restoredCanvas.setActiveObject(restoredObject);
+            setSelectedObject(restoredObject);
+          }
+        }
+
+        restoredCanvas?.requestRenderAll();
+      }
+    } finally {
+      resumeAnimations();
     }
-  } finally {
-    resumeAnimations();
   }
-}
 
 
   async function downloadPDF(pageIds?: string[]) {
@@ -3675,24 +3993,24 @@ const value = String(rawValue).trim();
       const initialCanvas = canvasRef.current;
       if (!initialCanvas) return;
 
-    // Commit in-progress text editing before reading the page snapshot.
-    const editingObject = initialCanvas.getActiveObject();
-    if (
-      (editingObject instanceof IText || editingObject instanceof Textbox) &&
-      editingObject.isEditing
-    ) {
-      editingObject.exitEditing();
-      initialCanvas.requestRenderAll();
-    }
+      // Commit in-progress text editing before reading the page snapshot.
+      const editingObject = initialCanvas.getActiveObject();
+      if (
+        (editingObject instanceof IText || editingObject instanceof Textbox) &&
+        editingObject.isEditing
+      ) {
+        editingObject.exitEditing();
+        initialCanvas.requestRenderAll();
+      }
 
-    // This synchronously updates EditorContext's latest-elements ref before any
-    // page switch can occur. The current page is always taken from the live canvas.
-    syncCanvasToEditor();
-    const liveElements = convertCanvasToElements();
+      // This synchronously updates EditorContext's latest-elements ref before any
+      // page switch can occur. The current page is always taken from the live canvas.
+      syncCanvasToEditor();
+      const liveElements = convertCanvasToElements();
 
-    const sourcePages = Array.isArray(pages) && pages.length > 0
-      ? pages
-      : [{
+      const sourcePages = Array.isArray(pages) && pages.length > 0
+        ? pages
+        : [{
           id: activePageId,
           name: "Page 1",
           elements: [],
@@ -3701,185 +4019,216 @@ const value = String(rawValue).trim();
           orientation: "landscape" as const,
         }];
 
-    // Do not use stale React page data for the page currently displayed.
-    const pageList = sourcePages.map((page) =>
-      page.id === activePageId
-        ? {
+      // Do not use stale React page data for the page currently displayed.
+      const pageList = sourcePages.map((page) =>
+        page.id === activePageId
+          ? {
             ...page,
             elements: liveElements,
             backgroundColor: String(initialCanvas.backgroundColor || page.backgroundColor || "#ffffff"),
+            borderAsset: borderAsset ?? page.borderAsset ?? null,
           }
-        : page,
-    );
+          : page,
+      );
 
-    // An explicitly empty selection means export nothing, not every page.
-    const pagesToExport = pageIds === undefined
-      ? pageList
-      : pageList.filter((page) => pageIds.includes(page.id));
+      // An explicitly empty selection means export nothing, not every page.
+      const pagesToExport = pageIds === undefined
+        ? pageList
+        : pageList.filter((page) => pageIds.includes(page.id));
 
-    if (pagesToExport.length === 0) {
-      console.warn("PDF export cancelled: no pages were selected.");
-      return;
-    }
+      if (pagesToExport.length === 0) {
+        console.warn("PDF export cancelled: no pages were selected.");
+        return;
+      }
 
-    const originalPageId = activePageId;
-    const originalActiveObjectId = (initialCanvas.getActiveObject() as any)?.elementId as string | undefined;
-    let currentPageId = activePageId;
-    let pdf: jsPDF | null = null;
+      const originalPageId = activePageId;
+      const originalActiveObjectId = (initialCanvas.getActiveObject() as any)?.elementId as string | undefined;
+      let currentPageId = activePageId;
+      let pdf: jsPDF | null = null;
 
-    const waitFrame = () => new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
-
-    const pageIsRendered = (page: (typeof pagesToExport)[number]) => {
-      const currentCanvas = canvasRef.current;
-      if (!currentCanvas) return false;
-
-      const actual = convertCanvasToElements();
-      const expected = page.elements ?? [];
-      if (expected.length !== actual.length) return false;
-
-      // Normalize common hex color forms so equivalent backgrounds compare equal.
-      const normalizeColor = (value: unknown) => {
-        const color = String(value ?? "#ffffff").trim().toLowerCase();
-        if (/^#[0-9a-f]{3}$/.test(color)) {
-          return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
-        }
-        return color;
-      };
-      if (
-        normalizeColor(page.backgroundColor) !==
-        normalizeColor(currentCanvas.backgroundColor)
-      ) return false;
-
-      // Element IDs can be normalized while Fabric rebuilds a page. Match visible
-      // content and scene positions instead, so export waits for the target page.
-      const close = (a: number | undefined, b: number | undefined) =>
-        Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
-
-      return expected.every((item, index) => {
-        const rendered = actual[index];
-        if (!rendered || item.id !== rendered.id || item.type !== rendered.type) {
-          return false;
-        }
-        // Text is intentionally not used as a render-readiness signal: the
-        // React page snapshot may lag one render behind the live Fabric text.
-        // The synchronous EditorContext snapshot fix ensures page switches
-        // reload the latest text; coordinates still must match before capture.
-        return close(item.x, rendered.x) && close(item.y, rendered.y);
+      const waitFrame = () => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
       });
-    };
 
-    const waitForPage = async (page: (typeof pagesToExport)[number]) => {
-      const timeoutAt = Date.now() + 15000;
-      let matches = 0;
-
-      while (Date.now() < timeoutAt) {
-        await waitFrame();
-        if (pageIsRendered(page)) {
-          matches += 1;
-          if (matches >= 2) {
-            // Let Fabric complete the render after the target content is present.
-            canvasRef.current?.requestRenderAll();
-            await waitFrame();
-            return;
-          }
-        } else {
-          matches = 0;
-        }
-      }
-
-      throw new Error(`Page "${page.name}" did not finish rendering for PDF export.`);
-    };
-
-    try {
-      for (const page of pagesToExport) {
-        if (page.id !== currentPageId) {
-          selectPage(page.id);
-          currentPageId = page.id;
-        }
-
-        await waitForPage(page);
-
+      const pageIsRendered = (page: (typeof pagesToExport)[number]) => {
         const currentCanvas = canvasRef.current;
-        if (!currentCanvas) {
-          throw new Error("The editor canvas is unavailable during PDF export.");
-        }
+        if (!currentCanvas) return false;
 
-        // Exit active text editing and remove only selection controls. No object
-        // coordinates are recalculated or repositioned during export.
-        const active = currentCanvas.getActiveObject();
-        if ((active instanceof IText || active instanceof Textbox) && active.isEditing) {
-          active.exitEditing();
-        }
-        currentCanvas.discardActiveObject();
-        currentCanvas.requestRenderAll();
-        await waitFrame();
-        await waitFrame();
+        const actual = convertCanvasToElements();
+        const expected = page.elements ?? [];
+        if (expected.length !== actual.length) return false;
 
-        const width = currentCanvas.getWidth();
-        const height = currentCanvas.getHeight();
-        const dataUrl = currentCanvas.toDataURL({
-          format: "png",
-          multiplier: 2,
-          quality: 1,
+        // Normalize common hex color forms so equivalent backgrounds compare equal.
+        const normalizeColor = (value: unknown) => {
+          const color = String(value ?? "#ffffff").trim().toLowerCase();
+          if (/^#[0-9a-f]{3}$/.test(color)) {
+            return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+          }
+          return color;
+        };
+        if (
+          normalizeColor(page.backgroundColor) !==
+          normalizeColor(currentCanvas.backgroundColor)
+        ) return false;
+
+        // Element IDs can be normalized while Fabric rebuilds a page. Match visible
+        // content and scene positions instead, so export waits for the target page.
+        const close = (a: number | undefined, b: number | undefined) =>
+          Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= 2;
+
+        return expected.every((item, index) => {
+          const rendered = actual[index];
+          if (!rendered || item.id !== rendered.id || item.type !== rendered.type) {
+            return false;
+          }
+          // Text is intentionally not used as a render-readiness signal: the
+          // React page snapshot may lag one render behind the live Fabric text.
+          // The synchronous EditorContext snapshot fix ensures page switches
+          // reload the latest text; coordinates still must match before capture.
+          return close(item.x, rendered.x) && close(item.y, rendered.y);
         });
+      };
 
-        const orientation = width >= height ? "landscape" : "portrait";
-        if (!pdf) {
-          pdf = new jsPDF({
-            orientation,
-            unit: "px",
-            format: [width, height],
-            compress: true,
-          });
-        } else {
-          pdf.addPage([width, height], orientation);
-        }
+      const waitForPage = async (page: (typeof pagesToExport)[number]) => {
+        const timeoutAt = Date.now() + 15000;
+        let matches = 0;
 
-        // The captured raster is the exact Fabric canvas, placed edge-to-edge.
-        // This preserves all visible text, images and object positions as drawn.
-        pdf.addImage(dataUrl, "PNG", 0, 0, width, height, undefined, "FAST");
-
-        // Keep the live page selection visually unchanged until the next page.
-        currentCanvas.requestRenderAll();
-      }
-
-      if (pdf) pdf.save(`${getDownloadName()}.pdf`);
-    } catch (error) {
-      console.error("Failed to export PDF pages:", error);
-      window.alert("PDF download nahi ho paya. Please console error check karein aur dobara try karein.");
-    } finally {
-      // Return to the page the user was editing before export.
-      if (originalPageId && originalPageId !== currentPageId) {
-        selectPage(originalPageId);
-        currentPageId = originalPageId;
-        const originalPage = pageList.find((page) => page.id === originalPageId);
-        if (originalPage) {
-          try {
-            await waitForPage(originalPage);
-          } catch (restoreError) {
-            console.error("Unable to restore the original page after PDF export:", restoreError);
+        while (Date.now() < timeoutAt) {
+          await waitFrame();
+          if (pageIsRendered(page)) {
+            matches += 1;
+            if (matches >= 2) {
+              // Let Fabric complete the render after the target content is present.
+              canvasRef.current?.requestRenderAll();
+              await waitFrame();
+              return;
+            }
+          } else {
+            matches = 0;
           }
         }
-      }
 
-      const restoredCanvas = canvasRef.current;
-      if (restoredCanvas && originalActiveObjectId) {
-        const restoredObject = restoredCanvas.getObjects().find(
-          (object: any) => object.elementId === originalActiveObjectId,
-        );
-        if (restoredObject) {
-          restoredCanvas.setActiveObject(restoredObject);
-          setSelectedObject(restoredObject);
+        throw new Error(`Page "${page.name}" did not finish rendering for PDF export.`);
+      };
+
+      try {
+        for (const page of pagesToExport) {
+          if (page.id !== currentPageId) {
+            selectPage(page.id);
+            currentPageId = page.id;
+          }
+
+          await waitForPage(page);
+
+          const currentCanvas = canvasRef.current;
+          if (!currentCanvas) {
+            throw new Error("The editor canvas is unavailable during PDF export.");
+          }
+
+          // Exit active text editing and remove only selection controls. No object
+          // coordinates are recalculated or repositioned during export.
+          const active = currentCanvas.getActiveObject();
+          if ((active instanceof IText || active instanceof Textbox) && active.isEditing) {
+            active.exitEditing();
+          }
+          currentCanvas.discardActiveObject();
+          currentCanvas.requestRenderAll();
+          await waitFrame();
+          await waitFrame();
+
+          const width = currentCanvas.getWidth();
+          const height = currentCanvas.getHeight();
+          const targetBorderAsset =
+            page.borderAsset ??
+            (page.id === activePageId ? borderAsset : null);
+
+          const borderObjects = targetBorderAsset
+            ? await createBorderFabricObjects(
+              targetBorderAsset,
+              width,
+              height,
+            )
+            : [];
+
+          if (borderObjects.length > 0) {
+            for (const borderObj of borderObjects) {
+              currentCanvas.add(borderObj);
+            }
+            currentCanvas.requestRenderAll();
+            await waitFrame();
+          }
+
+          let dataUrl = "";
+          try {
+            dataUrl = currentCanvas.toDataURL({
+              format: "png",
+              multiplier: 2,
+              quality: 1,
+            });
+          } finally {
+            if (borderObjects.length > 0) {
+              for (const borderObj of borderObjects) {
+                currentCanvas.remove(borderObj);
+              }
+              currentCanvas.requestRenderAll();
+            }
+          }
+
+          const orientation = width >= height ? "landscape" : "portrait";
+          if (!pdf) {
+            pdf = new jsPDF({
+              orientation,
+              unit: "px",
+              format: [width, height],
+              compress: true,
+            });
+          } else {
+            pdf.addPage([width, height], orientation);
+          }
+
+          // The captured raster is the exact Fabric canvas, placed edge-to-edge.
+          // This preserves all visible text, images and object positions as drawn.
+          pdf.addImage(dataUrl, "PNG", 0, 0, width, height, undefined, "FAST");
+
+          // Keep the live page selection visually unchanged until the next page.
+          currentCanvas.requestRenderAll();
         }
+
+        if (pdf) pdf.save(`${getDownloadName()}.pdf`);
+      } catch (error) {
+        console.error("Failed to export PDF pages:", error);
+        window.alert("PDF download nahi ho paya. Please console error check karein aur dobara try karein.");
+      } finally {
+        // Return to the page the user was editing before export.
+        if (originalPageId && originalPageId !== currentPageId) {
+          selectPage(originalPageId);
+          currentPageId = originalPageId;
+          const originalPage = pageList.find((page) => page.id === originalPageId);
+          if (originalPage) {
+            try {
+              await waitForPage(originalPage);
+            } catch (restoreError) {
+              console.error("Unable to restore the original page after PDF export:", restoreError);
+            }
+          }
+        }
+
+        const restoredCanvas = canvasRef.current;
+        if (restoredCanvas && originalActiveObjectId) {
+          const restoredObject = restoredCanvas.getObjects().find(
+            (object: any) => object.elementId === originalActiveObjectId,
+          );
+          if (restoredObject) {
+            restoredCanvas.setActiveObject(restoredObject);
+            setSelectedObject(restoredObject);
+          }
+        }
+        restoredCanvas?.requestRenderAll();
       }
-      restoredCanvas?.requestRenderAll();
+    } finally {
+      resumeAnimations();
     }
-  } finally {
-    resumeAnimations();
   }
-}
 
   const value: FabricContextType = {
     canvasRef,

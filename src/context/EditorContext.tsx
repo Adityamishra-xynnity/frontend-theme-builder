@@ -133,6 +133,10 @@ interface EditorContextType {
     sourcePageId?: string
   ) => void;
 
+  updatePages: (
+    updater: (pages: EditorPage[]) => EditorPage[]
+  ) => void;
+
   registerCanvasSnapshotProvider: (
     provider: (() => EditorElement[]) | null
   ) => void;
@@ -599,6 +603,15 @@ export function EditorProvider({
     pagesRef.current = nextPages;
     setPages(nextPages);
   }, []);
+
+  const updatePages = useCallback(
+    (updater: (pages: EditorPage[]) => EditorPage[]) => {
+      const nextPages = updater(pagesRef.current);
+      pagesRef.current = nextPages;
+      setPages(nextPages);
+    },
+    []
+  );
 
   const createSnapshot = useCallback(
     (): EditorState => ({
@@ -1252,6 +1265,7 @@ export function EditorProvider({
         deleteSavedDesign,
 
         syncElementsFromCanvas,
+        updatePages,
         registerCanvasSnapshotProvider,
         setDraftSource,
         restoreDraft,
