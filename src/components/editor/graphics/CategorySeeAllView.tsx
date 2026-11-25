@@ -134,7 +134,7 @@ export default function CategorySeeAllView({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search ${category.name.toLowerCase()}...`}
-            className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-8 pr-8 text-xs text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-[#d9dbe0] bg-white pl-9 pr-9 text-[13px] text-[#0e1318] outline-none transition-shadow placeholder:text-[#6b7280] focus:border-[#8b3dff] focus:ring-2 focus:ring-[#8b3dff]/25"
           />
           {search && (
             <button
@@ -154,8 +154,8 @@ export default function CategorySeeAllView({
             onClick={() => handleFilterChange("all")}
             className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
               typeFilter === "all"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                ? "bg-[#0e1318] text-white"
+                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
             }`}
           >
             All
@@ -165,8 +165,8 @@ export default function CategorySeeAllView({
             onClick={() => handleFilterChange("animated")}
             className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
               typeFilter === "animated"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                ? "bg-[#0e1318] text-white"
+                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
             }`}
           >
             <Sparkles size={11} />
@@ -177,8 +177,8 @@ export default function CategorySeeAllView({
             onClick={() => handleFilterChange("static")}
             className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
               typeFilter === "static"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                ? "bg-[#0e1318] text-white"
+                : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
             }`}
           >
             Static
@@ -189,15 +189,9 @@ export default function CategorySeeAllView({
       {/* CONTENT GRID */}
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-slate-200">
         {loading ? (
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             {Array.from({ length: 9 }).map((_, idx) => (
-              <div
-                key={idx}
-                className="flex h-32 animate-pulse flex-col items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-2"
-              >
-                <div className="h-24 w-full rounded-xl bg-slate-200/70" />
-                <div className="mt-2 h-2.5 w-14 rounded bg-slate-200/70" />
-              </div>
+              <div key={idx} className="aspect-square animate-pulse rounded-lg bg-[#f1f3f4]" />
             ))}
           </div>
         ) : error ? (
@@ -213,7 +207,7 @@ export default function CategorySeeAllView({
             </button>
           </div>
         ) : graphics.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             {graphics.map((graphic) => (
               <GraphicCard
                 key={graphic.id || graphic.assetKey}

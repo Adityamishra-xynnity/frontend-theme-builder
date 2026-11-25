@@ -196,25 +196,19 @@ export default function GraphicsBrowser({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800">
       {/* TOP HEADER */}
-      <div className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-slate-50/80 p-3.5">
+      <div className="bg-white px-4 pb-2 pt-3">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Back to Elements"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-blue-600 active:scale-95"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#0e1318] transition-colors hover:bg-[#f1f3f4]"
           >
             <ArrowLeft size={16} />
           </button>
 
           <div className="min-w-0 flex-1">
-            <h2 className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-slate-900">
-              <Sparkles size={16} className="text-blue-600" />
-              <span>Animated Designs</span>
-            </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Dynamic animated elements, arrows & decorative vectors
-            </p>
+            <h2 className="text-base font-bold text-[#0e1318]"><span>Animated Designs</span></h2>
           </div>
         </div>
 
@@ -230,7 +224,7 @@ export default function GraphicsBrowser({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search animated designs (arrows, words, shapes, food...)"
             aria-label="Search animated designs library"
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-9 text-xs text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-3 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-[#d9dbe0] bg-white pl-9 pr-9 text-[13px] text-[#0e1318] outline-none transition-shadow placeholder:text-[#6b7280] focus:border-[#8b3dff] focus:ring-2 focus:ring-[#8b3dff]/25"
           />
           {search && (
             <button
@@ -252,8 +246,8 @@ export default function GraphicsBrowser({
               onClick={() => setSearchType("all")}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 searchType === "all"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                  ? "bg-[#0e1318] text-white"
+                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
               }`}
             >
               All ({searchTotal})
@@ -263,8 +257,8 @@ export default function GraphicsBrowser({
               onClick={() => setSearchType("animated")}
               className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 searchType === "animated"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                  ? "bg-[#0e1318] text-white"
+                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
               }`}
             >
               <Sparkles size={11} />
@@ -275,8 +269,8 @@ export default function GraphicsBrowser({
               onClick={() => setSearchType("static")}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 searchType === "static"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+                  ? "bg-[#0e1318] text-white"
+                  : "bg-[#f1f3f4] text-[#0e1318] hover:bg-[#e8eaed]"
               }`}
             >
               Static
@@ -297,15 +291,9 @@ export default function GraphicsBrowser({
             </div>
 
             {searchLoading ? (
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 {Array.from({ length: 9 }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="flex h-32 animate-pulse flex-col items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-2"
-                  >
-                    <div className="h-24 w-full rounded-xl bg-slate-200/70" />
-                    <div className="mt-2 h-2.5 w-14 rounded bg-slate-200/70" />
-                  </div>
+                  <div key={idx} className="aspect-square animate-pulse rounded-lg bg-[#f1f3f4]" />
                 ))}
               </div>
             ) : searchError ? (
@@ -316,7 +304,7 @@ export default function GraphicsBrowser({
                 </p>
               </div>
             ) : searchResults.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 {searchResults.map((graphic) => (
                   <GraphicCard
                     key={graphic.id || graphic.assetKey}
