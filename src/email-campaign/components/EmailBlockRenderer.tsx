@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import { Move, Trash2, Copy, Link2 } from "lucide-react";
-import { useEmailEditor } from "../context/EmailEditorContext";
+import {
+  useEmailEditor,
+  computeScaledSectionFromSnapshot,
+  getNodeMinDimensions,
+  type EmailSection,
+} from "../context/EmailEditorContext";
 import LinkPopover from "./LinkPopover";
 import { getNodeLinkUrl, isValidEmailUrl } from "../utils/linkUtils";
 
@@ -16,12 +21,14 @@ export default function EmailBlockRenderer() {
     updateNodeLink,
     duplicateNode,
     updateSectionBounds,
+    replaceSection,
     updateNodeBounds,
     removeNode,
     removeSection,
   } = useEmailEditor();
 
   const [activeLinkNodeId, setActiveLinkNodeId] = useState<string | null>(null);
+  const sectionResizeSnapshotRef = useRef<EmailSection | null>(null);
 
   if (sections.length === 0) {
     return (
@@ -60,6 +67,7 @@ export default function EmailBlockRenderer() {
             size={{ width: section.width, height: section.height }}
             bounds="parent"
             minWidth={250}
+            maxWidth={600}
             minHeight={40}
             disableDragging={!isSectionSelected}
             dragHandleClassName="section-drag-handle"
@@ -70,28 +78,41 @@ export default function EmailBlockRenderer() {
                 y: data.y,
               })
             }
-            onResizeStop={(_e, _direction, ref, _delta, position) => {
-              const scaleX = ref.offsetWidth / section.width;
-              const scaleY = ref.offsetHeight / section.height;
-
-              section.nodes.forEach((node) => {
-                const fontScale = Math.min(scaleX, scaleY);
-
-                updateNodeBounds(section.id, node.id, {
-                  x: node.x * scaleX,
-                  y: node.y * scaleY,
-                  width: node.width * scaleX,
-                  height: node.height * scaleY,
-                  fontSize: (node.fontSize ?? 14) * fontScale,
-                });
-              });
-
-              updateSectionBounds(section.id, {
-                x: position.x,
-                y: position.y,
-                width: ref.offsetWidth,
-                height: ref.offsetHeight,
-              });
+            onResizeStart={() => {
+              sectionResizeSnapshotRef.current = structuredClone(section);
+            }}
+            onResize={(_e, direction, ref, _delta, position) => {
+              const snap = sectionResizeSnapshotRef.current;
+              if (!snap || snap.id !== section.id) return;
+              replaceSection(
+                computeScaledSectionFromSnapshot(
+                  snap,
+                  {
+                    x: position.x,
+                    y: position.y,
+                    width: ref.offsetWidth,
+                    height: ref.offsetHeight,
+                  },
+                  direction
+                )
+              );
+            }}
+            onResizeStop={(_e, direction, ref, _delta, position) => {
+              const snap = sectionResizeSnapshotRef.current;
+              sectionResizeSnapshotRef.current = null;
+              if (!snap || snap.id !== section.id) return;
+              replaceSection(
+                computeScaledSectionFromSnapshot(
+                  snap,
+                  {
+                    x: position.x,
+                    y: position.y,
+                    width: ref.offsetWidth,
+                    height: ref.offsetHeight,
+                  },
+                  direction
+                )
+              );
             }}
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation();
@@ -165,6 +186,7 @@ export default function EmailBlockRenderer() {
 
                 // Toolbar position (above node, or below if near top boundary)
                 const isNearTopEdge = node.y < 42;
+                const { minWidth, minHeight } = getNodeMinDimensions(node.type);
 
                 return (
                   <Rnd
@@ -172,8 +194,10 @@ export default function EmailBlockRenderer() {
                     position={{ x: node.x, y: node.y }}
                     size={{ width: node.width, height: node.height }}
                     bounds="parent"
-                    minWidth={10}
-                    minHeight={1}
+                    minWidth={minWidth}
+                    minHeight={minHeight}
+                    maxWidth={section.width}
+                    lockAspectRatio={node.type === "image"}
                     disableDragging={!isNodeSelected}
                     dragHandleClassName="node-drag-handle"
                     enableResizing={isNodeSelected}
@@ -181,6 +205,14 @@ export default function EmailBlockRenderer() {
                       updateNodeBounds(section.id, node.id, {
                         x: data.x,
                         y: data.y,
+                      })
+                    }
+                    onResize={(_e, _direction, ref, _delta, position) =>
+                      updateNodeBounds(section.id, node.id, {
+                        x: position.x,
+                        y: position.y,
+                        width: ref.offsetWidth,
+                        height: ref.offsetHeight,
                       })
                     }
                     onResizeStop={(_e, _direction, ref, _delta, position) =>
