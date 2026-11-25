@@ -126,26 +126,27 @@ function renderNode(node: EmailNode): string {
   const width = Math.max(1, Math.round(node.width));
   const height = Math.max(1, Math.round(node.height));
   const color = node.color ? `color:${escapeHtml(node.color)};` : "";
+  const textAlign = node.textAlign ? `text-align:${escapeHtml(node.textAlign)};` : "";
   const rawLinkUrl = getNodeLinkUrl(node);
   const destinationUrl = sanitizeEmailUrl(rawLinkUrl);
 
   switch (node.type) {
     case "logo": {
-      const logoHtml = `<span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;font-weight:bold;letter-spacing:-0.2px;line-height:1.2;${color}">${content}</span>`;
+      const logoHtml = `<span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;font-weight:bold;letter-spacing:-0.2px;line-height:1.2;${textAlign}${color}">${content}</span>`;
       return destinationUrl
         ? `<a href="${destinationUrl}" target="_blank" style="text-decoration:none;display:inline-block;${color}">${logoHtml}</a>`
         : logoHtml;
     }
 
     case "heading": {
-      const headingHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;font-weight:bold;line-height:1.25;white-space:pre-wrap;word-break:break-word;${color}">${content}</div>`;
+      const headingHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;font-weight:bold;line-height:1.25;white-space:pre-wrap;word-break:break-word;max-width:${width}px;${textAlign}${color}">${content}</div>`;
       return destinationUrl
         ? `<a href="${destinationUrl}" target="_blank" style="text-decoration:none;display:inline-block;${color}">${headingHtml}</a>`
         : headingHtml;
     }
 
     case "text": {
-      const textHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;line-height:1.45;white-space:pre-wrap;word-break:break-word;${color}">${content}</div>`;
+      const textHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:${fontSize}px;line-height:1.45;white-space:pre-wrap;word-break:break-word;max-width:${width}px;${textAlign}${color}">${content}</div>`;
       return destinationUrl
         ? `<a href="${destinationUrl}" target="_blank" style="color:inherit;text-decoration:none;display:inline-block;${color}">${textHtml}</a>`
         : textHtml;
@@ -234,25 +235,53 @@ function renderNode(node: EmailNode): string {
 }
 
 /**
- * Render vertically stacked nodes in a single column table.
+ * Render an email-client-safe vertical spacer row.
+ * Inherits parent background color unless an explicit bgColor is supplied.
+ */
+function renderSpacerRow(heightPx: number, bgColor?: string): string {
+  const h = Math.round(heightPx);
+  if (h <= 0) return "";
+  const bgAttr = bgColor ? ` bgcolor="${escapeHtml(bgColor)}"` : "";
+  const bgStyle = bgColor ? `background-color:${escapeHtml(bgColor)};` : "";
+  return `
+    <tr>
+      <td height="${h}"${bgAttr} style="height:${h}px;line-height:${h}px;font-size:1px;mso-line-height-rule:exactly;${bgStyle}">&nbsp;</td>
+    </tr>
+  `;
+}
+
+/**
+ * Render vertically stacked nodes in a single column table,
+ * preserving top offset, inter-node vertical gaps, and optional bottom space.
  */
 function renderStackedNodes(
   nodes: EmailNode[],
-  horizontalAlign: "left" | "center" | "right" = "left"
+  horizontalAlign: "left" | "center" | "right" = "left",
+  sectionHeight?: number,
+  bgColor?: string
 ): string {
-  if (nodes.length === 0) return "";
+  if (nodes.length === 0) {
+    return sectionHeight ? renderSpacerRow(sectionHeight, bgColor) : "";
+  }
 
-  const sorted = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x);
+  const sorted = [...nodes]
+    .map((node, index) => ({ node, index }))
+    .sort((a, b) => a.node.y - b.node.y || a.node.x - b.node.x || a.index - b.index)
+    .map((entry) => entry.node);
 
-  return sorted
-    .map((node, index) => {
-      const topGap = index === 0 ? 0 : Math.max(4, Math.round(node.y - (sorted[index - 1].y + sorted[index - 1].height)));
+  let innerY = 0;
+  const rowsHtml = sorted
+    .map((node) => {
       const rendered = renderNode(node);
       if (!rendered) return "";
 
+      const gap = Math.round(node.y - innerY);
+      const spacer = gap > 0 ? renderSpacerRow(gap, bgColor) : "";
+      innerY = Math.max(innerY, Math.round(node.y + node.height));
+
       return `
+        ${spacer}
         <tr>
-          ${topGap > 0 ? `<td height="${topGap}" style="height:${topGap}px;font-size:0;line-height:0;">&nbsp;</td></tr><tr>` : ""}
           <td align="${horizontalAlign}" valign="top" style="vertical-align:top;">
             ${rendered}
           </td>
@@ -260,6 +289,12 @@ function renderStackedNodes(
       `;
     })
     .join("");
+
+  const bottomGap =
+    sectionHeight !== undefined ? Math.round(sectionHeight - innerY) : 0;
+  const bottomSpacer = bottomGap > 0 ? renderSpacerRow(bottomGap, bgColor) : "";
+
+  return `${rowsHtml}${bottomSpacer}`;
 }
 
 /**
@@ -326,15 +361,15 @@ function renderSection(section: EmailSection): string {
       return `
         <tr>
           <td>
-            <table role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
+            <table class="email-section-table" role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
               style="width:${sectionWidth}px;background-color:${sectionBg};">
               <tr>
                 <td width="${leftFlank.width}" valign="middle" align="left" style="width:${leftFlank.width}px;padding-left:16px;">
                   ${renderNode(leftFlank)}
                 </td>
-                <td valign="middle" align="center" style="padding:16px 8px;">
+                <td valign="top" align="center" style="padding:0 8px;">
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    ${renderStackedNodes(middle, "center")}
+                    ${renderStackedNodes(middle, "center", sectionHeight, sectionBg)}
                   </table>
                 </td>
                 <td width="${rightFlank.width}" valign="middle" align="right" style="width:${rightFlank.width}px;padding-right:16px;">
@@ -397,21 +432,21 @@ function renderSection(section: EmailSection): string {
     return `
       <tr>
         <td>
-          <table role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
+          <table class="email-section-table" role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
             style="width:${sectionWidth}px;background-color:${sectionBg};">
             <tr>
-              <td style="padding:20px ${rightPad}px 20px ${leftPad}px;">
+              <td style="padding:0 ${rightPad}px 0 ${leftPad}px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td width="${col1Width}" valign="top" style="width:${col1Width}px;vertical-align:top;">
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                        ${renderStackedNodes(bestSplit.leftGroup, "left")}
+                        ${renderStackedNodes(bestSplit.leftGroup, "left", sectionHeight, sectionBg)}
                       </table>
                     </td>
                     <td width="20" style="width:20px;font-size:0;line-height:0;">&nbsp;</td>
                     <td width="${col2Width}" valign="top" align="right" style="width:${col2Width}px;vertical-align:top;">
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                        ${renderStackedNodes(bestSplit.rightGroup, "right")}
+                        ${renderStackedNodes(bestSplit.rightGroup, "right", sectionHeight, sectionBg)}
                       </table>
                     </td>
                   </tr>
@@ -455,8 +490,17 @@ function renderSection(section: EmailSection): string {
   }
   if (currentRow.length > 0) rows.push(currentRow);
 
+  let innerY = 0;
   const renderedRows = rows
     .map((rowNodes) => {
+      const rowMinY = Math.min(...rowNodes.map((n) => n.y));
+      const rowMaxBottom = Math.max(...rowNodes.map((n) => n.y + n.height));
+      const gap = Math.round(rowMinY - innerY);
+      const spacer = gap > 0 ? renderSpacerRow(gap, sectionBg) : "";
+      innerY = Math.max(innerY, Math.round(rowMaxBottom));
+
+      let rowContent = "";
+
       // Single Node in row
       if (rowNodes.length === 1) {
         const node = rowNodes[0];
@@ -465,39 +509,41 @@ function renderSection(section: EmailSection): string {
         if (node.type === "container") {
           const leftPad = Math.max(16, Math.round(node.x));
           const rightPad = Math.max(16, Math.round(sectionWidth - (node.x + node.width)));
-          return `
+          rowContent = `
             <tr>
-              <td style="padding:6px ${rightPad}px 6px ${leftPad}px;">
+              <td style="padding:0 ${rightPad}px 0 ${leftPad}px;">
                 ${renderNode(node)}
               </td>
             </tr>
           `;
+        } else {
+          // Centered node (e.g. sponsorship text or CTA button)
+          const isCentered =
+            Math.abs(node.x - (sectionWidth - node.width) / 2) <= 35 ||
+            node.type === "button";
+
+          if (isCentered) {
+            rowContent = `
+              <tr>
+                <td align="center" style="padding:0 24px;">
+                  ${renderNode(node)}
+                </td>
+              </tr>
+            `;
+          } else {
+            // Left-aligned with offset
+            const leftPad = Math.max(16, Math.round(node.x));
+            rowContent = `
+              <tr>
+                <td align="left" style="padding:0 24px 0 ${leftPad}px;">
+                  ${renderNode(node)}
+                </td>
+              </tr>
+            `;
+          }
         }
 
-        // Centered node (e.g. sponsorship text or CTA button)
-        const isCentered =
-          Math.abs(node.x - (sectionWidth - node.width) / 2) <= 35 ||
-          node.type === "button";
-
-        if (isCentered) {
-          return `
-            <tr>
-              <td align="center" style="padding:4px 24px;">
-                ${renderNode(node)}
-              </td>
-            </tr>
-          `;
-        }
-
-        // Left-aligned with offset
-        const leftPad = Math.max(16, Math.round(node.x));
-        return `
-          <tr>
-            <td align="left" style="padding:4px 24px 4px ${leftPad}px;">
-              ${renderNode(node)}
-            </td>
-          </tr>
-        `;
+        return `${spacer}${rowContent}`;
       }
 
       // Multi-node row: sort left to right
@@ -513,9 +559,9 @@ function renderSection(section: EmailSection): string {
           sectionWidth - Math.max(...rightGroup.map((n) => n.x + n.width))
         );
 
-        return `
+        rowContent = `
           <tr>
-            <td style="padding:8px ${rightPad}px 8px ${leftPad}px;">
+            <td style="padding:0 ${rightPad}px 0 ${leftPad}px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" valign="middle">
@@ -529,13 +575,14 @@ function renderSection(section: EmailSection): string {
             </td>
           </tr>
         `;
+        return `${spacer}${rowContent}`;
       }
 
       // Adjacent horizontal items on the left (e.g. Globe + Website link)
       const leftPad = Math.max(16, Math.min(...sortedRow.map((n) => n.x)));
-      return `
+      rowContent = `
         <tr>
-          <td style="padding:8px 24px 8px ${leftPad}px;">
+          <td style="padding:0 24px 0 ${leftPad}px;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="left">
               <tr>
                 ${sortedRow
@@ -552,18 +599,23 @@ function renderSection(section: EmailSection): string {
           </td>
         </tr>
       `;
+      return `${spacer}${rowContent}`;
     })
     .join("");
+
+  const bottomGap = Math.round(sectionHeight - innerY);
+  const bottomSpacer = bottomGap > 0 ? renderSpacerRow(bottomGap, sectionBg) : "";
 
   return `
     <tr>
       <td>
-        <table role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
+        <table class="email-section-table" role="presentation" width="${sectionWidth}" cellpadding="0" cellspacing="0" border="0"
           style="width:${sectionWidth}px;background-color:${sectionBg};">
           <tr>
-            <td style="padding:16px 0;">
+            <td style="padding:0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 ${renderedRows}
+                ${bottomSpacer}
               </table>
             </td>
           </tr>
@@ -586,7 +638,20 @@ export async function emailCampaignToHtml(
   // Preprocess any remaining SVG graphics into high-resolution base64 PNGs
   const preparedSections = await prepareSectionsForEmail(sections);
 
-  const sectionHtml = preparedSections.map(renderSection).join("");
+  const orderedSections = preparedSections
+    .map((section, index) => ({ section, index }))
+    .sort((a, b) => a.section.y - b.section.y || a.index - b.index)
+    .map((entry) => entry.section);
+
+  let cursorY = 0;
+  const sectionHtml = orderedSections
+    .map((section) => {
+      const gap = Math.round(section.y - cursorY);
+      const spacer = gap > 0 ? renderSpacerRow(gap) : "";
+      cursorY = Math.max(cursorY, Math.round(section.y + section.height));
+      return `${spacer}${renderSection(section)}`;
+    })
+    .join("");
 
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -612,6 +677,9 @@ export async function emailCampaignToHtml(
     table { border-collapse: collapse !important; }
     body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f3f4f6; }
     a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+    @media only screen and (max-width: 620px) {
+      .email-section-table { width: 100% !important; max-width: 100% !important; }
+    }
   </style>
 </head>
 <body style="margin:0;padding:0;background-color:#f3f4f6;-webkit-font-smoothing:antialiased;">

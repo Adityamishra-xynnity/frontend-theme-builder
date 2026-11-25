@@ -22,6 +22,103 @@ export type {
   EmailSectionTemplate,
 };
 
+export function getNodeMinDimensions(type: EmailNodeType): {
+  minWidth: number;
+  minHeight: number;
+} {
+  switch (type) {
+    case "container":
+      return { minWidth: 20, minHeight: 1 };
+    case "image":
+      return { minWidth: 16, minHeight: 16 };
+    case "button":
+      return { minWidth: 60, minHeight: 28 };
+    default:
+      return { minWidth: 40, minHeight: 18 };
+  }
+}
+
+function round1(val: number): number {
+  return Math.round(val * 10) / 10;
+}
+
+function round2(val: number): number {
+  return Math.round(val * 100) / 100;
+}
+
+function clamp(val: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, val));
+}
+
+/**
+ * Compute a scaled section and its child nodes from a drag-start snapshot.
+ * Prevents cumulative font-size and dimension drift while distinguishing
+ * corner scaling from vertical (blank space) and horizontal edge resizing.
+ */
+export function computeScaledSectionFromSnapshot(
+  startSection: EmailSection,
+  nextBounds: EmailBounds,
+  direction: string
+): EmailSection {
+  const safeStartW = Math.max(1, startSection.width);
+  const safeStartH = Math.max(1, startSection.height);
+  const scaleX = nextBounds.width / safeStartW;
+  const scaleY = nextBounds.height / safeStartH;
+
+  const isVerticalEdge = direction === "top" || direction === "bottom";
+  const isHorizontalEdge = direction === "left" || direction === "right";
+
+  if (isVerticalEdge) {
+    return {
+      ...startSection,
+      ...nextBounds,
+      nodes: startSection.nodes.map((node) => ({ ...node })),
+    };
+  }
+
+  if (isHorizontalEdge) {
+    return {
+      ...startSection,
+      ...nextBounds,
+      nodes: startSection.nodes.map((node) => {
+        const { minWidth } = getNodeMinDimensions(node.type);
+        const scaledX = round2(node.x * scaleX);
+        const scaledWidth = Math.max(
+          minWidth,
+          Math.min(nextBounds.width, round2(node.width * scaleX))
+        );
+        return {
+          ...node,
+          x: scaledX,
+          width: scaledWidth,
+        };
+      }),
+    };
+  }
+
+  // Corner resize: proportionally scale child positions, dimensions, and typography
+  const fontScale = Math.min(scaleX, scaleY);
+
+  return {
+    ...startSection,
+    ...nextBounds,
+    nodes: startSection.nodes.map((node) => {
+      const { minWidth, minHeight } = getNodeMinDimensions(node.type);
+      const baseFont = node.fontSize ?? (node.type === "heading" ? 24 : 14);
+      const scaledFont = clamp(round1(baseFont * fontScale), 8, 120);
+
+      return {
+        ...node,
+        x: round2(node.x * scaleX),
+        y: round2(node.y * scaleY),
+        width: Math.max(minWidth, round2(node.width * scaleX)),
+        height: Math.max(minHeight, round2(node.height * scaleY)),
+        fontSize: node.fontSize !== undefined ? scaledFont : node.fontSize,
+      };
+    }),
+  };
+}
+
 export interface EmailEditorContextType {
   sections: EmailSection[];
   setSections: React.Dispatch<React.SetStateAction<EmailSection[]>>;
@@ -59,6 +156,8 @@ export interface EmailEditorContextType {
     sectionId: string,
     bounds: Partial<EmailBounds>
   ) => void;
+
+  replaceSection: (updatedSection: EmailSection) => void;
 
   updateNodeBounds: (
     sectionId: string,
@@ -354,6 +453,15 @@ export function EmailEditorProvider({
     );
   };
 
+  // Atomically replace a section and all its child nodes (e.g. during live/final section resize)
+  const replaceSection = (updatedSection: EmailSection) => {
+    setSections((current) =>
+      current.map((section) =>
+        section.id === updatedSection.id ? updatedSection : section
+      )
+    );
+  };
+
   // Resize or move an individual element
   const updateNodeBounds = (
     sectionId: string,
@@ -444,6 +552,7 @@ export function EmailEditorProvider({
         updateNodeLink,
         duplicateNode,
         updateSectionBounds,
+        replaceSection,
         updateNodeBounds,
         selectSection,
         selectNode,
