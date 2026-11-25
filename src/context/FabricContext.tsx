@@ -39,6 +39,7 @@ import type {
 } from "../types/graphics";
 import type { EmojiAsset } from "../types/emoji";
 import { graphicAnimationRuntime } from "../utils/graphicAnimationRuntime";
+import { takeDraggedElement } from "../utils/elementDrag";
 
 import {
   FabricContext,
@@ -959,7 +960,8 @@ export function FabricProvider({
     if (!canvas) return;
 
     const snapshot = getCanvasJSON(canvas);
-    setHistory((previous) => [...previous, snapshot]);
+    // Cap undo depth: snapshots of detailed illustrations are several MB each.
+    setHistory((previous) => [...previous, snapshot].slice(-30));
     setFuture([]);
   }
 
@@ -1784,6 +1786,44 @@ const value = String(rawValue).trim();
     }
   }
 
+  // Parse #rgb, #rrggbb, rgb() and rgba() (Fabric turns colours with opacity into rgba()).
+  function parseCssColor(value: unknown): { hex: string; alpha: number } | null {
+    if (typeof value !== "string") return null;
+    const v = value.trim().toLowerCase();
+    if (!v || v === "none" || v === "transparent") return null;
+    let m = /^#([0-9a-f]{3})$/.exec(v);
+    if (m) {
+      const h = m[1];
+      return { hex: `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`, alpha: 1 };
+    }
+    m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/.exec(v);
+    if (m) {
+      return {
+        hex: `#${m[1]}`,
+        alpha: m[2] ? parseInt(m[2], 16) / 255 : 1,
+      };
+    }
+    m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(v);
+    if (m) {
+      const to = (n: string) => Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, "0");
+      return {
+        hex: `#${to(m[1])}${to(m[2])}${to(m[3])}`,
+        alpha: m[4] !== undefined ? Number(m[4]) : 1,
+      };
+    }
+    return null;
+  }
+
+  function withSameAlpha(newHex: string, alpha: number): string {
+    if (alpha >= 1) return newHex;
+    const p = parseCssColor(newHex);
+    if (!p) return newHex;
+    const r = parseInt(p.hex.slice(1, 3), 16);
+    const g = parseInt(p.hex.slice(3, 5), 16);
+    const b = parseInt(p.hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
   function extractColorsFromFabricGroup(group: any): string[] {
     const colors = new Set<string>();
     const traverse = (obj: any) => {
@@ -1791,18 +1831,19 @@ const value = String(rawValue).trim();
         obj.getObjects().forEach(traverse);
       }
       const checkColor = (val: unknown) => {
-        if (typeof val === "string" && val && val !== "none" && val !== "transparent") {
-          const hex = val.trim();
-          if (/^#[0-9a-f]{3,8}$/i.test(hex)) {
-            colors.add(hex.toUpperCase());
-          }
-        }
+        const parsed = parseCssColor(val);
+        if (parsed) colors.add(parsed.hex.toUpperCase());
       };
       checkColor(obj.fill);
       checkColor(obj.stroke);
+      for (const paint of [obj.fill, obj.stroke]) {
+        if (paint && typeof paint === "object" && Array.isArray(paint.colorStops)) {
+          paint.colorStops.forEach((stop: { color?: string }) => checkColor(stop.color));
+        }
+      }
     };
     traverse(group);
-    return Array.from(colors).slice(0, 6);
+    return Array.from(colors).slice(0, 12);
   }
 
   async function addGraphic(graphic: GraphicAsset) {
@@ -1833,6 +1874,8 @@ const value = String(rawValue).trim();
           child.set({
             selectable: false,
             evented: false,
+            // The parent group is cached as ONE bitmap; children must not build their own caches.
+            objectCaching: false,
           });
         });
       }
@@ -1870,7 +1913,7 @@ const value = String(rawValue).trim();
         lockRotation: false,
         cornerSize: 12,
         touchCornerSize: 24,
-        objectCaching: false,
+        objectCaching: !(graphic.assetData?.type === "animated" || Boolean(graphic.assetData?.animationConfig)),
       });
 
       applyObjectControls(group);
@@ -1884,11 +1927,11 @@ const value = String(rawValue).trim();
         animConfig?.type ?? (isAnimated ? "pulse" : undefined);
       const elementId = crypto.randomUUID();
 
-      let palette = graphic.assetData?.colorPalette
-        ? [...graphic.assetData.colorPalette]
-        : [];
-      if (palette.length === 0) {
-        palette = extractColorsFromFabricGroup(group);
+      // Always derive the palette from the parsed SVG (solid fills, strokes AND
+      // gradient stops) so every graphic is recolourable, whatever the stored data says.
+      let palette = extractColorsFromFabricGroup(group);
+      if (palette.length === 0 && graphic.assetData?.colorPalette) {
+        palette = [...graphic.assetData.colorPalette];
       }
 
       attachMetadata(group, isAnimated ? "animated-graphic" : "graphic", elementId, {
@@ -1917,6 +1960,11 @@ const value = String(rawValue).trim();
     }
   }
 
+  // Colour pickers fire a change per mouse-move. Take ONE undo snapshot per gesture and
+  // batch the (expensive) canvas -> editor sync instead of doing both on every step.
+  const colorGestureRef = useRef<{ time: number; target: unknown }>({ time: 0, target: null });
+  const colorSyncTimerRef = useRef(0);
+
   function setGraphicColor(colorIndex: number, newColor: string) {
     const canvas = canvasRef.current;
     if (!canvas || !selectedObject) return;
@@ -1934,7 +1982,13 @@ const value = String(rawValue).trim();
     const oldColor = meta.colorPalette[colorIndex];
     if (!oldColor || oldColor.toLowerCase() === newColor.toLowerCase()) return;
 
-    saveCanvasState();
+    const now = performance.now();
+    const gesture = colorGestureRef.current;
+    if (gesture.target !== selectedObject || now - gesture.time > 1500) {
+      saveCanvasState();
+    }
+    gesture.target = selectedObject;
+    gesture.time = now;
 
     const normalizeColorStr = (c: string) => {
       c = c.trim().toLowerCase();
@@ -1950,12 +2004,30 @@ const value = String(rawValue).trim();
       if (obj.getObjects && typeof obj.getObjects === "function") {
         obj.getObjects().forEach(recolorGroupItem);
       }
-      if (typeof obj.fill === "string" && normalizeColorStr(obj.fill) === oldNorm) {
-        obj.set("fill", newColor);
-      }
-      if (typeof obj.stroke === "string" && normalizeColorStr(obj.stroke) === oldNorm) {
-        obj.set("stroke", newColor);
-      }
+      const recolorPaint = (prop: "fill" | "stroke") => {
+        const paint = obj[prop];
+        const oldHex = parseCssColor(oldColor)?.hex ?? oldNorm;
+        if (typeof paint === "string") {
+          const parsed = parseCssColor(paint);
+          if (parsed && parsed.hex === oldHex) {
+            obj.set(prop, withSameAlpha(newColor, parsed.alpha));
+          }
+        } else if (paint && Array.isArray(paint.colorStops)) {
+          // Gradient paint: recolor every matching colour stop (keeps stop opacity)
+          let touched = false;
+          paint.colorStops.forEach((stop: { color?: string }) => {
+            const parsed = parseCssColor(stop.color);
+            if (parsed && parsed.hex === oldHex) {
+              stop.color = withSameAlpha(newColor, parsed.alpha);
+              touched = true;
+            }
+          });
+          if (touched) obj.set(prop, paint);
+        }
+      };
+      recolorPaint("fill");
+      recolorPaint("stroke");
+      obj.dirty = true;
     };
 
     recolorGroupItem(selectedObject);
@@ -1982,7 +2054,11 @@ const value = String(rawValue).trim();
 
     selectedObject.dirty = true;
     canvas.requestRenderAll();
-    syncCanvasToEditor();
+
+    window.clearTimeout(colorSyncTimerRef.current);
+    colorSyncTimerRef.current = window.setTimeout(() => {
+      syncCanvasToEditor();
+    }, 180);
   }
 
   function configureDrawingBrush(
@@ -2748,17 +2824,109 @@ const value = String(rawValue).trim();
 
   function deleteSelected() {
     const canvas = canvasRef.current;
-    if (!canvas || !selectedObject) return;
+    if (!canvas) return;
+
+    // Works for a single object and for a multi-selection (ActiveSelection).
+    const active = canvas.getActiveObjects();
+    const targets = active.length > 0 ? active : selectedObject ? [selectedObject] : [];
+    if (targets.length === 0) return;
 
     saveCanvasState();
-    if (graphicAnimationRuntime.isRegistered(selectedObject)) {
-      graphicAnimationRuntime.unregister(selectedObject);
-    }
-    canvas.remove(selectedObject);
+    targets.forEach((object) => {
+      if (graphicAnimationRuntime.isRegistered(object)) {
+        graphicAnimationRuntime.unregister(object);
+      }
+      canvas.remove(object);
+    });
     canvas.discardActiveObject();
     setSelectedObject(null);
     canvas.requestRenderAll();
     syncCanvasToEditor();
+  }
+
+  // Delete / Backspace removes the selected object(s), unless the user is typing.
+  const deleteSelectedRef = useRef(deleteSelected);
+  deleteSelectedRef.current = deleteSelected;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (event.defaultPrevented) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return; // typing in a field (this also covers Fabric's hidden text-edit textarea)
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas || !document.body.contains(canvas.getElement())) return;
+
+      const active = canvas.getActiveObject() as (FabricObject & { isEditing?: boolean }) | undefined;
+      if (!active || active.isEditing) return;
+
+      event.preventDefault(); // Backspace must not navigate back
+      deleteSelectedRef.current();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Drop of a panel item on the canvas: add it, then centre it on the cursor.
+  async function dropDraggedElement(clientX: number, clientY: number): Promise<boolean> {
+    const canvas = canvasRef.current;
+    const add = takeDraggedElement();
+    if (!canvas || !add) return false;
+
+    const rect = canvas.upperCanvasEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+
+    // client px -> canvas units (the canvas is CSS-scaled by the zoom level), clamped to the page
+    const x = Math.max(0, Math.min(canvas.getWidth(), (clientX - rect.left) * (canvas.getWidth() / rect.width)));
+    const y = Math.max(0, Math.min(canvas.getHeight(), (clientY - rect.top) * (canvas.getHeight() / rect.height)));
+
+    const before = new Set(canvas.getObjects());
+    await add();
+
+    // Some adders finish loading (images) after their promise resolves.
+    let added = canvas.getObjects().filter((object) => !before.has(object));
+    for (let i = 0; i < 60 && added.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      added = canvas.getObjects().filter((object) => !before.has(object));
+    }
+    if (added.length === 0) return true;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    added.forEach((object) => {
+      const box = object.getBoundingRect();
+      minX = Math.min(minX, box.left);
+      minY = Math.min(minY, box.top);
+      maxX = Math.max(maxX, box.left + box.width);
+      maxY = Math.max(maxY, box.top + box.height);
+    });
+    const dx = x - (minX + maxX) / 2;
+    const dy = y - (minY + maxY) / 2;
+
+    added.forEach((object) => {
+      object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy });
+      object.setCoords();
+      if (graphicAnimationRuntime.isRegistered(object)) {
+        graphicAnimationRuntime.updateBaseTransform(object);
+      }
+    });
+
+    canvas.requestRenderAll();
+    syncCanvasToEditor();
+    return true;
   }
 
   async function duplicateSelected() {
@@ -3730,6 +3898,7 @@ const value = String(rawValue).trim();
     setGraphicColor,
 
     deleteSelected,
+    dropDraggedElement,
     duplicateSelected,
 
     increaseFontSize,

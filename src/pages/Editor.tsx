@@ -25,6 +25,10 @@ interface EditorLocationState {
   savedDesign?: SavedDesign;
 }
 
+// True only for the first Editor mount after a full page load (i.e. a browser refresh).
+// In-app navigation must still open a blank canvas / the chosen template or design.
+let bootRestorePending = true;
+
 export default function Editor() {
   const { id } = useParams();
   const location = useLocation();
@@ -62,6 +66,8 @@ export default function Editor() {
     copyPage,
     deletePage,
     selectPage,
+    setDraftSource,
+    restoreDraft,
   } = useEditor();
 
   const locationState = location.state as EditorLocationState | null;
@@ -101,6 +107,29 @@ export default function Editor() {
 
   useEffect(() => {
     let cancelled = false;
+
+    const source = savedDesign
+      ? `design:${savedDesign.id}`
+      : id
+        ? `template:${id}`
+        : "new";
+    setDraftSource(source);
+
+    // Page refresh: bring back the unsaved work instead of resetting the canvas.
+    if (bootRestorePending) {
+      // Cleared on a macrotask so React StrictMode's double-run of this effect still restores.
+      window.setTimeout(() => {
+        bootRestorePending = false;
+      }, 0);
+      if (restoreDraft(source)) {
+        setSelectedTemplate(null);
+        setTemplateError("");
+        setTemplateLoading(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+    }
 
     if (savedDesign) {
       setSelectedTemplate(null);
@@ -184,6 +213,8 @@ export default function Editor() {
     loadSavedDesign,
     clearCanvas,
     setPageSettings,
+    setDraftSource,
+    restoreDraft,
   ]);
 
   const handlePanelChange = (panel: string) => {

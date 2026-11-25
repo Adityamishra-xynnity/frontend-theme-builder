@@ -63,6 +63,8 @@ export interface FabricContextType {
   setGraphicColor: (colorIndex: number, newColor: string) => void;
 
   deleteSelected: () => void;
+  /** Run the element currently being dragged from the panel and place it at the given client point. */
+  dropDraggedElement: (clientX: number, clientY: number) => Promise<boolean>;
   duplicateSelected: () => void;
 
   increaseFontSize: () => void;

@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   Search,
   X,
-  Palette,
   Leaf,
   Sun,
   Tent,
@@ -33,7 +32,7 @@ import GraphicCard from "./GraphicCard";
 
 interface StaticGraphicsBrowserProps {
   onBack: () => void;
-  onSelectGraphic?: (graphic: GraphicAsset) => void;
+  onSelectGraphic?: (graphic: GraphicAsset) => void | Promise<void>;
 }
 
 const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
@@ -41,6 +40,7 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "organic-summer": <Sun size={14} />,
   "camping-rustic-drawing": <Tent size={14} />,
   "vivid-leaves": <Leaf size={14} />,
+  featured: <Sparkles size={14} />,
   "handdrawn-animals": <PawPrint size={14} />,
   "pastel-travel-accessories": <Compass size={14} />,
   "simple-drawn-objects": <Coffee size={14} />,
@@ -49,6 +49,62 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "business-graphics": <Briefcase size={14} />,
   "lines-dividers": <Minus size={14} />,
 };
+
+/**
+ * Canva-style sections: many small collections are merged into a handful of
+ * topic sections. A merged section's id is a comma-separated list of the
+ * backend category ids it contains, which /api/graphics understands.
+ */
+const SECTION_GROUPS: { name: string; members: string[] }[] = [
+  { name: "Featured", members: ["featured"] },
+  { name: "Social Media", members: ["social-media"] },
+  { name: "Animals & Birds", members: ["realistic-animals", "handdrawn-animals", "birds"] },
+  {
+    name: "Nature & Plants",
+    members: ["bold-foliage", "vivid-leaves", "organic-summer", "camping-rustic-drawing"],
+  },
+  {
+    name: "Food & Objects",
+    members: ["organic-sketched-fruit", "simple-drawn-objects", "pastel-travel-accessories"],
+  },
+  {
+    name: "Shapes & Backgrounds",
+    members: ["abstract-shapes", "gradients-blurs", "lines-dividers"],
+  },
+  { name: "Education & Business", members: ["educational-graphics", "business-graphics"] },
+];
+
+function groupCategories(cats: GraphicCategory[]): GraphicCategory[] {
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const used = new Set<string>();
+  const sections: GraphicCategory[] = [];
+
+  for (const group of SECTION_GROUPS) {
+    const present = group.members
+      .map((id) => byId.get(id))
+      .filter((c): c is GraphicCategory => Boolean(c));
+    if (present.length === 0) continue;
+    present.forEach((c) => used.add(c.id));
+    sections.push({
+      id: present.map((c) => c.id).join(","),
+      name: group.name,
+      count: present.reduce((sum, c) => sum + c.count, 0),
+      iconKey: present[0].iconKey,
+      previewSvg: present[0].previewSvg,
+    });
+  }
+
+  // Any collection added later that isn't mapped yet goes into one catch-all section
+  const rest = cats.filter((c) => !used.has(c.id));
+  if (rest.length > 0) {
+    sections.push({
+      id: rest.map((c) => c.id).join(","),
+      name: "More Graphics",
+      count: rest.reduce((sum, c) => sum + c.count, 0),
+    });
+  }
+  return sections;
+}
 
 export default function StaticGraphicsBrowser({
   onBack,
@@ -93,7 +149,9 @@ export default function StaticGraphicsBrowser({
       setInitialError(null);
 
       // 1. Fetch static categories summary
-      const fetchedCats = await getGraphicCategories("static");
+      const rawCats = await getGraphicCategories("static");
+      // Merge the many small collections into a few Canva-style sections
+      const fetchedCats = groupCategories(rawCats);
       setCategories(fetchedCats);
 
       // 2. Fetch top recommended static graphics
@@ -114,7 +172,7 @@ export default function StaticGraphicsBrowser({
               size: 10,
             });
             const content = pageResp.content || [];
-            railsCacheRef.current[cat.id] = content;
+            if (content.length > 0) railsCacheRef.current[cat.id] = content;
             return [cat.id, content];
           } catch {
             return [cat.id, []];
@@ -198,25 +256,19 @@ export default function StaticGraphicsBrowser({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-slate-800">
       {/* TOP HEADER */}
-      <div className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-slate-50/80 p-3.5">
+      <div className="bg-white px-4 pb-2 pt-3">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Back to Elements"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-blue-600 active:scale-95"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#0e1318] transition-colors hover:bg-[#f1f3f4]"
           >
             <ArrowLeft size={16} />
           </button>
 
           <div className="min-w-0 flex-1">
-            <h2 className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-slate-900">
-              <Palette size={16} className="text-blue-600" />
-              <span>Graphics</span>
-            </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Free, editable vector illustrations & decorative objects
-            </p>
+            <h2 className="text-base font-bold text-[#0e1318]"><span>Graphics</span></h2>
           </div>
         </div>
 
@@ -232,7 +284,7 @@ export default function StaticGraphicsBrowser({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search graphics (e.g. flowers, leaves, animals, fruit...)"
             aria-label="Search graphics library"
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-9 text-xs text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-3 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-[#d9dbe0] bg-white pl-9 pr-9 text-[13px] text-[#0e1318] outline-none transition-shadow placeholder:text-[#6b7280] focus:border-[#8b3dff] focus:ring-2 focus:ring-[#8b3dff]/25"
           />
           {search && (
             <button
@@ -248,7 +300,7 @@ export default function StaticGraphicsBrowser({
       </div>
 
       {/* BODY CONTENT AREA */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2 space-y-6 [scrollbar-width:thin]">
         {/* VIEW 1: SEARCH ACTIVE */}
         {isSearchActive && (
           <div className="space-y-3">
@@ -262,11 +314,11 @@ export default function StaticGraphicsBrowser({
             </div>
 
             {searchLoading ? (
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div
                     key={i}
-                    className="h-28 animate-pulse rounded-2xl border border-slate-100 bg-slate-50 p-2"
+                    className="aspect-square animate-pulse rounded-lg bg-[#f1f3f4]"
                   />
                 ))}
               </div>
@@ -288,7 +340,7 @@ export default function StaticGraphicsBrowser({
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2">
                 {searchResults.map((graphic) => (
                   <GraphicCard
                     key={graphic.id}
@@ -309,12 +361,12 @@ export default function StaticGraphicsBrowser({
               <div className="space-y-6">
                 {Array.from({ length: 3 }).map((_, railIdx) => (
                   <div key={railIdx} className="space-y-2">
-                    <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+                    <div className="h-4 w-36 animate-pulse rounded-full bg-[#f1f3f4]" />
                     <div className="flex gap-2.5 overflow-hidden">
                       {Array.from({ length: 4 }).map((_, cardIdx) => (
                         <div
                           key={cardIdx}
-                          className="h-28 w-28 shrink-0 animate-pulse rounded-2xl bg-slate-100"
+                          className="h-[88px] w-[88px] shrink-0 animate-pulse rounded-lg bg-[#f1f3f4]"
                         />
                       ))}
                     </div>

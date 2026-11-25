@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isElementDrag } from "../../../utils/elementDrag";
 
 import {
   Canvas as FabricCanvasInstance,
@@ -210,6 +211,23 @@ function createTextBendPath(
     },
   );
 }
+// svgContent of detailed illustrations can be >1 MB; hashing it is far cheaper than
+// stringifying it into the signature. One-entry memo keeps repeat calls O(1).
+let lastSvgForSig = "";
+let lastSvgSig = "";
+function svgSignature(svg: string | undefined): string {
+  if (!svg) return "";
+  if (svg === lastSvgForSig) return lastSvgSig;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < svg.length; i++) {
+    h ^= svg.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  lastSvgForSig = svg;
+  lastSvgSig = `${svg.length}:${h >>> 0}`;
+  return lastSvgSig;
+}
+
 function getElementSignature(elements: EditorElement[]): string {
   return JSON.stringify(
     elements.map((element) => ({
@@ -242,7 +260,7 @@ function getElementSignature(elements: EditorElement[]): string {
       pathData: element.pathData ?? [],
       tableData: element.tableData ?? null,
       graphicKey: element.graphicKey ?? "",
-      svgContent: element.svgContent ?? "",
+      svgContent: svgSignature(element.svgContent),
       colorPalette: element.colorPalette ?? [],
     })),
   );
@@ -970,6 +988,7 @@ export default function FabricEditorCanvas({
 }: FabricEditorCanvasProps) {
   const htmlCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [dropActive, setDropActive] = useState(false);
 
   const [canvasScale, setCanvasScale] = useState(1);
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -1015,6 +1034,7 @@ export default function FabricEditorCanvas({
     setActiveTableCell,
     setTableCellText,
     convertCanvasToElements,
+    dropDraggedElement,
   } = useFabric();
 
   const safeWidth = Math.max(1, pageWidth || DEFAULT_WIDTH);
@@ -1643,6 +1663,7 @@ export default function FabricEditorCanvas({
                   child.set({
                     selectable: false,
                     evented: false,
+                    objectCaching: false,
                   });
                 });
               }
@@ -1673,7 +1694,7 @@ export default function FabricEditorCanvas({
                 borderColor: "#2563eb",
                 cornerSize: 12,
                 touchCornerSize: 24,
-                objectCaching: false,
+                objectCaching: !(element.isAnimated || element.type === "animated-graphic"),
               });
 
               applyRotationCursor(group);
@@ -1909,11 +1930,28 @@ export default function FabricEditorCanvas({
       <div
         ref={viewportRef}
         className="relative flex-1 min-h-0 w-full overflow-auto bg-slate-100 flex"
+        onDragOver={(event) => {
+          if (!isElementDrag(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDropActive(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setDropActive(false);
+          }
+        }}
+        onDrop={(event) => {
+          if (!isElementDrag(event)) return;
+          event.preventDefault();
+          setDropActive(false);
+          void dropDraggedElement(event.clientX, event.clientY);
+        }}
       >
         {/* Canvas centering container: centers canvas both vertically and horizontally */}
         <div className="m-auto flex shrink-0 items-center justify-center p-6 sm:p-8">
           <div
-            className="relative bg-white shadow-[0_4px_25px_rgba(0,0,0,0.12)] border border-slate-200/60 rounded-xs transition-shadow duration-200"
+            className={`relative bg-white shadow-[0_4px_25px_rgba(0,0,0,0.12)] border rounded-xs transition-shadow duration-200 ${dropActive ? "border-[#8b3dff] ring-4 ring-[#8b3dff]/30" : "border-slate-200/60"}`}
             style={{
               width: Math.round(safeWidth * canvasScale),
               height: Math.round(safeHeight * canvasScale),
