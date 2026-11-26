@@ -26,6 +26,9 @@ import {
   Gift,
   Wallpaper,
   Check,
+  SmilePlus,
+  LayoutGrid,
+  Columns3,
 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useFabric, type ShapeElementType } from "../../context/useFabric";
@@ -35,6 +38,8 @@ import AnimationsPanel from "./AnimationsPanel";
 import GraphicsBrowser from "./graphics/GraphicsBrowser";
 import StaticGraphicsBrowser from "./graphics/StaticGraphicsBrowser";
 import EmojiBrowser from "./emojis/EmojiBrowser";
+import ThemeElementBrowser, { StructuredLayoutPreview } from "./elements/ThemeElementBrowser";
+import type { ThemeElementAsset } from "../../types/themeElements";
 import type { EmojiAsset } from "../../types/emoji";
 import type { GraphicAsset } from "../../types/graphics";
 
@@ -212,7 +217,10 @@ type PanelView =
   | "borders"
   | "animations"
   | "graphics"
-  | "animated-designs";
+  | "animated-designs"
+  | "icons"
+  | "bricks"
+  | "columns";
 
 // --------------------------------------------------
 // API CONFIGURATION
@@ -838,7 +846,7 @@ function buildCategories(assets: ShapeApiAsset[]): ShapeCategory[] {
 // --------------------------------------------------
 
 export default function ElementsPanel() {
-  const { addShape, addEmoji, addImage, addGraphic } = useFabric();
+  const { addShape, addEmoji, addImage, addGraphic, addIcon, addStructuredLayout } = useFabric();
   const {
     borderAsset,
     setPageBorderAsset,
@@ -1815,6 +1823,10 @@ export default function ElementsPanel() {
       handleAddShape(mappedType);
     } else if (type === "PHOTO") {
       await handleAddPhoto(asset as unknown as PhotoApiAsset);
+    } else if (type === "ICON") {
+      await addIcon(asset as unknown as ThemeElementAsset);
+    } else if (type === "BRICK" || type === "COLUMN") {
+      await addStructuredLayout(asset as unknown as ThemeElementAsset);
     }
   };
 
@@ -1839,6 +1851,9 @@ export default function ElementsPanel() {
       EMOJI: { label: "Emoji", badgeClass: "bg-amber-100 text-amber-700" },
       SHAPE: { label: "Shape", badgeClass: "bg-blue-100 text-blue-700" },
       PHOTO: { label: "Photo", badgeClass: "bg-sky-100 text-sky-700" },
+      ICON: { label: "Icon", badgeClass: "bg-sky-100 text-sky-700" },
+      BRICK: { label: "Brick", badgeClass: "bg-indigo-100 text-indigo-700" },
+      COLUMN: { label: "Column", badgeClass: "bg-teal-100 text-teal-700" },
     };
     const badge = badgeConfig[type] || {
       label: type,
@@ -1930,6 +1945,8 @@ export default function ElementsPanel() {
                 Photo
               </div>
             )
+          ) : type === "BRICK" || type === "COLUMN" ? (
+            <StructuredLayoutPreview asset={asset as unknown as ThemeElementAsset} />
           ) : type === "SHAPE" ? (
             <div className="flex h-full w-full items-center justify-center text-blue-600">
               <ShapePreview type={mappedShapeType} />
@@ -2358,6 +2375,45 @@ export default function ElementsPanel() {
           setSearch("");
         }}
         onSelectEmoji={handleAddEmoji}
+      />
+    );
+  }
+
+  if (view === "icons") {
+    return (
+      <ThemeElementBrowser
+        kind="icons"
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectElement={(asset) => addIcon(asset)}
+      />
+    );
+  }
+
+  if (view === "bricks") {
+    return (
+      <ThemeElementBrowser
+        kind="bricks"
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectElement={(asset) => addStructuredLayout(asset)}
+      />
+    );
+  }
+
+  if (view === "columns") {
+    return (
+      <ThemeElementBrowser
+        kind="columns"
+        onBack={() => {
+          setView("root");
+          setSearch("");
+        }}
+        onSelectElement={(asset) => addStructuredLayout(asset)}
       />
     );
   }
@@ -2870,6 +2926,75 @@ export default function ElementsPanel() {
 
               <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-fuchsia-700">
                 Animations
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setView("icons");
+              }}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-sky-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-sky-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
+                  <SmilePlus
+                    size={24}
+                    strokeWidth={2}
+                    className="text-sky-700"
+                  />
+                </span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-sky-700">
+                Icons
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setView("bricks");
+              }}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-indigo-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-indigo-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
+                  <LayoutGrid
+                    size={24}
+                    strokeWidth={2}
+                    className="text-indigo-700"
+                  />
+                </span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-indigo-700">
+                Bricks
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setView("columns");
+              }}
+              className="group flex min-w-0 flex-col items-center gap-2 focus:outline-none"
+            >
+              <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-teal-100 p-2 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-teal-200">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/80 shadow-sm transition-transform group-hover:scale-110">
+                  <Columns3
+                    size={24}
+                    strokeWidth={2}
+                    className="text-teal-700"
+                  />
+                </span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-700 transition-colors group-hover:text-teal-700">
+                Columns
               </span>
             </button>
 

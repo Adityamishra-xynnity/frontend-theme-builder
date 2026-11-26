@@ -1,11 +1,13 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useState,
   type ReactNode,
 } from "react";
 import type {
   EmailBounds,
+  EmailCampaignResponse,
   EmailNode,
   EmailNodeType,
   EmailSection,
@@ -22,102 +24,25 @@ export type {
   EmailSectionTemplate,
 };
 
-export function getNodeMinDimensions(type: EmailNodeType): {
-  minWidth: number;
-  minHeight: number;
-} {
-  switch (type) {
-    case "container":
-      return { minWidth: 20, minHeight: 1 };
-    case "image":
-      return { minWidth: 16, minHeight: 16 };
-    case "button":
-      return { minWidth: 60, minHeight: 28 };
-    default:
-      return { minWidth: 40, minHeight: 18 };
-  }
-}
+import {
+  EMAIL_CANVAS_WIDTH,
+  computeScaledSectionFromSnapshot,
+  computeSymmetricHorizontalBounds,
+  enforceSectionBounds,
+  getNodeMinDimensions,
+  getSectionMinDimensions,
+  sanitizeNodeStylePatch,
+} from "../utils/emailCompatibilityEngine";
 
-function round1(val: number): number {
-  return Math.round(val * 10) / 10;
-}
-
-function round2(val: number): number {
-  return Math.round(val * 100) / 100;
-}
-
-function clamp(val: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, val));
-}
-
-/**
- * Compute a scaled section and its child nodes from a drag-start snapshot.
- * Prevents cumulative font-size and dimension drift while distinguishing
- * corner scaling from vertical (blank space) and horizontal edge resizing.
- */
-export function computeScaledSectionFromSnapshot(
-  startSection: EmailSection,
-  nextBounds: EmailBounds,
-  direction: string
-): EmailSection {
-  const safeStartW = Math.max(1, startSection.width);
-  const safeStartH = Math.max(1, startSection.height);
-  const scaleX = nextBounds.width / safeStartW;
-  const scaleY = nextBounds.height / safeStartH;
-
-  const isVerticalEdge = direction === "top" || direction === "bottom";
-  const isHorizontalEdge = direction === "left" || direction === "right";
-
-  if (isVerticalEdge) {
-    return {
-      ...startSection,
-      ...nextBounds,
-      nodes: startSection.nodes.map((node) => ({ ...node })),
-    };
-  }
-
-  if (isHorizontalEdge) {
-    return {
-      ...startSection,
-      ...nextBounds,
-      nodes: startSection.nodes.map((node) => {
-        const { minWidth } = getNodeMinDimensions(node.type);
-        const scaledX = round2(node.x * scaleX);
-        const scaledWidth = Math.max(
-          minWidth,
-          Math.min(nextBounds.width, round2(node.width * scaleX))
-        );
-        return {
-          ...node,
-          x: scaledX,
-          width: scaledWidth,
-        };
-      }),
-    };
-  }
-
-  // Corner resize: proportionally scale child positions, dimensions, and typography
-  const fontScale = Math.min(scaleX, scaleY);
-
-  return {
-    ...startSection,
-    ...nextBounds,
-    nodes: startSection.nodes.map((node) => {
-      const { minWidth, minHeight } = getNodeMinDimensions(node.type);
-      const baseFont = node.fontSize ?? (node.type === "heading" ? 24 : 14);
-      const scaledFont = clamp(round1(baseFont * fontScale), 8, 120);
-
-      return {
-        ...node,
-        x: round2(node.x * scaleX),
-        y: round2(node.y * scaleY),
-        width: Math.max(minWidth, round2(node.width * scaleX)),
-        height: Math.max(minHeight, round2(node.height * scaleY)),
-        fontSize: node.fontSize !== undefined ? scaledFont : node.fontSize,
-      };
-    }),
-  };
-}
+export {
+  EMAIL_CANVAS_WIDTH,
+  computeScaledSectionFromSnapshot,
+  computeSymmetricHorizontalBounds,
+  enforceSectionBounds,
+  getNodeMinDimensions,
+  getSectionMinDimensions,
+  sanitizeNodeStylePatch,
+};
 
 export interface EmailEditorContextType {
   sections: EmailSection[];
@@ -133,15 +58,23 @@ export interface EmailEditorContextType {
   setCurrentCampaignId: (id: number | null) => void;
 
   addSection: (template: EmailSectionTemplate) => void;
+  addButtonElement: (template: EmailSectionTemplate) => void;
   addImage: (imageUrl: string) => void;
 
   loadTemplate: (template: EmailTemplateResponse) => void;
+  loadCampaign: (campaign: EmailCampaignResponse) => void;
   resetToBlank: () => void;
 
   updateNodeContent: (
     sectionId: string,
     nodeId: string,
     content: string
+  ) => void;
+
+  updateNodeStyle: (
+    sectionId: string,
+    nodeId: string,
+    patch: Partial<EmailNode>
   ) => void;
 
   updateNodeLink: (
@@ -156,6 +89,13 @@ export interface EmailEditorContextType {
     sectionId: string,
     bounds: Partial<EmailBounds>
   ) => void;
+
+  updateSectionStyle: (
+    sectionId: string,
+    patch: Partial<Pick<EmailSection, "backgroundColor" | "padding">>
+  ) => void;
+
+  duplicateSection: (sectionId: string) => void;
 
   replaceSection: (updatedSection: EmailSection) => void;
 
@@ -228,7 +168,7 @@ export function EmailEditorProvider({
         height: typeof node.height === "number" ? node.height : 40,
       }));
 
-      return {
+      return enforceSectionBounds({
         ...sec,
         id: freshSectionId,
         templateId: sec.templateId || `sec-template-${sIdx}`,
@@ -241,7 +181,7 @@ export function EmailEditorProvider({
         width: typeof sec.width === "number" ? sec.width : 600,
         height: typeof sec.height === "number" ? sec.height : 240,
         nodes: clonedNodes,
-      };
+      });
     });
 
     setSections(clonedSections);
@@ -255,16 +195,62 @@ export function EmailEditorProvider({
   };
 
   /**
+   * Load a saved EmailCampaign into the editor canvas without destructive regeneration.
+   * Preserves IDs, positions, styles, Cloudinary image URLs, and button properties,
+   * while safely defaulting missing optional fields on older saved campaigns.
+   */
+  const loadCampaign = useCallback((campaign: EmailCampaignResponse) => {
+    if (!campaign) return;
+
+    const sourceSections = Array.isArray(campaign.sectionsData)
+      ? campaign.sectionsData
+      : [];
+
+    const restoredSections: EmailSection[] = sourceSections.map((sec, sIdx) =>
+      enforceSectionBounds({
+        ...sec,
+        id: sec.id || crypto.randomUUID(),
+        templateId: sec.templateId || `sec-${sIdx}`,
+        category: sec.category || "custom",
+        name: sec.name || `Section ${sIdx + 1}`,
+        backgroundColor: sec.backgroundColor || "#ffffff",
+        padding: sec.padding ?? "24px",
+        x: typeof sec.x === "number" ? sec.x : 0,
+        y: typeof sec.y === "number" ? sec.y : sIdx * 200,
+        width: typeof sec.width === "number" ? sec.width : 600,
+        height: typeof sec.height === "number" ? sec.height : 200,
+        nodes: (Array.isArray(sec.nodes) ? sec.nodes : []).map((node, nIdx) => ({
+          ...node,
+          id: node.id || crypto.randomUUID(),
+          type: node.type || "text",
+          content: node.content ?? "",
+          x: typeof node.x === "number" ? node.x : 24,
+          y: typeof node.y === "number" ? node.y : 24 + nIdx * 48,
+          width: typeof node.width === "number" ? node.width : 200,
+          height: typeof node.height === "number" ? node.height : 40,
+        })),
+      })
+    );
+
+    setSections(restoredSections);
+    setCurrentCampaignId(campaign.id);
+    setCampaignName(campaign.name || "Untitled Campaign");
+    setCampaignSubject(campaign.subject || campaign.name || "");
+    setSelectedSectionId(restoredSections[0]?.id ?? null);
+    setSelectedNodeId(null);
+  }, []);
+
+  /**
    * Reset the editor canvas safely to a blank state.
    */
-  const resetToBlank = () => {
+  const resetToBlank = useCallback(() => {
     setSections([]);
     setSelectedSectionId(null);
     setSelectedNodeId(null);
     setCurrentCampaignId(null);
     setCampaignName("Untitled Campaign");
     setCampaignSubject("");
-  };
+  }, []);
 
   // Add a complete section with initial positions and dimensions
   const addSection = (template: EmailSectionTemplate) => {
@@ -320,9 +306,72 @@ export function EmailEditorProvider({
       })),
     };
 
-    setSections((current) => [...current, newSection]);
+    setSections((current) => [...current, enforceSectionBounds(newSection)]);
     setSelectedSectionId(sectionId);
     setSelectedNodeId(null);
+  };
+
+  // Insert an independent Canva-style button element directly onto the canvas
+  // without a visible container or 600px wrapper block.
+  const addButtonElement = (template: EmailSectionTemplate) => {
+    const sourceNode = template.nodes[0];
+    if (!sourceNode) return;
+
+    const sectionId = crypto.randomUUID();
+    const nodeId = crypto.randomUUID();
+    const btnWidth = typeof sourceNode.width === "number" ? sourceNode.width : 180;
+    const btnHeight = typeof sourceNode.height === "number" ? sourceNode.height : 44;
+    const defaultX =
+      typeof sourceNode.x === "number"
+        ? sourceNode.x
+        : Math.round((600 - btnWidth) / 2);
+
+    const nextY = sections.reduce(
+      (acc, sec) => Math.max(acc, (sec.y || 0) + (sec.height || 0)),
+      0
+    );
+    const defaultY = nextY === 0 ? 40 : nextY + 20;
+
+    const newButtonSection: EmailSection = {
+      id: sectionId,
+      templateId: template.id,
+      category: "button-element",
+      name: template.name || "Button",
+      backgroundColor: "transparent",
+      padding: "0",
+      x: defaultX,
+      y: defaultY,
+      width: btnWidth,
+      height: btnHeight,
+      nodes: [
+        {
+          ...sourceNode,
+          id: nodeId,
+          type: "button",
+          content: sourceNode.content || "Button",
+          fontSize: sourceNode.fontSize ?? 15,
+          fontFamily: sourceNode.fontFamily,
+          fontWeight: sourceNode.fontWeight || "bold",
+          color: sourceNode.color || "#ffffff",
+          backgroundColor: sourceNode.backgroundColor || "#6d28d9",
+          gradient: sourceNode.gradient,
+          borderColor: sourceNode.borderColor,
+          borderWidth: sourceNode.borderWidth,
+          borderRadius: sourceNode.borderRadius ?? 6,
+          padding: sourceNode.padding || "10px 20px",
+          url: sourceNode.url,
+          linkUrl: sourceNode.linkUrl || sourceNode.url,
+          x: 0,
+          y: 0,
+          width: btnWidth,
+          height: btnHeight,
+        },
+      ],
+    };
+
+    setSections((current) => [...current, enforceSectionBounds(newButtonSection)]);
+    setSelectedSectionId(sectionId);
+    setSelectedNodeId(nodeId);
   };
 
   // Add an uploaded image to the email canvas
@@ -354,7 +403,7 @@ export function EmailEditorProvider({
       ],
     };
 
-    setSections((current) => [...current, newSection]);
+    setSections((current) => [...current, enforceSectionBounds(newSection)]);
     setSelectedSectionId(sectionId);
     setSelectedNodeId(nodeId);
   };
@@ -378,6 +427,33 @@ export function EmailEditorProvider({
           }
           : section
       )
+    );
+  };
+
+  // Update styling, dimensions, or properties on an individual element
+  const updateNodeStyle = (
+    sectionId: string,
+    nodeId: string,
+    patch: Partial<EmailNode>
+  ) => {
+    const safePatch = sanitizeNodeStylePatch(patch);
+    setSections((current) =>
+      current.map((section) => {
+        if (section.id !== sectionId) return section;
+        const isStandalone =
+          section.backgroundColor === "transparent" &&
+          section.nodes.length === 1 &&
+          section.nodes[0].id === nodeId;
+
+        return enforceSectionBounds({
+          ...section,
+          width: isStandalone && typeof safePatch.width === "number" ? safePatch.width : section.width,
+          height: isStandalone && typeof safePatch.height === "number" ? safePatch.height : section.height,
+          nodes: section.nodes.map((node) =>
+            node.id === nodeId ? { ...node, ...safePatch } : node
+          ),
+        });
+      })
     );
   };
 
@@ -417,6 +493,39 @@ export function EmailEditorProvider({
     const targetNode = targetSection.nodes.find((n) => n.id === nodeId);
     if (!targetNode) return;
 
+    // If standalone button element, clone as an independent button on the canvas
+    const isStandalone =
+      targetSection.backgroundColor === "transparent" &&
+      targetSection.nodes.length === 1 &&
+      targetNode.type === "button";
+
+    if (isStandalone) {
+      const freshSectionId = crypto.randomUUID();
+      const freshNodeId = crypto.randomUUID();
+      const nextX = Math.min(Math.max(0, 600 - targetSection.width), targetSection.x + 16);
+      const nextY = targetSection.y + 16;
+
+      const clonedSection: EmailSection = {
+        ...targetSection,
+        id: freshSectionId,
+        x: nextX,
+        y: nextY,
+        nodes: [
+          {
+            ...targetNode,
+            id: freshNodeId,
+            x: 0,
+            y: 0,
+          },
+        ],
+      };
+
+      setSections((current) => [...current, clonedSection]);
+      setSelectedSectionId(freshSectionId);
+      setSelectedNodeId(freshNodeId);
+      return;
+    }
+
     const freshNodeId = crypto.randomUUID();
     const clonedNode: EmailNode = {
       ...targetNode,
@@ -447,17 +556,57 @@ export function EmailEditorProvider({
     setSections((current) =>
       current.map((section) =>
         section.id === sectionId
-          ? { ...section, ...bounds }
+          ? enforceSectionBounds({ ...section, ...bounds })
           : section
       )
     );
   };
 
+  // Update backgroundColor or padding on a non-standalone section
+  const updateSectionStyle = (
+    sectionId: string,
+    patch: Partial<Pick<EmailSection, "backgroundColor" | "padding">>
+  ) => {
+    setSections((current) =>
+      current.map((section) => {
+        if (section.id !== sectionId) return section;
+        const isStandaloneButton =
+          section.backgroundColor === "transparent" &&
+          section.nodes.length === 1 &&
+          section.nodes[0].type === "button";
+        if (isStandaloneButton) return section;
+        return { ...section, ...patch };
+      })
+    );
+  };
+
+  // Duplicate an entire section and all its child nodes
+  const duplicateSection = (sectionId: string) => {
+    const target = sections.find((s) => s.id === sectionId);
+    if (!target) return;
+
+    const freshSectionId = crypto.randomUUID();
+    const cloned: EmailSection = {
+      ...target,
+      id: freshSectionId,
+      y: (target.y || 0) + (target.height || 100) + 16,
+      nodes: target.nodes.map((node) => ({
+        ...node,
+        id: crypto.randomUUID(),
+      })),
+    };
+
+    setSections((current) => [...current, cloned]);
+    setSelectedSectionId(freshSectionId);
+    setSelectedNodeId(null);
+  };
+
   // Atomically replace a section and all its child nodes (e.g. during live/final section resize)
   const replaceSection = (updatedSection: EmailSection) => {
+    const normalized = enforceSectionBounds(updatedSection);
     setSections((current) =>
       current.map((section) =>
-        section.id === updatedSection.id ? updatedSection : section
+        section.id === normalized.id ? normalized : section
       )
     );
   };
@@ -471,14 +620,14 @@ export function EmailEditorProvider({
     setSections((current) =>
       current.map((section) =>
         section.id === sectionId
-          ? {
-            ...section,
-            nodes: section.nodes.map((node) =>
-              node.id === nodeId
-                ? { ...node, ...bounds }
-                : node
-            ),
-          }
+          ? enforceSectionBounds({
+              ...section,
+              nodes: section.nodes.map((node) =>
+                node.id === nodeId
+                  ? { ...node, ...bounds }
+                  : node
+              ),
+            })
           : section
       )
     );
@@ -499,23 +648,29 @@ export function EmailEditorProvider({
     setSelectedNodeId(nodeId);
   };
 
-  // Remove an individual element
+  // Remove an individual element (and its wrapper if it was a standalone button)
   const removeNode = (sectionId: string, nodeId: string) => {
     setSections((current) =>
-      current.map((section) =>
-        section.id === sectionId
-          ? {
-            ...section,
-            nodes: section.nodes.filter(
-              (node) => node.id !== nodeId
-            ),
+      current
+        .map((section) => {
+          if (section.id !== sectionId) return section;
+          const remaining = section.nodes.filter((node) => node.id !== nodeId);
+          if (section.backgroundColor === "transparent" && remaining.length === 0) {
+            return null;
           }
-          : section
-      )
+          return {
+            ...section,
+            nodes: remaining,
+          };
+        })
+        .filter((s): s is EmailSection => s !== null)
     );
 
     if (selectedNodeId === nodeId) {
       setSelectedNodeId(null);
+      if (selectedSectionId === sectionId) {
+        setSelectedSectionId(null);
+      }
     }
   };
 
@@ -545,13 +700,18 @@ export function EmailEditorProvider({
         currentCampaignId,
         setCurrentCampaignId,
         loadTemplate,
+        loadCampaign,
         resetToBlank,
         addSection,
+        addButtonElement,
         addImage,
         updateNodeContent,
+        updateNodeStyle,
         updateNodeLink,
         duplicateNode,
         updateSectionBounds,
+        updateSectionStyle,
+        duplicateSection,
         replaceSection,
         updateNodeBounds,
         selectSection,

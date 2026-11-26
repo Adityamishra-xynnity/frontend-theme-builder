@@ -71,6 +71,7 @@ export interface EditorElement {
   };
   strokeColor?: string;
   strokeWidth?: number;
+  borderRadius?: number;
   lineDash?: number[];
   shapeSides?: number;
   pathData?: (string | number)[][];

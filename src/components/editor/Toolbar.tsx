@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  TOOLBAR_CLASSES,
+  TextFormattingControls,
+  ColorSwatchButton,
+} from "./SharedToolbarControls";
 
 import {
   Undo2,
@@ -11,14 +16,6 @@ import {
   ArrowDownToLine,
   Copy,
   Trash2,
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
   Save,
   X,
   Download,
@@ -26,16 +23,12 @@ import {
   FileDown,
   ChevronDown,
   Palette,
-  BetweenVerticalStart,
-  LetterText,
   List,
   ListOrdered,
   IndentDecrease,
   IndentIncrease,
   RotateCcw,
   RotateCw,
-  Minus,
-  Plus,
   Mail,
   Loader2,
 } from "lucide-react";
@@ -599,18 +592,8 @@ export default function Toolbar() {
 
   
 
-  const toolBtn =
-    "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-slate-600 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-35 select-none";
-
-  const divider = "mx-1 h-5 w-px shrink-0 bg-slate-200";
-
-  const field =
-    "h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
-
-  const group = "flex shrink-0 items-center gap-1";
-
-  const colorPicker =
-    "absolute inset-0 h-full w-full cursor-pointer opacity-0";
+  const { toolBtn, divider, group, colorPicker, barWrapper, barInner } =
+    TOOLBAR_CLASSES;
 
   const isBold =
     object?.fontWeight === "bold" ||
@@ -625,8 +608,8 @@ export default function Toolbar() {
   return (
     <>
       {/* PROFESSIONAL CANVA-INSPIRED SINGLE-ROW TOOLBAR */}
-      <div className="relative z-40 w-full border-b border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="flex h-12 w-full items-center justify-between gap-1.5 px-3 overflow-x-auto overflow-y-visible">
+      <div className={barWrapper}>
+        <div className={barInner}>
 
           {/* LEFT / CONTEXTUAL CONTROLS */}
           <div className="flex items-center gap-1 shrink-0">
@@ -664,293 +647,36 @@ export default function Toolbar() {
             {/* 1. TEXT SELECTED */}
             {isText && (
               <>
-                {/* Font Family */}
-                <div className="relative">
-                  <select
-                    aria-label="Font family"
-                    value={selectedObject?.fontFamily ?? "Arial"}
-                    onChange={(event) => setFontFamily(event.target.value)}
-                    className={`${field} w-32 cursor-pointer appearance-none pr-6 text-xs font-medium`}
-                    title="Font family"
-                  >
-                    <option value="Arial">Arial</option>
-                    <option value="Inter">Inter</option>
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Verdana">Verdana</option>
-                    <option value="Courier New">Courier New</option>
-                  </select>
-                  <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
-                </div>
-
-                {/* Font Size (+ / input / -) */}
-                <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={decreaseFontSize}
-                    className="flex h-full w-7 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
-                    title="Decrease font size"
-                    aria-label="Decrease font size"
-                  >
-                    <Minus size={12} />
-                  </button>
-
-                  <input
-                    type="number"
-                    min={8}
-                    max={200}
-                    value={fontSize}
-                    onChange={(event) => handleFontSizeChange(event.target.value)}
-                    className="h-full w-10 border-x border-slate-200 text-center text-xs font-semibold text-slate-700 outline-none focus:bg-indigo-50/50"
-                    title="Font size"
-                    aria-label="Font size"
-                  />
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={increaseFontSize}
-                    className="flex h-full w-7 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
-                    title="Increase font size"
-                    aria-label="Increase font size"
-                  >
-                    <Plus size={12} />
-                  </button>
-                </div>
-
-                {/* Text Color Swatch */}
-                <label
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs transition hover:border-indigo-400 hover:bg-slate-50"
-                  title="Text color"
-                >
-                  <span className="text-xs font-bold text-slate-800 leading-none">A</span>
-                  <span
-                    className="absolute bottom-1 h-1 w-4 rounded-full"
-                    style={{ backgroundColor: selectedFill }}
-                  />
-                  <input
-                    type="color"
-                    value={
-                      /^#[0-9a-f]{6}$/i.test(selectedFill) ? selectedFill : "#222222"
-                    }
-                    onChange={(event) => setTextColor(event.target.value)}
-                    className={colorPicker}
-                    aria-label="Text color"
-                  />
-                </label>
-
-                <div className={divider} />
-
-                {/* Formatting Pill: Bold, Italic, Underline, Strikethrough */}
-                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={toggleBold}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
-                      isBold
-                        ? "bg-white text-indigo-700 shadow-xs font-bold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Bold (Ctrl+B)"
-                    aria-label="Bold"
-                  >
-                    <Bold size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={toggleItalic}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
-                      isItalic
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Italic (Ctrl+I)"
-                    aria-label="Italic"
-                  >
-                    <Italic size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => toggleTextDecoration("underline")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
-                      isUnderline
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Underline (Ctrl+U)"
-                    aria-label="Underline"
-                  >
-                    <Underline size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => toggleTextDecoration("linethrough")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
-                      isStrikethrough
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Strikethrough"
-                    aria-label="Strikethrough"
-                  >
-                    <Strikethrough size={14} />
-                  </button>
-                </div>
-
-                {/* Text Alignment */}
-                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5">
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => alignObject("left")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
-                      currentAlign === "left"
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Align left"
-                    aria-label="Align left"
-                  >
-                    <AlignLeft size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => alignObject("center")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
-                      currentAlign === "center"
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Align center"
-                    aria-label="Align center"
-                  >
-                    <AlignCenter size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => alignObject("right")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
-                      currentAlign === "right"
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Align right"
-                    aria-label="Align right"
-                  >
-                    <AlignRight size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={preserveSelection}
-                    onClick={() => alignObject("justify")}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
-                      currentAlign === "justify"
-                        ? "bg-white text-indigo-700 shadow-xs font-semibold"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    title="Justify alignment"
-                    aria-label="Justify alignment"
-                  >
-                    <AlignJustify size={14} />
-                  </button>
-                </div>
-
-                <div className={divider} />
-
-                {/* Visible Text Spacing Controls: Line Spacing & Letter Spacing */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Line Spacing */}
-                  <div className="flex items-center gap-1 shrink-0" title="Line spacing">
-                    <span className="flex items-center text-slate-500" title="Line spacing" aria-hidden="true">
-                      <BetweenVerticalStart size={15} />
-                    </span>
-                    <div className="relative">
-                      <select
-                        aria-label="Line spacing"
-                        value={lineSpacing}
-                        onChange={(e) => handleLineSpacingChange(e.target.value)}
-                        className={`${field} w-16 cursor-pointer appearance-none pr-5 text-xs font-medium`}
-                        title="Line spacing"
-                      >
-                        {![0.75, 1, 1.16, 1.25, 1.5, 1.75, 2, 2.5, 3].includes(lineSpacing) && (
-                          <option value={lineSpacing}>{lineSpacing}</option>
-                        )}
-                        <option value={0.75}>0.75</option>
-                        <option value={1}>1.0</option>
-                        <option value={1.16}>1.16</option>
-                        <option value={1.25}>1.25</option>
-                        <option value={1.5}>1.5</option>
-                        <option value={1.75}>1.75</option>
-                        <option value={2}>2.0</option>
-                        <option value={2.5}>2.5</option>
-                        <option value={3}>3.0</option>
-                      </select>
-                      <ChevronDown size={11} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-
-                  {/* Letter Spacing (- / input / +) */}
-                  <div className="flex items-center gap-1 shrink-0" title="Letter spacing">
-                    <span className="flex items-center text-slate-500" title="Letter spacing" aria-hidden="true">
-                      <LetterText size={15} />
-                    </span>
-                    <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-                      <button
-                        type="button"
-                        onMouseDown={preserveSelection}
-                        onClick={() => {
-                          const next = Math.max(0, letterSpacing - 5);
-                          handleLetterSpacingChange(String(next));
-                        }}
-                        className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
-                        title="Decrease letter spacing"
-                        aria-label="Decrease letter spacing"
-                      >
-                        <Minus size={11} />
-                      </button>
-
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={letterSpacing}
-                        onChange={(event) => handleLetterSpacingChange(event.target.value)}
-                        className="h-full w-9 border-x border-slate-200 text-center text-xs font-semibold text-slate-700 outline-none focus:bg-indigo-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        title="Letter spacing (0-100)"
-                        aria-label="Letter spacing"
-                      />
-
-                      <button
-                        type="button"
-                        onMouseDown={preserveSelection}
-                        onClick={() => {
-                          const next = Math.min(100, letterSpacing + 5);
-                          handleLetterSpacingChange(String(next));
-                        }}
-                        className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
-                        title="Increase letter spacing"
-                        aria-label="Increase letter spacing"
-                      >
-                        <Plus size={11} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <TextFormattingControls
+                  fontFamily={selectedObject?.fontFamily ?? "Arial"}
+                  fontSize={fontSize}
+                  color={selectedFill}
+                  isBold={isBold}
+                  isItalic={isItalic}
+                  isUnderline={isUnderline}
+                  isStrikethrough={isStrikethrough}
+                  textAlign={currentAlign}
+                  lineSpacing={lineSpacing}
+                  letterSpacing={letterSpacing}
+                  onFontFamilyChange={(val) => setFontFamily(val)}
+                  onFontSizeDecrease={decreaseFontSize}
+                  onFontSizeIncrease={increaseFontSize}
+                  onFontSizeChange={handleFontSizeChange}
+                  onColorChange={(hex) => setTextColor(hex)}
+                  onToggleBold={toggleBold}
+                  onToggleItalic={toggleItalic}
+                  onToggleUnderline={() => toggleTextDecoration("underline")}
+                  onToggleStrikethrough={() => toggleTextDecoration("linethrough")}
+                  onAlignChange={(align) => alignObject(align)}
+                  onLineSpacingChange={handleLineSpacingChange}
+                  onLetterSpacingDecrease={() =>
+                    handleLetterSpacingChange(String(Math.max(0, letterSpacing - 5)))
+                  }
+                  onLetterSpacingIncrease={() =>
+                    handleLetterSpacingChange(String(Math.min(100, letterSpacing + 5)))
+                  }
+                  onLetterSpacingChange={handleLetterSpacingChange}
+                />
 
                 <div className={divider} />
 
@@ -1003,26 +729,11 @@ export default function Toolbar() {
 
             {/* 2. SHAPE SELECTED */}
             {isShape && (
-              <label
-                className="relative flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 shadow-xs transition hover:border-indigo-300 hover:bg-slate-50"
-                title="Shape color"
-              >
-                <Palette size={14} className="text-slate-500" />
-                <span className="text-xs font-medium text-slate-700">Shape color</span>
-                <span
-                  className="h-4 w-4 rounded-md border border-slate-200 shadow-xs"
-                  style={{ backgroundColor: selectedFill }}
-                />
-                <input
-                  type="color"
-                  value={
-                    /^#[0-9a-f]{6}$/i.test(selectedFill) ? selectedFill : "#2563eb"
-                  }
-                  onChange={(event) => setShapeColor(event.target.value)}
-                  className={colorPicker}
-                  aria-label="Shape color"
-                />
-              </label>
+              <ColorSwatchButton
+                label="Shape color"
+                value={selectedFill}
+                onChange={(hex) => setShapeColor(hex)}
+              />
             )}
 
             {/* 3. GRAPHIC OR IMAGE SELECTED */}

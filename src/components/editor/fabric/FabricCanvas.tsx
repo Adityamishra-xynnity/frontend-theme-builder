@@ -632,6 +632,8 @@ pathStartOffset: 0,
       fill: effectiveFill,
       stroke: effectiveStroke,
       strokeWidth: effectiveStrokeWidth,
+      rx: element.borderRadius ?? 0,
+      ry: element.borderRadius ?? 0,
       originX: "left",
       originY: "top",
     });

@@ -3,18 +3,20 @@ interface ShareEmailModalProps {
   onClose: () => void;
   onSend: (recipientEmail: string, subject: string) => void;
   isSending?: boolean;
+  defaultSubject?: string;
 }
 
 import { useState } from "react";
-import { X, Mail } from "lucide-react";
+import { X, Mail, Loader2 } from "lucide-react";
 
 export default function ShareEmailModal({
   onClose,
   onSend,
   isSending = false,
+  defaultSubject = "My Email Campaign",
 }: ShareEmailModalProps) {
   const [recipientEmail, setRecipientEmail] = useState("");
-  const [subject, setSubject] = useState("My Email Campaign");
+  const [subject, setSubject] = useState(defaultSubject);
   const [error, setError] = useState("");
 
   const handleSend = () => {
@@ -106,9 +108,10 @@ export default function ShareEmailModal({
             <button
               onClick={handleSend}
               disabled={isSending}
-              className="rounded-lg bg-violet-600 px-5 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSending ? "Sending..." : "Send Email"}
+              {isSending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSending ? "Sending email..." : "Send Email"}
             </button>
           </div>
         </div>

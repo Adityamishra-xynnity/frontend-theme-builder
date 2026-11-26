@@ -97,6 +97,11 @@ export default function Navbar() {
             <Mail size={17} />
             Email Campaign
           </NavLink>
+
+          <NavLink to="/email-projects" className={navLinkClass}>
+            <FolderHeart size={17} />
+            Email Projects
+          </NavLink>
         </div>
 
         {/* Desktop Create Menu */}

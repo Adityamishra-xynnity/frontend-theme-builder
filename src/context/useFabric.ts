@@ -3,6 +3,7 @@ import type { Canvas as FabricCanvas } from "fabric";
 import type { EditorElement } from "../types/editor";
 import type { GraphicAsset } from "../types/graphics";
 import type { EmojiAsset } from "../types/emoji";
+import type { ThemeElementAsset } from "../types/themeElements";
 
 export type ToolMode =
   | "select"
@@ -63,6 +64,8 @@ export interface FabricContextType {
     options?: { pendingUploadId?: string; offsetIndex?: number }
   ) => Promise<void>;
   addGraphic: (graphic: GraphicAsset) => Promise<void>;
+  addIcon: (icon: ThemeElementAsset) => Promise<void>;
+  addStructuredLayout: (asset: ThemeElementAsset) => Promise<void>;
   setGraphicColor: (colorIndex: number, newColor: string) => void;
 
   deleteSelected: () => void;
