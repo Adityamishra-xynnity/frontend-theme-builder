@@ -1,7 +1,4 @@
 
-import { useEffect } from "react";
-import { getElements } from "./api/elementApi";
-
 import { Routes, Route, useLocation } from "react-router-dom";
 
 import Navbar from "./components/navbar/Navbar";
@@ -11,6 +8,7 @@ import Home from "./pages/Home";
 import Templates from "./pages/Templates";
 import Editor from "./pages/Editor";
 import SavedDesigns from "./pages/SavedDesigns";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 import { EditorProvider } from "./context/EditorContext";
@@ -23,16 +21,6 @@ export default function App() {
   const isEditorPage =
     location.pathname === "/editor" ||
     location.pathname.startsWith("/editor/");
-
-  useEffect(() => {
-    getElements()
-      .then((data) => {
-        console.log("Elements from backend:", data);
-      })
-      .catch((error) => {
-        console.error("Backend connection failed:", error);
-      });
-  }, []);
 
   return (
     <EditorProvider>
@@ -48,6 +36,7 @@ export default function App() {
               <Route path="/editor/:id" element={<Editor />} />
               <Route path="/saved-designs" element={<SavedDesigns />} />
               <Route path="/email-campaign" element={<EmailCampaign />} />
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

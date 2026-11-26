@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { Check, LoaderCircle, Search, Sparkles, X } from "lucide-react";
 import { useEditor, type EditorPageAsset } from "../../context/EditorContext";
+import { assetLibraryService } from "../../services/assetLibraryService";
 
 interface ApiAsset extends EditorPageAsset {
   sortOrder?: number;
   isActive?: boolean;
 }
-interface PageResponse { content?: ApiAsset[]; last?: boolean }
-const API_URL = "http://localhost:8080/api/assets/ANIMATION";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 function effectName(asset: EditorPageAsset) {
   const config = asset.assetData?.config as Record<string, unknown> | undefined;
@@ -46,44 +45,39 @@ export default function AnimationsPanel() {
   }, [search]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
     const load = async () => {
       setLoading(true);
       setError("");
       try {
-        const all: ApiAsset[] = [];
-        let page = 0;
-        let last = false;
-        while (!last) {
-          const params = new URLSearchParams({
-            page: String(page),
-            size: String(PAGE_SIZE),
-          });
-          if (debouncedSearch.trim()) {
-            params.set("search", debouncedSearch.trim());
-          }
-
-          const response = await fetch(`${API_URL}/page?${params}`, {
-            headers: { Accept: "application/json" },
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error(`Animation assets load nahi hue (${response.status})`);
-          const data: PageResponse = await response.json();
-          if (!Array.isArray(data.content)) throw new Error("Backend se valid animation list nahi mili.");
-          all.push(...data.content.filter((item) => item.isActive !== false));
-          last = data.last ?? data.content.length < PAGE_SIZE;
-          page += 1;
-          if (page > 100) break;
-        }
-        setAssets(all.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+        const res = await assetLibraryService.getAssetsByType("ANIMATION", {
+          page: 0,
+          size: PAGE_SIZE,
+          search: debouncedSearch.trim() || undefined,
+          orderBy: "sort_order",
+          ascending: true,
+        });
+        if (!active) return;
+        const mapped: ApiAsset[] = res.data.map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          category: r.category,
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+          assetData: r.json_data || {},
+        }));
+        setAssets(mapped);
       } catch (err) {
-        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Animation assets load nahi hue.");
+        if (active) setError(err instanceof Error ? err.message : "Animation assets load nahi hue.");
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (active) setLoading(false);
       }
     };
     void load();
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [debouncedSearch]);
 
   const visible = assets;

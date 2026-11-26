@@ -23,8 +23,7 @@ import type {
   GraphicCategory,
 } from "../../../types/graphics";
 import {
-  getGraphicCategories,
-  getRecommendedGraphics,
+  getGraphicsBootstrap,
   getGraphics,
 } from "../../../api/graphicsApi";
 import CategoryRail from "./CategoryRail";
@@ -51,62 +50,6 @@ const STATIC_CATEGORY_ICONS: Record<string, ReactNode> = {
   "lines-dividers": <Minus size={14} />,
   "birds": <Bird size={14} />,
 };
-
-/**
- * Canva-style sections: many small collections are merged into a handful of
- * topic sections. A merged section's id is a comma-separated list of the
- * backend category ids it contains, which /api/graphics understands.
- */
-const SECTION_GROUPS: { name: string; members: string[] }[] = [
-  { name: "Featured", members: ["featured"] },
-  { name: "Social Media", members: ["social-media"] },
-  { name: "Animals & Birds", members: ["realistic-animals", "handdrawn-animals", "birds"] },
-  {
-    name: "Nature & Plants",
-    members: ["bold-foliage", "vivid-leaves", "organic-summer", "camping-rustic-drawing"],
-  },
-  {
-    name: "Food & Objects",
-    members: ["organic-sketched-fruit", "simple-drawn-objects", "pastel-travel-accessories"],
-  },
-  {
-    name: "Shapes & Backgrounds",
-    members: ["abstract-shapes", "gradients-blurs", "lines-dividers"],
-  },
-  { name: "Education & Business", members: ["educational-graphics", "business-graphics"] },
-];
-
-function groupCategories(cats: GraphicCategory[]): GraphicCategory[] {
-  const byId = new Map(cats.map((c) => [c.id, c]));
-  const used = new Set<string>();
-  const sections: GraphicCategory[] = [];
-
-  for (const group of SECTION_GROUPS) {
-    const present = group.members
-      .map((id) => byId.get(id))
-      .filter((c): c is GraphicCategory => Boolean(c));
-    if (present.length === 0) continue;
-    present.forEach((c) => used.add(c.id));
-    sections.push({
-      id: present.map((c) => c.id).join(","),
-      name: group.name,
-      count: present.reduce((sum, c) => sum + c.count, 0),
-      iconKey: present[0].iconKey,
-      previewSvg: present[0].previewSvg,
-    });
-  }
-
-  // Any collection added later that isn't mapped yet goes into one catch-all section
-  const rest = cats.filter((c) => !used.has(c.id));
-  if (rest.length > 0) {
-    sections.push({
-      id: rest.map((c) => c.id).join(","),
-      name: "More Graphics",
-      count: rest.reduce((sum, c) => sum + c.count, 0),
-    });
-  }
-  return sections;
-}
 
 // Global module-level caches so re-opening Static Graphics or switching categories is 0ms instant
 let cachedStaticCategories: GraphicCategory[] | null = null;
@@ -154,7 +97,7 @@ export default function StaticGraphicsBrowser({
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Load static categories and static recommendations from backend
+  // Load static categories, recommendations, and rails in ONE call
   const loadInitialData = useCallback(async () => {
     try {
       if (!cachedStaticCategories || !cachedStaticRecommended) {
@@ -162,55 +105,25 @@ export default function StaticGraphicsBrowser({
       }
       setInitialError(null);
 
-      // 1 & 2. Fetch categories summary and top recommended graphics in parallel
-      const [rawCats, fetchedRecs] = await Promise.all([
-        getGraphicCategories("static"),
-        getRecommendedGraphics(20, "static"),
-      ]);
-      const fetchedCats = groupCategories(rawCats);
+      const { categories: fetchedCats, recommended: fetchedRecs, railsByCategoryId } =
+        await getGraphicsBootstrap("static");
 
       cachedStaticCategories = fetchedCats;
       cachedStaticRecommended = fetchedRecs;
       setCategories(fetchedCats);
       setRecommended(fetchedRecs);
-      setInitialLoading(false); // Unblock UI immediately so user can browse categories
 
-      // 3. Fetch preview graphics for each static category with progressive updates
       const updatedMap: Record<string, GraphicAsset[]> = {};
-      const missingCats: GraphicCategory[] = [];
-
       for (const cat of fetchedCats) {
         if (globalStaticRailsCache.has(cat.id)) {
           updatedMap[cat.id] = globalStaticRailsCache.get(cat.id)!;
-        } else {
-          missingCats.push(cat);
+          continue;
         }
+        const items = railsByCategoryId[cat.id] || [];
+        globalStaticRailsCache.set(cat.id, items);
+        updatedMap[cat.id] = items;
       }
       setCategoryRailMap((prev) => ({ ...prev, ...updatedMap }));
-
-      // Fetch missing rails concurrently
-      if (missingCats.length > 0) {
-        await Promise.all(
-          missingCats.map(async (cat) => {
-            try {
-              const pageResp = await getGraphics({
-                categoryId: cat.id,
-                type: "static",
-                page: 0,
-                size: 10,
-              });
-              const content = pageResp.content || [];
-              globalStaticRailsCache.set(cat.id, content);
-              setCategoryRailMap((prev) => ({
-                ...prev,
-                [cat.id]: content,
-              }));
-            } catch {
-              // Ignore single category failure
-            }
-          })
-        );
-      }
     } catch (err) {
       setInitialError(
         err instanceof Error ? err.message : "Failed to load static graphics."

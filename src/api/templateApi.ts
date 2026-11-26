@@ -1,7 +1,6 @@
 import type { EditorElement } from "../types/editor";
 import { templates as localTemplates } from "../data/templates";
-
-const API_URL = "http://localhost:8080/api/templates";
+import { assetLibraryService } from "../services/assetLibraryService";
 
 export const TEMPLATE_CATEGORIES: Record<string, string> = {
   "classic-gold": "Achievement",
@@ -40,27 +39,17 @@ export interface TemplatePage {
   empty: boolean;
 }
 
+/**
+ * Fetch certificate templates page directly from Supabase PostgreSQL public.asset_library.
+ */
 export async function getTemplatesPage(
   page = 0,
   size = 20
 ): Promise<TemplatePage> {
   try {
-    const response = await fetch(
-      `${API_URL}/page?page=${page}&size=${size}`
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch templates");
-    }
-
-    const data: TemplatePage = await response.json();
-    data.content = data.content.map((t) => ({
-      ...t,
-      category: t.category || TEMPLATE_CATEGORIES[t.templateKey] || "Achievement",
-    }));
-    return data;
+    return await assetLibraryService.getTemplatesPage(page, size);
   } catch (error) {
-    console.warn("Backend template fetch failed, falling back to local templates:", error);
+    console.warn("Supabase template fetch failed, falling back to local templates:", error);
     const localContent: CertificateTemplate[] = localTemplates.map((t, idx) => ({
       id: idx + 1,
       templateKey: t.id,
@@ -85,25 +74,17 @@ export async function getTemplatesPage(
   }
 }
 
+/**
+ * Fetch a certificate template by templateKey directly from Supabase PostgreSQL public.asset_library.
+ */
 export async function getTemplateByKey(
   templateKey: string
 ): Promise<CertificateTemplate> {
   try {
-    const response = await fetch(
-      `${API_URL}/key/${encodeURIComponent(templateKey)}`
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch template");
-    }
-
-    const template: CertificateTemplate = await response.json();
-    template.category =
-      template.category || TEMPLATE_CATEGORIES[template.templateKey] || "Achievement";
-    return template;
+    return await assetLibraryService.getTemplateByKey(templateKey);
   } catch (error) {
     console.warn(
-      `Backend fetch for template key "${templateKey}" failed, falling back to local:`,
+      `Supabase fetch for template key "${templateKey}" failed, falling back to local:`,
       error
     );
     const local = localTemplates.find((t) => t.id === templateKey);

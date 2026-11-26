@@ -11,8 +11,7 @@ import {
 } from "lucide-react";
 import type { EmojiAsset, EmojiCategory } from "../../../types/emoji";
 import {
-  getEmojiCategories,
-  getRecommendedEmojis,
+  getEmojisBootstrap,
   getEmojis,
 } from "../../../api/emojiApi";
 import EmojiCard from "./EmojiCard";
@@ -102,44 +101,23 @@ export default function EmojiBrowser({
     [onSelectEmoji]
   );
 
-  // Load categories and initial rails from backend
+  // Load categories, recommendations, and rails in ONE call
   const loadInitialData = useCallback(async () => {
     try {
       setInitialLoading(true);
       setInitialError(null);
 
-      // 1. Fetch categories summary
-      const fetchedCats = await getEmojiCategories();
-      setCategories(fetchedCats);
+      const { categories: fetchedCats, recommended: fetchedRecs, railsByCategoryId } =
+        await getEmojisBootstrap();
 
-      // 2. Fetch top recommended emojis
-      const fetchedRecs = await getRecommendedEmojis(20);
+      setCategories(fetchedCats);
       setRecommended(fetchedRecs);
 
-      // 3. Fetch preview emojis for each canonical category in parallel
-      const railEntries: [string, EmojiAsset[]][] = await Promise.all(
-        fetchedCats.map(async (cat) => {
-          if (railsCacheRef.current[cat.id]) {
-            return [cat.id, railsCacheRef.current[cat.id]];
-          }
-          try {
-            const pageResp = await getEmojis({
-              category: cat.id,
-              page: 0,
-              size: 10,
-            });
-            const content = pageResp.content || [];
-            railsCacheRef.current[cat.id] = content;
-            return [cat.id, content];
-          } catch {
-            return [cat.id, []];
-          }
-        })
-      );
-
       const railMap: Record<string, EmojiAsset[]> = {};
-      for (const [id, items] of railEntries) {
-        railMap[id] = items;
+      for (const cat of fetchedCats) {
+        const items = railsByCategoryId[cat.id] || [];
+        if (items.length > 0) railsCacheRef.current[cat.id] = items;
+        railMap[cat.id] = items;
       }
       setCategoryRailMap(railMap);
     } catch (err) {

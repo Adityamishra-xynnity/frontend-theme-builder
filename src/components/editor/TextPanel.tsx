@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useFabric } from "../../context/useFabric";
+import { assetLibraryService } from "../../services/assetLibraryService";
 
 type TextStyle = {
   text: string;
@@ -55,17 +56,16 @@ type TextAssetApiResponse = {
   isActive: boolean;
 };
 
-type TextPageResponse = {
+export type TextPageResponse = {
   content?: TextAssetApiResponse[];
   last?: boolean;
   totalPages?: number;
   number?: number;
 };
 
-const API_URL = "http://localhost:8080/api/assets/text/page";
 const PAGE_SIZE = 20;
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   "All",
   "Elegant",
   "Celebration",
@@ -102,7 +102,23 @@ export default function TextPanel() {
   const [shadowColor, setShadowColor] = useState("#000000");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [textBendValue, setTextBendValue] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    assetLibraryService
+      .getCategoriesByType("TEXT")
+      .then((cats) => {
+        if (active && cats.length > 0) {
+          setCategories(["All", ...cats]);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const observerTargetRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -155,59 +171,27 @@ export default function TextPanel() {
       }
 
       try {
-        const params = new URLSearchParams({
-          page: String(pageNumber),
-          size: String(PAGE_SIZE),
+        const res = await assetLibraryService.getAssetsByType("TEXT", {
+          page: pageNumber,
+          size: PAGE_SIZE,
+          category: category !== "All" ? category : undefined,
+          search: search.trim() || undefined,
+          orderBy: "sort_order",
+          ascending: true,
         });
-
-        if (category !== "All") {
-          params.set("category", category);
-        }
-
-        const response = await fetch(`${API_URL}?${params.toString()}`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-          signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            `Text API failed. Status: ${response.status}`,
-          );
-        }
-
-        const data: unknown = await response.json();
-
-        let assets: TextAssetApiResponse[] = [];
-        let backendLast: boolean | undefined;
-        let backendTotalPages: number | undefined;
-
-        // Spring Boot Page response.
-        if (
-          data &&
-          typeof data === "object" &&
-          !Array.isArray(data) &&
-          "content" in data
-        ) {
-          const pageData = data as TextPageResponse;
-
-          if (!Array.isArray(pageData.content)) {
-            throw new Error("Invalid paginated Text API response.");
-          }
-
-          assets = pageData.content;
-          backendLast = pageData.last;
-          backendTotalPages = pageData.totalPages;
-        } else if (Array.isArray(data)) {
-          // Also supports a plain array response.
-          assets = data as TextAssetApiResponse[];
-        } else {
-          throw new Error("Invalid response received from Text API.");
-        }
 
         if (signal.aborted) return;
+
+        const assets: TextAssetApiResponse[] = res.data.map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          assetType: "TEXT",
+          category: r.category,
+          assetData: r.json_data || {},
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+        }));
 
         const mappedCombinations = mapAssets(assets);
 
@@ -228,16 +212,7 @@ export default function TextPanel() {
         pageRef.current = pageNumber;
         setPage(pageNumber);
 
-        let moreAvailable: boolean;
-
-        if (typeof backendLast === "boolean") {
-          moreAvailable = !backendLast;
-        } else if (typeof backendTotalPages === "number") {
-          moreAvailable = pageNumber + 1 < backendTotalPages;
-        } else {
-          moreAvailable = assets.length === PAGE_SIZE;
-        }
-
+        const moreAvailable = (pageNumber + 1) * PAGE_SIZE < res.total;
         hasMoreRef.current = moreAvailable;
         setHasMore(moreAvailable);
       } catch (error) {
@@ -466,7 +441,7 @@ export default function TextPanel() {
         </div>
 
         <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
-          {CATEGORIES.map((item) => (
+          {categories.map((item) => (
             <button
               key={item}
               type="button"

@@ -17,6 +17,7 @@ import {
   FilePlus2,
   Sparkles,
   Mail,
+  Database,
 } from "lucide-react";
 
 export default function Navbar() {
@@ -96,6 +97,11 @@ export default function Navbar() {
           <NavLink to="/email-campaign" className={navLinkClass}>
             <Mail size={17} />
             Email Campaign
+          </NavLink>
+
+          <NavLink to="/admin" className={navLinkClass}>
+            <Database size={17} />
+            Admin
           </NavLink>
         </div>
 
@@ -248,6 +254,15 @@ export default function Navbar() {
             >
               <Mail size={18} />
               Email Campaign
+            </NavLink>
+
+            <NavLink
+              to="/admin"
+              onClick={closeMenus}
+              className={navLinkClass}
+            >
+              <Database size={18} />
+              Admin
             </NavLink>
 
             <button
