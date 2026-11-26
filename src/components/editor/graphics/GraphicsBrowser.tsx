@@ -21,8 +21,7 @@ import type {
   GraphicCategory,
 } from "../../../types/graphics";
 import {
-  getGraphicCategories,
-  getRecommendedGraphics,
+  getGraphicsBootstrap,
   getGraphics,
 } from "../../../api/graphicsApi";
 import CategoryRail from "./CategoryRail";
@@ -83,45 +82,23 @@ export default function GraphicsBrowser({
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Load initial categories and recommendations
+  // Load initial categories, recommendations, and category rails in ONE call
   const loadInitialData = useCallback(async () => {
     try {
       setInitialLoading(true);
       setInitialError(null);
 
-      // 1. Fetch animated categories summary
-      const fetchedCats = await getGraphicCategories("animated");
-      setCategories(fetchedCats);
+      const { categories: fetchedCats, recommended: fetchedRecs, railsByCategoryId } =
+        await getGraphicsBootstrap("animated");
 
-      // 2. Fetch top animated recommendations
-      const fetchedRecs = await getRecommendedGraphics(20, "animated");
+      setCategories(fetchedCats);
       setRecommended(fetchedRecs);
 
-      // 3. Fetch preview graphics for each animated category in parallel
-      const railEntries: [string, GraphicAsset[]][] = await Promise.all(
-        fetchedCats.map(async (cat) => {
-          if (railsCacheRef.current[cat.id]) {
-            return [cat.id, railsCacheRef.current[cat.id]];
-          }
-          try {
-            const pageResp = await getGraphics({
-              categoryId: cat.id,
-              type: "animated",
-              page: 0,
-              size: 10,
-            });
-            const content = pageResp.content || [];
-            if (content.length > 0) railsCacheRef.current[cat.id] = content;
-            return [cat.id, content];
-          } catch {
-            return [cat.id, []];
-          }
-        })
-      );
-
       const railMap: Record<string, GraphicAsset[]> = {};
-      for (const [id, items] of railEntries) {
-        railMap[id] = items;
+      for (const cat of fetchedCats) {
+        const items = railsByCategoryId[cat.id] || [];
+        if (items.length > 0) railsCacheRef.current[cat.id] = items;
+        railMap[cat.id] = items;
       }
       setCategoryRailMap(railMap);
     } catch (err) {

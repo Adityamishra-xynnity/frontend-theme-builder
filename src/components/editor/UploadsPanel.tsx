@@ -2,19 +2,11 @@ import {
   ImagePlus,
   UploadCloud,
   Sparkles,
-  Loader2,
   AlertCircle,
-  Trash2,
-  RefreshCw,
   X,
 } from "lucide-react";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState } from "react";
 import { useFabric } from "../../context/useFabric";
-import {
-  getUploadedImages,
-  deleteUploadedImage,
-  type UserUploadItem,
-} from "../../api/uploadApi";
 import { registerPendingUpload } from "../../services/pendingUploadService";
 
 export default function UploadsPanel() {
@@ -28,40 +20,6 @@ export default function UploadsPanel() {
 
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
-
-  // Uploaded media gallery state
-  const [galleryImages, setGalleryImages] = useState<UserUploadItem[]>([]);
-  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  // Fetch previously uploaded images from backend
-  const loadGallery = useCallback(async () => {
-    try {
-      setIsLoadingGallery(true);
-      const items = await getUploadedImages();
-      setGalleryImages(items);
-    } catch {
-      // Backend might be warming up or offline; non-fatal for initial render
-    } finally {
-      setIsLoadingGallery(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadGallery();
-  }, [loadGallery]);
-
-  // Listen for design saves to refresh gallery with newly uploaded Cloudinary items
-  useEffect(() => {
-    const handleUploadsUpdated = () => {
-      void loadGallery();
-    };
-
-    window.addEventListener("user-uploads-updated", handleUploadsUpdated);
-    return () => {
-      window.removeEventListener("user-uploads-updated", handleUploadsUpdated);
-    };
-  }, [loadGallery]);
 
   /**
    * Process a locally selected file:
@@ -139,37 +97,6 @@ export default function UploadsPanel() {
       for (let i = 0; i < files.length; i++) {
         void processLocalImage(files[i], i);
       }
-    }
-  };
-
-  // Re-insert an existing image from the gallery
-  const handleSelectGalleryItem = async (item: UserUploadItem) => {
-    try {
-      await addImage(item.secureUrl);
-    } catch (err) {
-      console.error("Failed to add image to canvas:", err);
-    }
-  };
-
-  // Delete an image from Cloudinary and PostgreSQL
-  const handleDeleteItem = async (e: React.MouseEvent, item: UserUploadItem) => {
-    e.stopPropagation();
-    if (deletingId !== null) return;
-
-    const confirmed = window.confirm(
-      `Delete "${item.originalFilename || "this image"}" from your uploads?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setDeletingId(item.id);
-      setErrorMessage(null);
-      await deleteUploadedImage(item.id);
-      setGalleryImages((prev) => prev.filter((i) => i.id !== item.id));
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to delete uploaded image.");
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -282,94 +209,6 @@ export default function UploadsPanel() {
             </span>
           ))}
         </div>
-      </div>
-
-      {/* UPLOADED MEDIA GALLERY SECTION */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="mt-4 mb-2 flex items-center justify-between border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700">Uploaded Media</span>
-            {galleryImages.length > 0 && (
-              <span className="rounded-full bg-indigo-100 px-1.5 py-0.2 text-[10px] font-semibold text-indigo-700">
-                {galleryImages.length}
-              </span>
-            )}
-          </div>
-
-          <button
-            type="button"
-            title="Refresh uploads"
-            onClick={() => void loadGallery()}
-            disabled={isLoadingGallery}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none"
-          >
-            <RefreshCw
-              size={12}
-              className={isLoadingGallery ? "animate-spin text-indigo-600" : ""}
-            />
-          </button>
-        </div>
-
-        {/* GALLERY GRID */}
-        {galleryImages.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
-            {galleryImages.map((img) => (
-              <div
-                key={img.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => void handleSelectGalleryItem(img)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    void handleSelectGalleryItem(img);
-                  }
-                }}
-                title={img.originalFilename || "Uploaded Image"}
-                className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md"
-              >
-                <img
-                  src={img.secureUrl}
-                  alt={img.originalFilename || "User upload"}
-                  loading="lazy"
-                  crossOrigin="anonymous"
-                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                />
-
-                {/* DELETE BUTTON ON HOVER */}
-                <button
-                  type="button"
-                  title="Delete from uploads"
-                  disabled={deletingId === img.id}
-                  onClick={(e) => void handleDeleteItem(e, img)}
-                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-red-600 group-hover:opacity-100 focus:opacity-100"
-                >
-                  {deletingId === img.id ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={12} />
-                  )}
-                </button>
-
-                {/* FORMAT BADGE */}
-                {img.format && (
-                  <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1 py-0.2 text-[8px] font-bold uppercase tracking-wider text-white">
-                    {img.format}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          !isLoadingGallery && (
-            <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-4 text-center">
-              <Sparkles size={16} className="mx-auto text-indigo-400 mb-1.5" />
-              <p className="text-xs font-medium text-slate-600">No uploads yet</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">
-                Photos you upload will appear here for easy reuse.
-              </p>
-            </div>
-          )
-        )}
       </div>
     </aside>
   );

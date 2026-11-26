@@ -37,6 +37,7 @@ import StaticGraphicsBrowser from "./graphics/StaticGraphicsBrowser";
 import EmojiBrowser from "./emojis/EmojiBrowser";
 import type { EmojiAsset } from "../../types/emoji";
 import type { GraphicAsset } from "../../types/graphics";
+import { assetLibraryService } from "../../services/assetLibraryService";
 
 // --------------------------------------------------
 // TYPES
@@ -68,7 +69,7 @@ interface ShapeApiAsset {
   isActive: boolean;
 }
 
-interface ShapePageResponse {
+export interface ShapePageResponse {
   content: ShapeApiAsset[];
   number: number;
   size: number;
@@ -93,7 +94,7 @@ interface EmojiApiAsset {
   isActive: boolean;
 }
 
-interface EmojiPageResponse {
+export interface EmojiPageResponse {
   content: EmojiApiAsset[];
   number: number;
   size: number;
@@ -122,7 +123,7 @@ interface PhotoApiAsset {
   isActive: boolean;
 }
 
-interface PhotoPageResponse {
+export interface PhotoPageResponse {
   content: PhotoApiAsset[];
   number: number;
   size: number;
@@ -215,12 +216,8 @@ type PanelView =
   | "animated-designs";
 
 // --------------------------------------------------
-// API CONFIGURATION
+// CONFIGURATION
 // --------------------------------------------------
-
-const API_URL = "http://localhost:8080/api/assets/shapes";
-const EMOJI_API_URL = "http://localhost:8080/api/assets/emoji";
-const PHOTO_API_URL = "http://localhost:8080/api/assets/PHOTO";
 
 const PAGE_SIZE = 10;
 
@@ -873,37 +870,41 @@ export default function ElementsPanel() {
       return;
     }
 
-    const controller = new AbortController();
+    let active = true;
     const fetchSearch = async () => {
       setGlobalSearchLoading(true);
       setGlobalSearchError("");
       try {
-        const res = await fetch(
-          `http://localhost:8080/api/assets/search?search=${encodeURIComponent(debouncedGlobalSearch)}&size=60`,
-          {
-            headers: { Accept: "application/json" },
-            signal: controller.signal,
-          }
-        );
-        if (!res.ok) throw new Error(`Search failed (${res.status})`);
-        const data = await res.json();
-        const items: SearchApiAsset[] = Array.isArray(data.content) ? data.content : [];
+        const res = await assetLibraryService.searchAssets(debouncedGlobalSearch, { size: 60 });
+        if (!active) return;
+        const items: SearchApiAsset[] = res.data.map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          assetType: r.type,
+          category: r.category,
+          assetData: r.json_data || {},
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+        }));
         setGlobalSearchResults(items.filter((item) => item.isActive !== false));
       } catch (err) {
-        if (!controller.signal.aborted) {
+        if (active) {
           setGlobalSearchError(
             err instanceof Error ? err.message : "Search failed"
           );
         }
       } finally {
-        if (!controller.signal.aborted) {
+        if (active) {
           setGlobalSearchLoading(false);
         }
       }
     };
 
     void fetchSearch();
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [debouncedGlobalSearch, view]);
 
   // --------------------------------------------------
@@ -991,14 +992,43 @@ export default function ElementsPanel() {
   // SHAPE CATEGORIES
   // --------------------------------------------------
 
+  const [shapeCategoryNames, setShapeCategoryNames] = useState<string[]>(() =>
+    Object.keys(CATEGORY_ICONS),
+  );
+  const [photoCategoryNames, setPhotoCategoryNames] = useState<string[]>(() =>
+    PHOTO_CATEGORIES.map((c) => c.title),
+  );
+
+  useEffect(() => {
+    let active = true;
+    if (view === "categories" || view === "items") {
+      assetLibraryService
+        .getCategoriesByType("SHAPE")
+        .then((cats) => {
+          if (active && cats.length > 0) setShapeCategoryNames(cats);
+        })
+        .catch(() => {});
+    } else if (view === "photo-categories" || view === "photo-items") {
+      assetLibraryService
+        .getCategoriesByType("PHOTO")
+        .then((cats) => {
+          if (active && cats.length > 0) setPhotoCategoryNames(cats);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [view]);
+
   const categories = useMemo<ShapeCategory[]>(
     () =>
-      Object.entries(CATEGORY_ICONS).map(([title, icon]) => ({
+      shapeCategoryNames.map((title) => ({
         title,
-        icon,
+        icon: CATEGORY_ICONS[title] ?? <Shapes size={17} />,
         items: [],
       })),
-    [],
+    [shapeCategoryNames],
   );
 
   const selectedCategoryData = useMemo(() => {
@@ -1049,39 +1079,28 @@ export default function ElementsPanel() {
     }
 
     try {
-      const params = new URLSearchParams({
-        page: String(pageToLoad),
-        size: String(PAGE_SIZE),
-        category,
-      });
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      const response = await fetch(`${API_URL}/page?${params.toString()}`, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
+      const res = await assetLibraryService.getAssetsByType("SHAPE", {
+        page: pageToLoad,
+        size: PAGE_SIZE,
+        category: category !== "All" ? category : undefined,
+        search: search.trim() || undefined,
+        orderBy: "sort_order",
+        ascending: true,
       });
 
-      if (!response.ok) {
-        throw new Error(
-          `Unable to load shapes. Please try again. Server response: ${response.status}`,
-        );
-      }
-
-      const data: ShapePageResponse = await response.json();
-
-      if (!data || !Array.isArray(data.content)) {
-        throw new Error(
-          "Unable to retrieve valid paginated shape data. Please try again later.",
-        );
-      }
-
-      const activeAssets = data.content.filter(
-        (asset) => asset.isActive !== false,
-      );
+      const isLast = (pageToLoad + 1) * PAGE_SIZE >= res.total;
+      const activeAssets: ShapeApiAsset[] = res.data
+        .map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          assetType: r.type,
+          category: r.category,
+          assetData: r.json_data || {},
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+        }))
+        .filter((asset) => asset.isActive !== false);
 
       const cached = categoryCacheRef.current.get(category);
       const base = replace ? [] : (cached?.assets ?? []);
@@ -1097,15 +1116,15 @@ export default function ElementsPanel() {
 
       categoryCacheRef.current.set(category, {
         assets: nextAssets,
-        page: data.number,
-        hasMore: !data.last,
+        page: pageToLoad,
+        hasMore: !isLast,
       });
 
       if (activeCategoryRef.current === category) {
         setAssets(nextAssets);
-        pageRef.current = data.number;
-        hasMoreRef.current = !data.last;
-        setHasMore(!data.last);
+        pageRef.current = pageToLoad;
+        hasMoreRef.current = !isLast;
+        setHasMore(!isLast);
         setError("");
 
         if (replace && activeAssets.length === 0) {
@@ -1172,45 +1191,34 @@ export default function ElementsPanel() {
     }
 
     try {
-      const params = new URLSearchParams({
-        page: String(pageToLoad),
-        size: String(PAGE_SIZE),
-        category,
+      const res = await assetLibraryService.getAssetsByType("EMOJI", {
+        page: pageToLoad,
+        size: PAGE_SIZE,
+        category: category !== "All" ? category : undefined,
+        search: search.trim() || undefined,
+        orderBy: "sort_order",
+        ascending: true,
       });
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
 
-      const response = await fetch(
-        `${EMOJI_API_URL}/page?${params.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `We couldn’t load the emojis. Please try again in a moment. Server response: ${response.status}`,
+      const isLast = (pageToLoad + 1) * PAGE_SIZE >= res.total;
+      const activeAssets: EmojiApiAsset[] = res.data
+        .map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          assetType: r.type,
+          category: r.category,
+          assetData: r.json_data || {},
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+        }))
+        .filter(
+          (asset) =>
+            asset.isActive !== false &&
+            (Boolean(asset.assetData?.emoji) ||
+             Boolean(asset.assetData?.unicode) ||
+             Boolean(asset.assetData?.svgContent)),
         );
-      }
-
-      const data: EmojiPageResponse = await response.json();
-
-      if (!data || !Array.isArray(data.content)) {
-        throw new Error(
-          "We couldn’t retrieve the emojis correctly. Please try again later.",
-        );
-      }
-
-      const activeAssets = data.content.filter(
-        (asset) =>
-          asset.isActive !== false &&
-          typeof asset.assetData?.emoji === "string" &&
-          asset.assetData.emoji.trim().length > 0,
-      );
 
       const cached = emojiCacheRef.current.get(category);
       const base = replace ? [] : (cached?.assets ?? []);
@@ -1226,15 +1234,15 @@ export default function ElementsPanel() {
 
       emojiCacheRef.current.set(category, {
         assets: nextAssets,
-        page: data.number,
-        hasMore: !data.last,
+        page: pageToLoad,
+        hasMore: !isLast,
       });
 
       if (emojiActiveCategoryRef.current === category) {
         setEmojiAssets(nextAssets);
-        emojiPageRef.current = data.number;
-        emojiHasMoreRef.current = !data.last;
-        setEmojiHasMore(!data.last);
+        emojiPageRef.current = pageToLoad;
+        emojiHasMoreRef.current = !isLast;
+        setEmojiHasMore(!isLast);
         setEmojiError("");
 
         if (replace && activeAssets.length === 0) {
@@ -1305,42 +1313,32 @@ export default function ElementsPanel() {
     }
 
     try {
-      const params = new URLSearchParams({
-        page: String(pageToLoad),
-        size: String(PAGE_SIZE),
-        category,
+      const res = await assetLibraryService.getAssetsByType("PHOTO", {
+        page: pageToLoad,
+        size: PAGE_SIZE,
+        category: category !== "All" ? category : undefined,
+        search: search.trim() || undefined,
+        orderBy: "sort_order",
+        ascending: true,
       });
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
 
-      const response = await fetch(
-        `${PHOTO_API_URL}/page?${params.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `We couldn’t load the photos. Please try again in a moment.. Server response: ${response.status}`,
+      const isLast = (pageToLoad + 1) * PAGE_SIZE >= res.total;
+      const activeAssets: PhotoApiAsset[] = res.data
+        .map((r) => ({
+          id: r.id as any,
+          assetKey: r.asset_key,
+          name: r.name,
+          assetType: r.type,
+          category: r.category,
+          assetData: r.json_data || {},
+          sortOrder: r.sort_order,
+          isActive: r.is_active,
+        }))
+        .filter(
+          (asset) =>
+            asset.isActive !== false &&
+            getPhotoUrl(asset).length > 0,
         );
-      }
-
-      const data: PhotoPageResponse = await response.json();
-
-      if (!data || !Array.isArray(data.content)) {
-        throw new Error("We couldn’t retrieve the photos correctly. Please try again later.");
-      }
-
-      const activeAssets = data.content.filter(
-        (asset) =>
-          asset.isActive !== false &&
-          getPhotoUrl(asset).length > 0,
-      );
 
       const cached = photoCacheRef.current.get(category);
       const base = replace ? [] : (cached?.assets ?? []);
@@ -1357,15 +1355,15 @@ export default function ElementsPanel() {
 
       photoCacheRef.current.set(category, {
         assets: nextAssets,
-        page: data.number,
-        hasMore: !data.last,
+        page: pageToLoad,
+        hasMore: !isLast,
       });
 
       if (photoActiveCategoryRef.current === category) {
         setPhotoAssets(nextAssets);
-        photoPageRef.current = data.number;
-        photoHasMoreRef.current = !data.last;
-        setPhotoHasMore(!data.last);
+        photoPageRef.current = pageToLoad;
+        photoHasMoreRef.current = !isLast;
+        setPhotoHasMore(!isLast);
         setPhotoError("");
 
         if (replace && activeAssets.length === 0) {
@@ -1603,7 +1601,22 @@ export default function ElementsPanel() {
       item.label.toLowerCase().includes(normalizedSearch),
     ) ?? [];
 
-  const filteredPhotoCategories = PHOTO_CATEGORIES.filter((category) =>
+  const dynamicPhotoCategories = useMemo<PhotoCategory[]>(
+    () =>
+      photoCategoryNames.map((title) => {
+        const preset = PHOTO_CATEGORIES.find((p) => p.title === title);
+        return (
+          preset ?? {
+            title,
+            emoji: "📷",
+            description: `${title} photos`,
+          }
+        );
+      }),
+    [photoCategoryNames],
+  );
+
+  const filteredPhotoCategories = dynamicPhotoCategories.filter((category) =>
     category.title.toLowerCase().includes(normalizedSearch),
   );
 
