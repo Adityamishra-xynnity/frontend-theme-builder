@@ -13,7 +13,11 @@ import type {
   EmojiPageResponse,
   EmojiAssetData,
 } from "../types/emoji";
-import type { CertificateTemplate, TemplatePage } from "../api/templateApi";
+import {
+  TEMPLATE_CATEGORIES,
+  type CertificateTemplate,
+  type TemplatePage,
+} from "../api/templateApi";
 
 export interface AssetLibraryRecord {
   id: string; // UUID or number
@@ -147,14 +151,23 @@ export function toEmojiAsset(r: AssetLibraryRecord): EmojiAsset {
 
 export function toCertificateTemplate(r: AssetLibraryRecord): CertificateTemplate {
   const data = r.json_data || {};
+  const elements =
+    (Array.isArray(data.elementsData) && data.elementsData) ||
+    (Array.isArray(data.elements) && data.elements) ||
+    (Array.isArray(data.elements_data) && data.elements_data) ||
+    [];
   return {
     id: r.id as any,
     templateKey: r.asset_key,
     name: r.name || data.title || r.asset_key,
     description: data.description || "",
     backgroundColor: data.backgroundColor || "#ffffff",
-    category: r.category || "Achievement",
-    elementsData: data.elementsData || [],
+    category:
+      data.category ||
+      TEMPLATE_CATEGORIES[r.asset_key] ||
+      r.category ||
+      "Achievement",
+    elementsData: elements,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

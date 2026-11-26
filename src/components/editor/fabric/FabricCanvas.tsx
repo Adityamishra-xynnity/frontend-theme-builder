@@ -28,6 +28,7 @@ import type {
   ElementType,
 } from "../../../types/editor";
 import { graphicAnimationRuntime } from "../../../utils/graphicAnimationRuntime";
+import { getElementSignature } from "../../../utils/elementSignature";
 
 
 function createStripedTextPattern(baseColor: string, stripeColor: string): Pattern {
@@ -211,60 +212,6 @@ function createTextBendPath(
       selectable: false,
       evented: false,
     },
-  );
-}
-// svgContent of detailed illustrations can be >1 MB; hashing it is far cheaper than
-// stringifying it into the signature. One-entry memo keeps repeat calls O(1).
-let lastSvgForSig = "";
-let lastSvgSig = "";
-function svgSignature(svg: string | undefined): string {
-  if (!svg) return "";
-  if (svg === lastSvgForSig) return lastSvgSig;
-  let h = 0x811c9dc5;
-  for (let i = 0; i < svg.length; i++) {
-    h ^= svg.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  lastSvgForSig = svg;
-  lastSvgSig = `${svg.length}:${h >>> 0}`;
-  return lastSvgSig;
-}
-
-function getElementSignature(elements: EditorElement[]): string {
-  return JSON.stringify(
-    elements.map((element) => ({
-      id: element.id,
-      type: element.type,
-      x: element.x,
-      y: element.y,
-      width: element.width,
-      height: element.height,
-      scaleX: element.scaleX ?? 1,
-      scaleY: element.scaleY ?? 1,
-      angle: element.angle ?? 0,
-      opacity: element.opacity ?? 1,
-      text: element.text ?? "",
-      fontSize: element.fontSize ?? 32,
-      fontFamily: element.fontFamily ?? "Arial",
-      color: element.color ?? "#000000",
-      backgroundColor: element.backgroundColor ?? "",
-      fontWeight: element.fontWeight ?? "normal",
-      fontStyle: element.fontStyle ?? "normal",
-      textAlign: element.textAlign ?? "left",
-      lineHeight: element.lineHeight ?? 1.16,
-      charSpacing: element.charSpacing ?? 0,
-      textBend: element.textBend ?? 0,
-      strokeColor: element.strokeColor ?? "",
-      strokeWidth: element.strokeWidth ?? 0,
-      lineDash: element.lineDash ?? [],
-      shapeSides: element.shapeSides ?? 0,
-      src: element.src ?? "",
-      pathData: element.pathData ?? [],
-      tableData: element.tableData ?? null,
-      graphicKey: element.graphicKey ?? "",
-      svgContent: svgSignature(element.svgContent),
-      colorPalette: element.colorPalette ?? [],
-    })),
   );
 }
 
@@ -669,7 +616,7 @@ pathStartOffset: 0,
           points,
           width,
           height,
-          isSquareStar ? 0.7 : 0.42,
+          isSquareStar || points >= 16 ? 41 / 75 : 34 / 75,
         ),
         width,
         height,
@@ -813,7 +760,7 @@ pathStartOffset: 0,
     const outline = {
       fill,
       stroke: strokeColor,
-      strokeWidth: strokeWidth || 2,
+      strokeWidth: element.strokeWidth ?? 2,
       objectCaching: false,
     };
 
@@ -851,8 +798,8 @@ pathStartOffset: 0,
         leaf: `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.9} ${height * 0.8} 0 ${height} Z`,
         "leaf-rounded": `M 0 ${height} Q ${width * 0.1} 0 ${width} 0 Q ${width} ${height} 0 ${height} Z`,
         "leaf-pointed": `M 0 ${height} Q ${width * 0.2} 0 ${width} 0 Q ${width * 0.7} ${height * 0.8} 0 ${height} Z`,
-        "leaf-pair": `M 0 ${height * 0.5} Q ${width * 0.1} 0 ${width * 0.5} 0 Q ${width * 0.5} ${height * 0.5} 0 ${height * 0.5} Z M ${width * 0.5} ${height} Q ${width * 0.55} ${height * 0.3} ${width} ${height * 0.3} Q ${width * 0.95} ${height} ${width * 0.5} ${height} Z`,
-        vine: `M 0 ${height} Q ${width * 0.25} ${height * 0.8} ${width * 0.2} ${height * 0.5} T ${width * 0.5} ${height * 0.2} T ${width} 0`,
+        "leaf-pair": `M 0 ${height} Q ${width * 0.1} 0 ${width * 0.5} 0 Q ${width * (70 / 150)} ${height * 0.8} 0 ${height} Z M ${width * 0.5} ${height} Q ${width * 0.6} 0 ${width} 0 Q ${width * (145 / 150)} ${height * 0.8} ${width * 0.5} ${height} Z`,
+        vine: "M 0 100 Q 40 80 30 50 Q 20 20 60 15 Q 100 10 95 45 Q 90 75 130 70 Q 165 65 150 30",
         "flow-document": (() => {
           // Fabric includes the path stroke in its reported width/height.
           // Subtract it from the path coordinates so rebuilding this shape
@@ -865,7 +812,7 @@ pathStartOffset: 0,
         })(),
         "speech-bubble": `M 0 0 L ${width} 0 L ${width} ${height * 0.8} L ${width * 0.3} ${height * 0.8} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.8} L 0 ${height * 0.8} Z`,
         "chat-bubble": `M ${width * 0.1} 0 L ${width * 0.9} 0 Q ${width} 0 ${width} ${height * 0.15} L ${width} ${height * 0.7} Q ${width} ${height * 0.85} ${width * 0.85} ${height * 0.85} L ${width * 0.3} ${height * 0.85} L ${width * 0.15} ${height} L ${width * 0.18} ${height * 0.85} L ${width * 0.1} ${height * 0.85} Q 0 ${height * 0.85} 0 ${height * 0.7} L 0 ${height * 0.15} Q 0 0 ${width * 0.1} 0 Z`,
-        "thought-bubble": `M ${width * 0.2} ${height * 0.2} C 0 ${height * 0.1} 0 ${height * 0.5} ${width * 0.15} ${height * 0.6} C 0 ${height} ${width * 0.5} ${height} ${width * 0.6} ${height * 0.8} C ${width} ${height} ${width} ${height * 0.4} ${width * 0.8} ${height * 0.3} C ${width * 0.7} 0 ${width * 0.3} 0 ${width * 0.2} ${height * 0.2} Z`,
+        "thought-bubble": "M 30 15 C 5 15 0 45 15 60 C 0 85 25 105 50 95 C 70 120 100 105 105 90 C 135 100 155 80 145 60 C 170 35 145 10 125 20 C 105 -5 70 0 60 15 C 50 10 40 10 30 15 Z",
       };
 
       if (paths[type]) {
@@ -875,15 +822,20 @@ pathStartOffset: 0,
         });
       } else if (type === "flow-process") {
         object = new Rect({ width, height, ...outline });
-      } else if (
-        type === "flow-terminator" ||
-        type === "rounded-bubble"
-      ) {
+      } else if (type === "flow-terminator") {
         object = new Rect({
           width,
           height,
-          rx: Math.min(width, height) / 3,
-          ry: Math.min(width, height) / 3,
+          rx: Math.min(width, height) / 2,
+          ry: Math.min(width, height) / 2,
+          ...outline,
+        });
+      } else if (type === "rounded-bubble") {
+        object = new Rect({
+          width,
+          height,
+          rx: Math.min(24, Math.min(width, height) / 2),
+          ry: Math.min(24, Math.min(width, height) / 2),
           ...outline,
         });
       } else if (type === "flow-connector") {
@@ -960,7 +912,11 @@ pathStartOffset: 0,
     // slightly from the dimensions saved on the page (stroke + Bézier bounds).
     // Keep its rendered size equal to the saved rendered size on every rebuild.
     // This is intentionally limited to this one shape type.
-    if (element.type === "flow-document") {
+    if (
+      element.type === "flow-document" ||
+      element.type === "thought-bubble" ||
+      element.type === "vine"
+    ) {
       const savedScaleX = element.scaleX ?? 1;
       const savedScaleY = element.scaleY ?? 1;
       const rebuiltWidth = Math.max(1, object.width ?? width);
@@ -1040,6 +996,7 @@ export default function FabricEditorCanvas({
     setActiveTableCell,
     setTableCellText,
     convertCanvasToElements,
+    isRecentCanvasSync,
     dropDraggedElement,
   } = useFabric();
 
@@ -1625,14 +1582,24 @@ export default function FabricEditorCanvas({
     );
 
     if (incomingSignature === currentSignature) {
+      canvasPageIdRef.current = activePageId;
       internalChangeRef.current = false;
       lastSyncedSignatureRef.current = "";
       return;
     }
 
     if (incomingSignature === lastSyncedSignatureRef.current) {
+      canvasPageIdRef.current = activePageId;
       internalChangeRef.current = false;
       lastSyncedSignatureRef.current = "";
+      return;
+    }
+
+    if (
+      canvasPageIdRef.current === activePageId &&
+      isRecentCanvasSync(activePageId, incomingSignature, elements)
+    ) {
+      internalChangeRef.current = false;
       return;
     }
 

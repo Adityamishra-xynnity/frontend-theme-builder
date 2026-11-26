@@ -19,6 +19,7 @@ import {
   deleteDesign,
   type Design,
   type DesignPageData,
+  type DesignPreviewElement,
 } from "../api/designApi";
 
 export type PaperSize = "A1" | "A2" | "A3" | "A4" | "A5";
@@ -53,6 +54,7 @@ export interface SavedDesign {
   pageSize?: PaperSize;
   orientation?: PageOrientation;
   pages?: EditorPage[];
+  previewElements?: DesignPreviewElement[];
 }
 
 interface EditorContextType {
@@ -335,14 +337,14 @@ export function EditorProvider({
       const updated = previous.map((page) =>
         page.id === activePageId
           ? {
-              ...page,
-              elements,
-              backgroundColor,
-              pageSize,
-              orientation,
-              borderAsset,
-              animationAsset,
-            }
+            ...page,
+            elements,
+            backgroundColor,
+            pageSize,
+            orientation,
+            borderAsset,
+            animationAsset,
+          }
           : page
       );
 
@@ -386,14 +388,14 @@ export function EditorProvider({
       ...currentPages.map((page) =>
         page.id === activePageIdRef.current
           ? {
-              ...page,
-              elements: currentElements,
-              backgroundColor,
-              pageSize,
-              orientation,
-              borderAsset,
-              animationAsset,
-            }
+            ...page,
+            elements: currentElements,
+            backgroundColor,
+            pageSize,
+            orientation,
+            borderAsset,
+            animationAsset,
+          }
           : page
       ),
       newPage,
@@ -450,14 +452,14 @@ export function EditorProvider({
       ...currentPages.map((page) =>
         page.id === activePageIdRef.current
           ? {
-              ...page,
-              elements: sourceElements,
-              backgroundColor,
-              pageSize,
-              orientation,
-              borderAsset,
-              animationAsset,
-            }
+            ...page,
+            elements: sourceElements,
+            backgroundColor,
+            pageSize,
+            orientation,
+            borderAsset,
+            animationAsset,
+          }
           : page
       ),
       copied,
@@ -542,14 +544,14 @@ export function EditorProvider({
       const nextPages = pagesRef.current.map((page) =>
         page.id === currentActivePageId
           ? {
-              ...page,
-              elements: currentElements,
-              backgroundColor,
-              pageSize,
-              orientation,
-              borderAsset,
-              animationAsset,
-            }
+            ...page,
+            elements: currentElements,
+            backgroundColor,
+            pageSize,
+            orientation,
+            borderAsset,
+            animationAsset,
+          }
           : page
       );
 
@@ -833,10 +835,13 @@ export function EditorProvider({
     setSelectedId(null);
   };
 
-  const convertDesign = (
+  const convertDesign = useCallback((
     design: Design
   ): SavedDesign => {
-    const normalizedPages = normalizePages(design);
+    const hasFullData =
+      (Array.isArray(design.pages) && design.pages.length > 0) ||
+      (Array.isArray(design.elements) && design.elements.length > 0);
+    const normalizedPages = hasFullData ? normalizePages(design) : undefined;
 
     return {
       id: design.id,
@@ -845,11 +850,12 @@ export function EditorProvider({
       // Legacy top-level fields retained.
       elements: Array.isArray(design.elements)
         ? design.elements
-        : normalizedPages[0].elements,
+        : normalizedPages?.[0]?.elements ?? [],
 
       backgroundColor:
         design.backgroundColor ||
-        normalizedPages[0].backgroundColor,
+        normalizedPages?.[0]?.backgroundColor ||
+        "#ffffff",
 
       createdAt:
         design.createdAt || new Date().toISOString(),
@@ -859,15 +865,16 @@ export function EditorProvider({
 
       pageSize: isPaperSize(design.pageSize)
         ? design.pageSize
-        : normalizedPages[0].pageSize,
+        : normalizedPages?.[0]?.pageSize ?? "A4",
 
       orientation: isOrientation(design.orientation)
         ? design.orientation
-        : normalizedPages[0].orientation,
+        : normalizedPages?.[0]?.orientation ?? "landscape",
 
       pages: normalizedPages,
+      previewElements: design.previewElements,
     };
-  };
+  }, []);
 
   const getSavedDesigns =
     async (): Promise<SavedDesign[]> => {
@@ -880,7 +887,7 @@ export function EditorProvider({
       }
     };
 
-  const getSavedDesignsPage = async (
+  const getSavedDesignsPage = useCallback(async (
     page: number,
     size = 20
   ) => {
@@ -893,7 +900,7 @@ export function EditorProvider({
       currentPage: result.number,
       last: result.last,
     };
-  };
+  }, [convertDesign]);
 
   const saveDesign = async (
     name?: string,
@@ -910,7 +917,7 @@ export function EditorProvider({
     const finalElements = Array.isArray(elementsOverride)
       ? elementsOverride
       : canvasSnapshotProviderRef.current?.() ??
-        latestElementsRef.current;
+      latestElementsRef.current;
 
     const finalBackground =
       typeof backgroundOverride === "string"
@@ -925,14 +932,14 @@ export function EditorProvider({
     const currentPages = pagesRef.current.map((page) =>
       page.id === activePageIdRef.current
         ? {
-            ...page,
-            elements: finalElements,
-            backgroundColor: finalBackground,
-            pageSize: finalPageSize,
-            orientation: finalOrientation,
-            borderAsset,
-            animationAsset,
-          }
+          ...page,
+          elements: finalElements,
+          backgroundColor: finalBackground,
+          pageSize: finalPageSize,
+          orientation: finalOrientation,
+          borderAsset,
+          animationAsset,
+        }
         : page
     );
 
@@ -1073,14 +1080,14 @@ export function EditorProvider({
     const nextPages = pagesRef.current.map((page) =>
       page.id === syncedPageId
         ? {
-            ...page,
-            elements: canvasElements,
-            backgroundColor,
-            pageSize,
-            orientation,
-            borderAsset: page.borderAsset ?? null,
-            animationAsset: page.animationAsset ?? null,
-          }
+          ...page,
+          elements: canvasElements,
+          backgroundColor,
+          pageSize,
+          orientation,
+          borderAsset: page.borderAsset ?? null,
+          animationAsset: page.animationAsset ?? null,
+        }
         : page
     );
 

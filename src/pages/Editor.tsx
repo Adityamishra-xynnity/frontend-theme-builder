@@ -16,6 +16,7 @@ import {
   getTemplateByKey,
   type CertificateTemplate,
 } from "../api/templateApi";
+import { getDesign, type Design } from "../api/designApi";
 
 import EditorSidebar from "../components/editor/EditorSidebar";
 import EditorPanel from "../components/editor/EditorPanel";
@@ -134,14 +135,50 @@ export default function Editor() {
     if (savedDesign) {
       setSelectedTemplate(null);
       setTemplateError("");
-      setTemplateLoading(false);
 
-      loadSavedDesign(savedDesign);
+      const hasFullData =
+        (Array.isArray(savedDesign.pages) && savedDesign.pages.length > 0) ||
+        (Array.isArray(savedDesign.elements) && savedDesign.elements.length > 0);
 
-      setPageSettings(
-        savedDesign.pageSize ?? "A4",
-        savedDesign.orientation ?? "landscape",
-      );
+      if (hasFullData) {
+        setTemplateLoading(false);
+        loadSavedDesign(savedDesign);
+        setPageSettings(
+          savedDesign.pageSize ?? "A4",
+          savedDesign.orientation ?? "landscape",
+        );
+      } else {
+        setTemplateLoading(true);
+        getDesign(savedDesign.id)
+          .then((fullDesign: Design) => {
+            if (cancelled) return;
+            loadSavedDesign({
+              id: fullDesign.id,
+              name: fullDesign.name || "My Certificate",
+              elements: Array.isArray(fullDesign.elements) ? fullDesign.elements : [],
+              backgroundColor: fullDesign.backgroundColor || "#ffffff",
+              createdAt: fullDesign.createdAt || new Date().toISOString(),
+              updatedAt: fullDesign.updatedAt || new Date().toISOString(),
+              pageSize: (fullDesign.pageSize as PaperSize) ?? "A4",
+              orientation: (fullDesign.orientation as PageOrientation) ?? "landscape",
+              pages: fullDesign.pages,
+            });
+            setPageSettings(
+              (fullDesign.pageSize as PaperSize) ?? "A4",
+              (fullDesign.orientation as PageOrientation) ?? "landscape",
+            );
+          })
+          .catch((error) => {
+            if (cancelled) return;
+            console.error("Failed to load saved design:", error);
+            setTemplateError("Unable to load this saved design. Please try again.");
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setTemplateLoading(false);
+            }
+          });
+      }
 
       return () => {
         cancelled = true;
