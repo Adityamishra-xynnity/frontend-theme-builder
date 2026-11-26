@@ -1556,7 +1556,7 @@ export default function Toolbar() {
                 ) : (
                   <Save size={14} />
                 )}
-                {isSaving ? "Uploading & Saving..." : "Save Certificate"}
+                {isSaving ? "Saving..." : "Save Certificate"}
               </button>
             </div>
           </form>

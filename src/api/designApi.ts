@@ -22,12 +22,24 @@ export interface DesignPageData {
   animationAsset?: DesignAssetData | null;
 }
 
+export interface DesignPreviewElement {
+  id: string;
+  type: string;
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  color?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+}
+
 export interface Design {
   id: number;
   name: string;
   backgroundColor: string;
-  elements: EditorElement[];
+  elements?: EditorElement[];
   pages?: DesignPageData[];
+  previewElements?: DesignPreviewElement[];
   createdAt?: string;
   updatedAt?: string;
   pageSize?: PaperSize;

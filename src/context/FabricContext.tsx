@@ -27,6 +27,7 @@ import {
 
 import jsPDF from "jspdf";
 import { useEditor } from "./EditorContext";
+import { getElementSignature } from "../utils/elementSignature";
 
 import type {
   ElementType,
@@ -980,6 +981,31 @@ export function FabricProvider({
   }
 
   const syncScheduledRef = useRef<number | null>(null);
+  const recentSyncedSignaturesRef = useRef<Map<string, string[]>>(new Map());
+  const lastSyncedElementsRef = useRef<EditorElement[] | null>(null);
+
+  function recordSyncedSignature(pageId: string, elements: EditorElement[]) {
+    lastSyncedElementsRef.current = elements;
+    const signature = getElementSignature(elements);
+    const list = recentSyncedSignaturesRef.current.get(pageId) ?? [];
+    list.push(signature);
+    if (list.length > 12) {
+      list.splice(0, list.length - 12);
+    }
+    recentSyncedSignaturesRef.current.set(pageId, list);
+  }
+
+  function isRecentCanvasSync(
+    pageId: string,
+    signature: string,
+    elements?: EditorElement[],
+  ): boolean {
+    if (elements && elements === lastSyncedElementsRef.current) {
+      return true;
+    }
+    const list = recentSyncedSignaturesRef.current.get(pageId);
+    return Boolean(list && list.includes(signature));
+  }
 
   function syncCanvasToEditor(immediate = false) {
     const canvas = canvasRef.current;
@@ -990,7 +1016,9 @@ export function FabricProvider({
         cancelAnimationFrame(syncScheduledRef.current);
         syncScheduledRef.current = null;
       }
-      syncElementsFromCanvas(convertCanvasToElements(), activePageId);
+      const converted = convertCanvasToElements();
+      recordSyncedSignature(activePageId, converted);
+      syncElementsFromCanvas(converted, activePageId);
       return;
     }
 
@@ -1000,7 +1028,9 @@ export function FabricProvider({
       syncScheduledRef.current = null;
       const currentCanvas = canvasRef.current;
       if (!currentCanvas) return;
-      syncElementsFromCanvas(convertCanvasToElements(), activePageId);
+      const converted = convertCanvasToElements();
+      recordSyncedSignature(activePageId, converted);
+      syncElementsFromCanvas(converted, activePageId);
     });
   }
 
@@ -4302,6 +4332,7 @@ export function FabricProvider({
     saveCurrentDesign,
     downloadPNG,
     downloadPDF,
+    isRecentCanvasSync,
   };
 
   return (

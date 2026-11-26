@@ -120,7 +120,7 @@ export default function SavedDesigns() {
 
   // Load the next page when the user scrolls near the bottom.
   const loadNextPageRef = useRef<() => Promise<void>>(
-    async () => {}
+    async () => { }
   );
 
   loadNextPageRef.current = async () => {
@@ -259,7 +259,10 @@ export default function SavedDesigns() {
   };
 
   const getPreviewText = (design: SavedDesign) => {
-    return design.elements
+    if (Array.isArray(design.previewElements)) {
+      return design.previewElements.slice(0, 3);
+    }
+    return (design.elements ?? [])
       .filter(
         (element) =>
           element.type === "heading" ||

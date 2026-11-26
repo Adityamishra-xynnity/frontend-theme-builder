@@ -38,6 +38,7 @@ export interface FabricContextType {
   setSelectedObject: (object: any) => void;
 
   convertCanvasToElements: () => EditorElement[];
+  isRecentCanvasSync: (pageId: string, signature: string, elements?: EditorElement[]) => boolean;
   selectObjectById: (id: string) => void;
 
   addText: (type?: TextElementType) => void;
