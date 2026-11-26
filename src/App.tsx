@@ -9,6 +9,7 @@ import Templates from "./pages/Templates";
 import Editor from "./pages/Editor";
 import SavedDesigns from "./pages/SavedDesigns";
 import AdminPanel from "./pages/AdminPanel";
+import EmailProjects from "./pages/EmailProjects";
 import NotFound from "./pages/NotFound";
 
 import { EditorProvider } from "./context/EditorContext";
@@ -35,7 +36,9 @@ export default function App() {
               <Route path="/editor" element={<Editor />} />
               <Route path="/editor/:id" element={<Editor />} />
               <Route path="/saved-designs" element={<SavedDesigns />} />
+              <Route path="/email-projects" element={<EmailProjects />} />
               <Route path="/email-campaign" element={<EmailCampaign />} />
+              <Route path="/email-campaign/:id" element={<EmailCampaign />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

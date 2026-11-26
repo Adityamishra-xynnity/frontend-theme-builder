@@ -99,6 +99,11 @@ export default function Navbar() {
             Email Campaign
           </NavLink>
 
+          <NavLink to="/email-projects" className={navLinkClass}>
+            <FolderHeart size={17} />
+            Email Projects
+          </NavLink>
+
           <NavLink to="/admin" className={navLinkClass}>
             <Database size={17} />
             Admin

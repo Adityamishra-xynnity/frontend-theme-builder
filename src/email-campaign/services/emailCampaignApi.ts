@@ -1,6 +1,9 @@
 import type {
   EmailTemplateResponse,
   EmailCampaignHeaderTemplateResponse,
+  EmailCampaignFooterTemplateResponse,
+  EmailCampaignButtonTemplateResponse,
+  EmailCampaignHighlightTemplateResponse,
   EmailCampaignResponse,
   EmailCampaignRequest,
   EmailCampaignSendRequest,
@@ -172,6 +175,323 @@ export async function fetchEmailCampaignHeaderTemplates(
 }
 
 // ==========================================
+// FOOTER TEMPLATE API SERVICES
+// ==========================================
+
+/**
+ * Fetch paginated active email campaign footer templates.
+ */
+export async function fetchEmailCampaignFootersPaginated(
+  page = 0,
+  size = 6,
+  category?: string,
+  search?: string
+): Promise<SpringPage<EmailCampaignFooterTemplateResponse>> {
+  const params = new URLSearchParams();
+  params.append("page", String(page));
+  params.append("size", String(size));
+  if (category && category !== "all") {
+    params.append("category", category);
+  }
+  if (search && search.trim()) {
+    params.append("search", search.trim());
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-footer-templates/page?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch footer templates (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch distinct active footer template categories.
+ */
+export async function fetchEmailCampaignFooterCategories(): Promise<string[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-footer-templates/categories`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch footer categories (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch single active footer template by numeric ID.
+ */
+export async function fetchEmailCampaignFooterById(
+  id: number
+): Promise<EmailCampaignFooterTemplateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-footer-templates/${id}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Failed to fetch footer template #${id}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch single active footer template by unique template key.
+ */
+export async function fetchEmailCampaignFooterByKey(
+  templateKey: string
+): Promise<EmailCampaignFooterTemplateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-footer-templates/key/${encodeURIComponent(templateKey)}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch footer template "${templateKey}"`
+    );
+  }
+
+  return response.json();
+}
+
+// ==========================================
+// BUTTON TEMPLATE API SERVICES
+// ==========================================
+
+/**
+ * Fetch paginated active email campaign button templates.
+ */
+export async function fetchEmailCampaignButtonsPaginated(
+  page = 0,
+  size = 8,
+  category?: string,
+  search?: string
+): Promise<SpringPage<EmailCampaignButtonTemplateResponse>> {
+  const params = new URLSearchParams();
+  params.append("page", String(page));
+  params.append("size", String(size));
+  if (category && category !== "all") {
+    params.append("category", category);
+  }
+  if (search && search.trim()) {
+    params.append("search", search.trim());
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-button-templates/page?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch button templates (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch distinct active button template categories.
+ */
+export async function fetchEmailCampaignButtonCategories(): Promise<string[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-button-templates/categories`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch button categories (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch single active button template by numeric ID.
+ */
+export async function fetchEmailCampaignButtonById(
+  id: number
+): Promise<EmailCampaignButtonTemplateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-button-templates/${id}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Failed to fetch button template #${id}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch single active button template by unique template key.
+ */
+export async function fetchEmailCampaignButtonByKey(
+  templateKey: string
+): Promise<EmailCampaignButtonTemplateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-button-templates/key/${encodeURIComponent(templateKey)}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch button template "${templateKey}"`
+    );
+  }
+
+  return response.json();
+}
+
+// ==========================================
+// HIGHLIGHT BLOCK TEMPLATE API SERVICES
+// ==========================================
+
+export async function fetchEmailCampaignHighlightsPaginated(
+  page = 0,
+  size = 20,
+  category?: string,
+  search?: string,
+  signal?: AbortSignal
+): Promise<SpringPage<EmailCampaignHighlightTemplateResponse>> {
+  const params = new URLSearchParams();
+  params.append("page", String(page));
+  params.append("size", String(size));
+  if (category && category !== "all") {
+    params.append("category", category);
+  }
+  if (search && search.trim()) {
+    params.append("search", search.trim());
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-highlight-templates/page?${params.toString()}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch highlight templates (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+export async function fetchEmailCampaignHighlightCategories(
+  signal?: AbortSignal
+): Promise<string[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-highlight-templates/categories`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch highlight categories (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+export async function fetchEmailCampaignHighlightById(
+  id: number
+): Promise<EmailCampaignHighlightTemplateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaign-highlight-templates/${id}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch highlight template (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+// ==========================================
 // CAMPAIGN CRUD API SERVICES
 // ==========================================
 
@@ -189,6 +509,41 @@ export async function fetchEmailCampaigns(): Promise<EmailCampaignResponse[]> {
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Failed to fetch email campaigns");
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch paginated user campaigns with optional search query.
+ */
+export async function fetchEmailCampaignsPaginated(
+  page = 0,
+  size = 12,
+  search?: string
+): Promise<SpringPage<EmailCampaignResponse>> {
+  const params = new URLSearchParams();
+  params.append("page", String(page));
+  params.append("size", String(size));
+  if (search && search.trim()) {
+    params.append("search", search.trim());
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/email-campaigns/page?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Failed to fetch campaigns (${response.status})`
+    );
   }
 
   return response.json();
