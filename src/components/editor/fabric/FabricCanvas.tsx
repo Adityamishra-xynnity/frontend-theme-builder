@@ -27,7 +27,10 @@ import type {
   EditorElement,
   ElementType,
 } from "../../../types/editor";
-import { graphicAnimationRuntime } from "../../../utils/graphicAnimationRuntime";
+import {
+  graphicAnimationRuntime,
+  resolveGraphicAnimationConfig,
+} from "../../../utils/graphicAnimationRuntime";
 import { getElementSignature } from "../../../utils/elementSignature";
 
 
@@ -1695,12 +1698,12 @@ export default function FabricEditorCanvas({
               group.setCoords();
 
               if (element.isAnimated || element.type === "animated-graphic") {
-                const animConfig = element.animationConfig || {
-                  type: element.animationType || "pulse",
-                  durationMs: 1400,
-                  easing: "ease-in-out",
-                  loop: true,
-                };
+                const animConfig = resolveGraphicAnimationConfig({
+                  explicitConfig: element.animationConfig,
+                  explicitType: element.animationType,
+                  svgContent: element.svgContent,
+                  nameOrKey: element.graphicKey,
+                });
                 graphicAnimationRuntime.register(group, animConfig, element.id);
               }
             } catch (error) {

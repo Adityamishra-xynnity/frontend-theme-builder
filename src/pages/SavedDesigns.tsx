@@ -23,6 +23,9 @@ import {
   useEditor,
   type SavedDesign,
 } from "../context/EditorContext";
+import { showAlert, showConfirm } from "../components/common/AppDialogHost";
+import CertificatePreview from "../components/common/CertificatePreview";
+import { getCanvasDimensions } from "../constants/paperDimensions";
 
 const PAGE_SIZE = 20;
 
@@ -209,9 +212,12 @@ export default function SavedDesigns() {
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this saved design? This action cannot be undone."
-    );
+    const confirmed = await showConfirm({
+      title: "Delete Saved Design",
+      message: "Are you sure you want to delete this saved design? This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
 
     if (!confirmed) {
       return;
@@ -232,9 +238,11 @@ export default function SavedDesigns() {
     } catch (error) {
       console.error("Failed to delete design:", error);
 
-      window.alert(
-        "The design could not be deleted. Please try again."
-      );
+      await showAlert({
+        title: "Delete Failed",
+        message: "The design could not be deleted. Please try again.",
+        variant: "error",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -256,20 +264,6 @@ export default function SavedDesigns() {
       month: "short",
       year: "numeric",
     });
-  };
-
-  const getPreviewText = (design: SavedDesign) => {
-    if (Array.isArray(design.previewElements)) {
-      return design.previewElements.slice(0, 3);
-    }
-    return (design.elements ?? [])
-      .filter(
-        (element) =>
-          element.type === "heading" ||
-          element.type === "subheading" ||
-          element.type === "text"
-      )
-      .slice(0, 3);
   };
 
   return (
@@ -414,7 +408,14 @@ export default function SavedDesigns() {
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {designs.map((design) => {
-                const previewText = getPreviewText(design);
+                const previewElements =
+                  Array.isArray(design.previewPageElements) && design.previewPageElements.length > 0
+                    ? design.previewPageElements
+                    : design.elements ?? [];
+                const previewDims = getCanvasDimensions(
+                  design.pageSize ?? "A4",
+                  design.orientation ?? "landscape"
+                );
 
                 const designName =
                   typeof design.name === "string" && design.name.trim()
@@ -427,57 +428,36 @@ export default function SavedDesigns() {
                     className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-100/40"
                   >
                     {/* Certificate Preview */}
-                    <div
-                      className="relative flex aspect-[4/3] items-center justify-center overflow-hidden p-5 sm:p-6"
-                      style={{
-                        backgroundColor:
-                          design.backgroundColor || "#f1f5f9",
-                      }}
-                    >
-                      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden border-2 border-slate-300/70 bg-white/50 px-4 py-3 shadow-sm">
-                        <div className="pointer-events-none absolute inset-2 border border-slate-300/40" />
-
-                        <div className="relative flex w-full flex-col items-center justify-center gap-1">
-                          {previewText.length > 0 ? (
-                            previewText.map((element) => (
-                              <p
-                                key={element.id}
-                                className="max-w-full truncate text-center"
-                                style={{
-                                  fontSize: `${Math.min(
-                                    Math.max(element.fontSize || 18, 8),
-                                    26
-                                  )}px`,
-                                  fontFamily:
-                                    element.fontFamily || "Arial, sans-serif",
-                                  color: element.color || "#111827",
-                                  fontWeight:
-                                    element.fontWeight || "normal",
-                                  fontStyle:
-                                    element.fontStyle || "normal",
-                                  lineHeight: 1.35,
-                                }}
-                              >
-                                {typeof element.text === "string"
-                                  ? element.text
-                                  : "Text"}
-                              </p>
-                            ))
-                          ) : (
-                            <>
-                              <Award
-                                size={30}
-                                className="mb-2 text-slate-400"
-                                strokeWidth={1.4}
-                              />
-
-                              <span className="text-sm font-semibold text-slate-500">
-                                Blank Certificate
-                              </span>
-                            </>
-                          )}
+                    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100 p-4">
+                      {previewElements.length > 0 ? (
+                        <div className="relative flex h-full w-full items-center justify-center">
+                          <CertificatePreview
+                            backgroundColor={design.backgroundColor || "#ffffff"}
+                            elements={previewElements}
+                            canvasWidth={previewDims.width}
+                            canvasHeight={previewDims.height}
+                            className="max-h-full max-w-full rounded-lg border border-slate-200/80 shadow-sm"
+                          />
                         </div>
-                      </div>
+                      ) : (
+                        <div
+                          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden border-2 border-slate-300/70 bg-white/60 px-4 py-3 shadow-sm"
+                          style={{
+                            backgroundColor:
+                              design.backgroundColor || "#f1f5f9",
+                          }}
+                        >
+                          <div className="pointer-events-none absolute inset-2 border border-slate-300/40" />
+                          <Award
+                            size={30}
+                            className="mb-2 text-slate-400"
+                            strokeWidth={1.4}
+                          />
+                          <span className="text-sm font-semibold text-slate-500">
+                            Blank Certificate
+                          </span>
+                        </div>
+                      )}
 
                       <div className="absolute right-3 top-3 rounded-lg border border-white/80 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
                         Saved design

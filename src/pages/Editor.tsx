@@ -148,6 +148,24 @@ export default function Editor() {
           savedDesign.orientation ?? "landscape",
         );
       } else {
+        // Immediately replace the previous canvas so stale designs never flash while loading.
+        if (Array.isArray(savedDesign.previewPageElements) && savedDesign.previewPageElements.length > 0) {
+          loadSavedDesign({
+            ...savedDesign,
+            elements: savedDesign.previewPageElements,
+          });
+          setPageSettings(
+            savedDesign.pageSize ?? "A4",
+            savedDesign.orientation ?? "landscape",
+          );
+        } else {
+          clearCanvas();
+          setPageSettings(
+            savedDesign.pageSize ?? "A4",
+            savedDesign.orientation ?? "landscape",
+          );
+        }
+
         setTemplateLoading(true);
         getDesign(savedDesign.id)
           .then((fullDesign: Design) => {

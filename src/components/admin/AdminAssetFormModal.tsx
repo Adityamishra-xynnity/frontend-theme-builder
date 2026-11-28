@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { X, Code2, Upload, Check } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { X, Upload, Image as ImageIcon, FileJson } from "lucide-react";
 import {
   ASSET_TYPES,
   getAdminCategories,
@@ -46,8 +46,10 @@ export default function AdminAssetFormModal({
   const [isDeleted, setIsDeleted] = useState(false);
 
   const [saving, setSaving] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [uploadedUrl, setUploadedUrl] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState("");
+  const [existingImageUrl, setExistingImageUrl] = useState("");
+  const [dataTab, setDataTab] = useState<"image" | "json">("image");
   const [error, setError] = useState("");
   const [typeCategories, setTypeCategories] = useState<string[]>(categories);
 
@@ -67,9 +69,21 @@ export default function AdminAssetFormModal({
   }, [open, type, categories]);
 
   useEffect(() => {
+    return () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
+
+  useEffect(() => {
     if (!open) return;
     setError("");
-    setUploadedUrl("");
+    setPendingFile(null);
+    setLocalPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
     if (initialAsset) {
       setAssetKey(initialAsset.assetKey || "");
       setKeyManuallyEdited(true);
@@ -80,6 +94,14 @@ export default function AdminAssetFormModal({
       setJsonText(JSON.stringify(initialAsset.jsonData || {}, null, 2));
       setIsActive(initialAsset.isActive !== false);
       setIsDeleted(Boolean(initialAsset.isDeleted));
+      const jd = initialAsset.jsonData || {};
+      const mediaUrl =
+        (typeof jd.thumbnailUrl === "string" && jd.thumbnailUrl) ||
+        (typeof jd.url === "string" && jd.url) ||
+        (typeof jd.imageUrl === "string" && jd.imageUrl) ||
+        "";
+      setExistingImageUrl(mediaUrl);
+      setDataTab(mediaUrl ? "image" : "json");
     } else {
       setAssetKey("");
       setKeyManuallyEdited(false);
@@ -90,8 +112,22 @@ export default function AdminAssetFormModal({
       setJsonText("{}");
       setIsActive(true);
       setIsDeleted(false);
+      setExistingImageUrl("");
+      setDataTab("image");
     }
   }, [open, initialAsset, defaultType]);
+
+  const parsedPreview = useMemo(() => {
+    try {
+      const parsed = JSON.parse(jsonText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { valid: false as const, data: null };
+      }
+      return { valid: true as const, data: parsed as Record<string, unknown> };
+    } catch {
+      return { valid: false as const, data: null };
+    }
+  }, [jsonText]);
 
   if (!open) return null;
 
@@ -102,39 +138,22 @@ export default function AdminAssetFormModal({
     }
   };
 
-  const handleFormatJson = () => {
-    try {
-      const parsed = JSON.parse(jsonText);
-      setJsonText(JSON.stringify(parsed, null, 2));
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? `Invalid JSON: ${e.message}` : "Invalid JSON syntax");
-    }
+  const handleSelectFile = (file: File) => {
+    setError("");
+    setPendingFile(file);
+    setLocalPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
   };
 
-  const handleCloudinaryUpload = async (file: File) => {
-    setUploadingMedia(true);
-    setError("");
-    try {
-      const uploaded = await uploadImageToCloudinary(file);
-      setUploadedUrl(uploaded.secureUrl);
-      try {
-        const parsed = JSON.parse(jsonText || "{}");
-        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-          parsed.url = uploaded.secureUrl;
-          if (!parsed.thumbnailUrl) parsed.thumbnailUrl = uploaded.secureUrl;
-          if (uploaded.width) parsed.width = uploaded.width;
-          if (uploaded.height) parsed.height = uploaded.height;
-          setJsonText(JSON.stringify(parsed, null, 2));
-        }
-      } catch {
-        // Leave raw jsonText intact if user had invalid JSON while editing
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Image upload failed");
-    } finally {
-      setUploadingMedia(false);
-    }
+  const handleRemoveImage = () => {
+    setPendingFile(null);
+    setLocalPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+    setExistingImageUrl("");
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -148,12 +167,12 @@ export default function AdminAssetFormModal({
 
     let parsedJson: Record<string, unknown>;
     try {
-      const raw = JSON.parse(jsonText);
+      const raw = JSON.parse(jsonText.trim() || "{}");
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
         setError("json_data must be a valid JSON object ({ ... }).");
         return;
       }
-      parsedJson = raw;
+      parsedJson = { ...raw };
     } catch (err) {
       setError(err instanceof Error ? `Invalid json_data: ${err.message}` : "Invalid json_data");
       return;
@@ -161,6 +180,14 @@ export default function AdminAssetFormModal({
 
     setSaving(true);
     try {
+      if (pendingFile) {
+        const uploaded = await uploadImageToCloudinary(pendingFile);
+        parsedJson.url = uploaded.secureUrl;
+        parsedJson.thumbnailUrl = uploaded.secureUrl;
+        if (uploaded.width) parsedJson.width = uploaded.width;
+        if (uploaded.height) parsedJson.height = uploaded.height;
+      }
+
       await onSave(
         {
           assetKey: assetKey.trim(),
@@ -298,53 +325,168 @@ export default function AdminAssetFormModal({
             </div>
           </div>
 
-          {/* Row 3: json_data + optional Cloudinary upload helper */}
-          <div>
-            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-700">
-                json_data (JSONB) <span className="text-rose-500">*</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100">
-                  <Upload size={13} />
-                  {uploadingMedia ? "Uploading..." : "Upload Media to URL"}
+          {/* Row 3: Image / JSON tabs */}
+          <div className="space-y-3">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setDataTab("image")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                  dataTab === "image"
+                    ? "bg-white text-violet-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <ImageIcon size={14} />
+                Image
+              </button>
+              <button
+                type="button"
+                onClick={() => setDataTab("json")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                  dataTab === "json"
+                    ? "bg-white text-violet-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <FileJson size={14} />
+                JSON
+              </button>
+            </div>
+
+            {dataTab === "image" ? (
+              <div className="space-y-3">
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center transition hover:border-violet-400 hover:bg-violet-50/40">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                    <Upload size={18} />
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    Upload Media
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Click to select an image or SVG file
+                  </div>
                   <input
                     type="file"
                     accept="image/*,.svg"
-                    disabled={uploadingMedia}
+                    disabled={saving}
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) void handleCloudinaryUpload(file);
+                      if (file) handleSelectFile(file);
                       e.target.value = "";
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={handleFormatJson}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                >
-                  <Code2 size={13} />
-                  Format JSON
-                </button>
-              </div>
-            </div>
 
-            {uploadedUrl && (
-              <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
-                <Check size={14} />
-                Uploaded &amp; injected URL into json_data: <span className="truncate font-mono">{uploadedUrl}</span>
+                {(localPreviewUrl || existingImageUrl) && (
+                  <div className="relative rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">Preview</p>
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        title="Remove image"
+                        aria-label="Remove image"
+                        className="rounded-lg p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="flex h-36 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2">
+                      <img
+                        src={localPreviewUrl || existingImageUrl}
+                        alt={name || "Media preview"}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-700">
+                    json_data (JSONB) <span className="text-rose-500">*</span>
+                  </label>
+                  {jsonText.trim() !== "" && (
+                    <button
+                      type="button"
+                      onClick={() => setJsonText("")}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <X size={12} />
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  rows={8}
+                  value={jsonText}
+                  onChange={(e) => setJsonText(e.target.value)}
+                  placeholder="{}"
+                  spellCheck={false}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
+                />
+                {jsonText.trim() !== "" && jsonText.trim() !== "{}" && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-600">Preview</p>
+                    {(() => {
+                      if (!parsedPreview.valid) {
+                        return <p className="text-xs text-rose-600">Invalid JSON syntax</p>;
+                      }
+                      const jd = parsedPreview.data;
+                      const svg = typeof jd.svgContent === "string" ? jd.svgContent : "";
+                      const imgUrl =
+                        (typeof jd.thumbnailUrl === "string" && jd.thumbnailUrl) ||
+                        (typeof jd.url === "string" && jd.url) ||
+                        (typeof jd.imageUrl === "string" && jd.imageUrl) ||
+                        "";
+                      const unicode =
+                        (typeof jd.unicode === "string" && jd.unicode) ||
+                        (typeof jd.emoji === "string" && jd.emoji) ||
+                        "";
+                      const textVal = typeof jd.text === "string" ? jd.text : "";
+
+                      if (svg && svg.includes("<svg")) {
+                        return (
+                          <div
+                            className="flex h-28 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2 [&>svg]:max-h-full [&>svg]:max-w-full"
+                            dangerouslySetInnerHTML={{ __html: svg }}
+                          />
+                        );
+                      }
+                      if (imgUrl) {
+                        return (
+                          <div className="flex h-28 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2">
+                            <img src={imgUrl} alt={name || "JSON preview"} className="max-h-full max-w-full object-contain" />
+                          </div>
+                        );
+                      }
+                      if (unicode) {
+                        return (
+                          <div className="flex h-24 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-4xl">
+                            {unicode}
+                          </div>
+                        );
+                      }
+                      if (textVal) {
+                        return (
+                          <div className="flex h-20 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm font-medium text-slate-800">
+                            {textVal}
+                          </div>
+                        );
+                      }
+                      return (
+                        <p className="text-xs text-slate-400">
+                          Enter svgContent, url, imageUrl, unicode, or text in json_data to preview.
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             )}
-
-            <textarea
-              rows={9}
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-              spellCheck={false}
-              className="w-full rounded-xl border border-slate-300 bg-slate-950 p-3 font-mono text-xs text-emerald-300 focus:border-violet-500 focus:outline-none"
-            />
           </div>
 
           {/* Row 4: Active */}

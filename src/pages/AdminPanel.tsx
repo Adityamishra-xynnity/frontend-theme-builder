@@ -16,6 +16,7 @@ import {
   getAdminAssets,
   getAdminAssetStats,
   getAdminCategories,
+  reorderAdminAssets,
   toggleAdminAssetStatus,
   updateAdminAsset,
   type AdminAssetItem,
@@ -24,6 +25,7 @@ import {
 } from "../api/adminAssetApi";
 import AdminAssetTable from "../components/admin/AdminAssetTable";
 import AdminAssetFormModal from "../components/admin/AdminAssetFormModal";
+import { showAlert } from "../components/common/AppDialogHost";
 // import BulkImportModal from "../components/admin/BulkImportModal";
 
 const PAGE_SIZE = 20;
@@ -155,16 +157,47 @@ export default function AdminPanel() {
     }
   };
 
+  const canReorder =
+    selectedType !== "ALL" &&
+    Boolean(selectedCategory) &&
+    selectedCategory !== "ALL" &&
+    !debouncedSearch.trim() &&
+    statusFilter !== "TRASH";
+
+  const handleReorder = async (orderedItems: AdminAssetItem[]) => {
+    const previousItems = items;
+    const startSortOrder = page * PAGE_SIZE + 1;
+    const updatedItems = orderedItems.map((item, index) => ({
+      ...item,
+      sortOrder: startSortOrder + index,
+    }));
+
+    setItems(updatedItems);
+    try {
+      await reorderAdminAssets(
+        updatedItems.map((item) => item.id),
+        startSortOrder
+      );
+    } catch (err) {
+      setItems(previousItems);
+      await showAlert({
+        title: "Reorder Failed",
+        message: err instanceof Error ? err.message : "Failed to save new sort order.",
+        variant: "error",
+      });
+    }
+  };
+
   return (
-    <div className="mx-auto flex h-[calc(100vh-88px)] w-full max-w-[1600px] flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
+    <div className="mx-auto flex min-h-[calc(100vh-88px)] w-full max-w-[1600px] flex-col px-4 py-5 sm:px-6 lg:h-[calc(100vh-88px)] lg:overflow-hidden lg:px-8">
       {/* Header */}
       <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
             <Database size={22} />
           </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900">
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold text-slate-900 sm:text-2xl">
               Asset Library Admin Panel
             </h1>
             <p className="text-xs text-slate-500">
@@ -206,7 +239,7 @@ export default function AdminPanel() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
         {/* Type Sidebar */}
-        <aside className="h-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+        <aside className="max-h-60 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-xs lg:h-full lg:max-h-none">
           <div className="mb-2 px-3 text-xs font-bold uppercase tracking-wider text-slate-400">
             Asset Types
           </div>
@@ -301,10 +334,10 @@ export default function AdminPanel() {
         </aside>
 
         {/* Main Content */}
-        <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-xs lg:h-full">
           {/* Filters Bar */}
           <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 p-4">
-            <div className="relative min-w-[220px] flex-1">
+            <div className="relative w-full min-w-0 sm:min-w-[220px] sm:flex-1">
               <Search
                 size={16}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -324,7 +357,7 @@ export default function AdminPanel() {
                 setStatusFilter(e.target.value as any);
                 setPage(0);
               }}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-violet-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-violet-500 focus:outline-none sm:w-auto"
             >
               <option value="ALL">Status: All</option>
               <option value="ACTIVE">Active Only</option>
@@ -344,6 +377,8 @@ export default function AdminPanel() {
               items={items}
               loading={loading}
               showSort={selectedType !== "ALL"}
+              canReorder={canReorder}
+              onReorder={(ordered) => void handleReorder(ordered)}
               onEdit={(item) => {
                 setEditingItem(item);
                 setFormOpen(true);
@@ -354,7 +389,7 @@ export default function AdminPanel() {
           </div>
 
           {/* Pagination */}
-          <div className="flex shrink-0 items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
             <span>
               Showing page {page + 1} of {totalPages} ({totalElements} total)
             </span>

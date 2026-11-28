@@ -1,36 +1,18 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { EditorElement } from "../../types/editor";
+import { getShapeSvgSpec } from "../../utils/shapeGeometry";
 
 interface CertificatePreviewProps {
   backgroundColor?: string;
   elements?: EditorElement[];
   className?: string;
   showWatermark?: boolean;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 /**
- * Generate 5-point star SVG points for 900x650 viewport renderer
- */
-function getStarPoints(w: number, h: number, points = 5, innerRatio = 0.42): string {
-  const cx = w / 2;
-  const cy = h / 2;
-  const outerR = Math.min(w, h) / 2;
-  const innerR = outerR * innerRatio;
-  const pts: string[] = [];
-
-  for (let i = 0; i < points * 2; i++) {
-    const r = i % 2 === 0 ? outerR : innerR;
-    const angle = (i * Math.PI) / points - Math.PI / 2;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  }
-
-  return pts.join(" ");
-}
-
-/**
- * High-fidelity 1:1 certificate preview matching the 900x650 Fabric.js canvas coordinate space.
+ * High-fidelity 1:1 certificate preview matching the Fabric.js canvas coordinate space.
  * Uses a fixed 900x650 virtual canvas scaled by CSS transform, ensuring pixel-perfect layout,
  * font sizes, borders, and element positioning.
  */
@@ -38,7 +20,11 @@ export default function CertificatePreview({
   backgroundColor = "#ffffff",
   elements = [],
   className = "",
+  canvasWidth = 900,
+  canvasHeight = 650,
 }: CertificatePreviewProps) {
+  const safeCanvasWidth = Math.max(1, canvasWidth);
+  const safeCanvasHeight = Math.max(1, canvasHeight);
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
 
@@ -47,7 +33,7 @@ export default function CertificatePreview({
       if (containerRef.current) {
         const width = containerRef.current.clientWidth;
         if (width > 0) {
-          setScale(width / 900);
+          setScale(width / safeCanvasWidth);
         }
       }
     };
@@ -65,7 +51,7 @@ export default function CertificatePreview({
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [safeCanvasWidth]);
 
   const safeElements = useMemo(() => {
     return Array.isArray(elements) ? elements : [];
@@ -74,21 +60,24 @@ export default function CertificatePreview({
   return (
     <div
       ref={containerRef}
-      className={`relative aspect-[900/650] w-full overflow-hidden select-none ${className}`}
-      style={{ backgroundColor }}
+      className={`relative w-full overflow-hidden select-none ${className}`}
+      style={{
+        backgroundColor,
+        aspectRatio: `${safeCanvasWidth} / ${safeCanvasHeight}`,
+      }}
     >
       <div
         className="pointer-events-none absolute left-0 top-0 origin-top-left"
         style={{
-          width: 900,
-          height: 650,
+          width: safeCanvasWidth,
+          height: safeCanvasHeight,
           transform: `scale(${scale})`,
           backgroundColor,
         }}
       >
-        {safeElements.map((element) => {
+        {safeElements.map((element, index) => {
           const {
-            id,
+            id: rawId,
             type,
             x = 0,
             y = 0,
@@ -103,12 +92,22 @@ export default function CertificatePreview({
             fontFamily = "Arial",
             fontWeight = "normal",
             fontStyle = "normal",
-            textAlign = "center",
+            textAlign = "left",
             text = "",
             lineHeight = 1.16,
             charSpacing,
             lineDash,
+            scaleX = 1,
+            scaleY = 1,
+            angle = 0,
+            src,
+            svgContent,
           } = element;
+          const id = rawId || `preview-el-${index}`;
+
+          const transforms: string[] = [];
+          if (angle) transforms.push(`rotate(${angle}deg)`);
+          if (scaleX !== 1 || scaleY !== 1) transforms.push(`scale(${scaleX}, ${scaleY})`);
 
           const baseStyle: React.CSSProperties = {
             position: "absolute",
@@ -118,7 +117,37 @@ export default function CertificatePreview({
             height: `${height}px`,
             opacity,
             boxSizing: "border-box",
+            transformOrigin: "top left",
+            transform: transforms.length > 0 ? transforms.join(" ") : undefined,
           };
+
+          // --- Images ---
+          if (type === "image" && src) {
+            return (
+              <img
+                key={id}
+                src={src}
+                alt=""
+                style={{
+                  ...baseStyle,
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+            );
+          }
+
+          // --- SVG Graphics / Animated Graphics ---
+          if ((type === "graphic" || type === "animated-graphic") && svgContent) {
+            return (
+              <div
+                key={id}
+                style={baseStyle}
+                className="[&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: svgContent }}
+              />
+            );
+          }
 
           // --- Rectangle / Square ---
           if (type === "rectangle" || type === "square") {
@@ -193,32 +222,79 @@ export default function CertificatePreview({
             );
           }
 
-          // --- Stars & Polygons ---
-          if (type.startsWith("star") || type.startsWith("square-star")) {
-            const starPoints = getStarPoints(width, height);
-            const fill = elBg || color || "#d4af37";
+          // --- Special Shapes, Polygons, Stars, Bubbles, Flowcharts ---
+          const shapeSpec = getShapeSvgSpec(type, width, height, element.shapeSides);
+          if (shapeSpec) {
+            const fill =
+              type === "star-outline" || (shapeSpec.kind === "path" && shapeSpec.noFill)
+                ? "none"
+                : elBg || color || "#2563eb";
+            const stroke = strokeColor || "none";
+
+            if (shapeSpec.kind === "rect") {
+              return (
+                <div
+                  key={id}
+                  style={{
+                    ...baseStyle,
+                    backgroundColor: fill,
+                    borderRadius: `${shapeSpec.rx}px`,
+                    border: strokeWidth > 0 && stroke !== "none" ? `${strokeWidth}px solid ${stroke}` : "none",
+                  }}
+                />
+              );
+            }
+
+            if (shapeSpec.kind === "circle") {
+              return (
+                <div
+                  key={id}
+                  style={{
+                    ...baseStyle,
+                    backgroundColor: fill,
+                    borderRadius: "50%",
+                    border: strokeWidth > 0 && stroke !== "none" ? `${strokeWidth}px solid ${stroke}` : "none",
+                  }}
+                />
+              );
+            }
+
             return (
               <div key={id} style={baseStyle}>
                 <svg
                   width={width}
                   height={height}
-                  viewBox={`0 0 ${width} ${height}`}
-                  style={{ display: "block" }}
+                  viewBox={shapeSpec.kind === "path" && shapeSpec.viewBox ? shapeSpec.viewBox : `0 0 ${width} ${height}`}
+                  preserveAspectRatio="none"
+                  style={{ display: "block", overflow: "visible" }}
                 >
-                  <polygon
-                    points={starPoints}
-                    fill={fill}
-                    stroke={strokeColor || "none"}
-                    strokeWidth={strokeWidth}
-                  />
+                  {shapeSpec.kind === "polygon" ? (
+                    <polygon
+                      points={shapeSpec.points}
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                    />
+                  ) : (
+                    <path
+                      d={shapeSpec.d}
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
                 </svg>
               </div>
             );
           }
 
-          // --- Lines ---
+          // --- Lines & Arrows ---
           if (
             type === "line" ||
+            type === "arrow" ||
+            type === "double-arrow" ||
             type === "dashed-line" ||
             type === "dotted-line"
           ) {

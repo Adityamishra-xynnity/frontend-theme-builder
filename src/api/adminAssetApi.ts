@@ -177,6 +177,19 @@ export async function deleteOrRestoreAdminAsset(
   return res.json();
 }
 
+export async function reorderAdminAssets(
+  orderedIds: number[],
+  startSortOrder = 1
+): Promise<void> {
+  const res = await fetch(`${ADMIN_API}/reorder`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify({ orderedIds, startSortOrder }),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Failed to reorder assets"));
+  assetLibraryService.clearCache();
+}
+
 /*
 export async function bulkImportAdminAssets(
   items: AdminAssetPayload[]

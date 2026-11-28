@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import { EditorProvider } from "./context/EditorContext";
 import { FabricProvider } from "./context/FabricContext";
 import EmailCampaign from "./email-campaign/EmailCampaign";
+import AppDialogHost from "./components/common/AppDialogHost";
 
 export default function App() {
   const location = useLocation();
@@ -45,6 +46,7 @@ export default function App() {
           </main>
 
           {!isEditorPage && <Footer />}
+          <AppDialogHost />
         </div>
       </FabricProvider>
     </EditorProvider>

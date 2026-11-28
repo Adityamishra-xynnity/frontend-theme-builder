@@ -40,6 +40,7 @@ export interface Design {
   elements?: EditorElement[];
   pages?: DesignPageData[];
   previewElements?: DesignPreviewElement[];
+  previewPageElements?: EditorElement[];
   createdAt?: string;
   updatedAt?: string;
   pageSize?: PaperSize;
