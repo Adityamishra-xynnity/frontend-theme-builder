@@ -4,6 +4,7 @@ import { Code2, Trash2, Download } from "lucide-react";
 
 import { useEditor } from "../../context/EditorContext";
 import { htmlToElements } from "./HtmlToElements";
+import { showConfirm } from "../common/AppDialogHost";
 
 export default function HTMLImportPanel() {
   const [htmlCode, setHtmlCode] = useState("");
@@ -18,7 +19,7 @@ export default function HTMLImportPanel() {
     setSuccess("");
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setError("");
     setSuccess("");
 
@@ -37,9 +38,12 @@ export default function HTMLImportPanel() {
 
       if (
         elements.length > 0 &&
-        !window.confirm(
-          "Importing this HTML will replace your current canvas. Continue?",
-        )
+        !(await showConfirm({
+          title: "Replace Canvas",
+          message: "Importing this HTML will replace your current canvas. Continue?",
+          confirmLabel: "Continue",
+          variant: "danger",
+        }))
       ) {
         return;
       }

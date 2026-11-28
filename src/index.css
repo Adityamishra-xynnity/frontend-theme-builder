@@ -292,6 +292,15 @@ textarea:focus-visible {
   animation: anim-preview-wiggle 1.8s ease-in-out infinite;
 }
 
+@keyframes anim-preview-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.anim-preview-blink {
+  animation: anim-preview-blink 1.2s ease-in-out infinite;
+}
+
 @keyframes tb-fade-in { from { opacity: .25; } to { opacity: 1; } }
 @keyframes tb-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 @keyframes tb-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }

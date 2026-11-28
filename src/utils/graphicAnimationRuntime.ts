@@ -469,6 +469,9 @@ export class GraphicAnimationRuntime {
       case "wiggle":
         this.applyWiggle(object, base, progress, intensity);
         break;
+      case "blink":
+        this.applyBlink(object, base, progress, intensity);
+        break;
       default:
         this.applyPulse(object, base, progress, intensity);
         break;
@@ -497,6 +500,25 @@ export class GraphicAnimationRuntime {
     obj.top = base.top;
     obj.angle = base.angle;
     obj.opacity = base.opacity;
+  }
+
+  /**
+   * Blink: smooth opacity pulse (1 -> 0.25 -> 1) without scaling.
+   */
+  private applyBlink(
+    obj: AnimatableObject,
+    base: BaseTransform,
+    progress: number,
+    intensity: number
+  ): void {
+    const minOpacity = Math.max(0.1, 1 - 0.75 * intensity);
+    const wave = 0.5 * (1 + Math.cos(progress * 2 * Math.PI));
+    obj.opacity = base.opacity * (minOpacity + (1 - minOpacity) * wave);
+    obj.scaleX = base.scaleX;
+    obj.scaleY = base.scaleY;
+    obj.left = base.left;
+    obj.top = base.top;
+    obj.angle = base.angle;
   }
 
   /**
@@ -665,3 +687,101 @@ export class GraphicAnimationRuntime {
 
 // Global runtime singleton instance
 export const graphicAnimationRuntime = new GraphicAnimationRuntime();
+
+function parseSvgDurationMs(svgContent?: string): number | undefined {
+  if (!svgContent) return undefined;
+
+  const smilMatch = svgContent.match(/\bdur\s*=\s*["']\s*([0-9]*\.?[0-9]+)\s*(ms|s)?\s*["']/i);
+  if (smilMatch) {
+    const val = Number(smilMatch[1]);
+    if (Number.isFinite(val) && val > 0) {
+      const ms = smilMatch[2]?.toLowerCase() === "ms" ? val : val * 1000;
+      return Math.max(200, Math.min(10000, Math.round(ms)));
+    }
+  }
+
+  const cssMatch = svgContent.match(/animation(?:-duration)?\s*:[^;]*?([0-9]*\.?[0-9]+)\s*(ms|s)\b/i);
+  if (cssMatch) {
+    const val = Number(cssMatch[1]);
+    if (Number.isFinite(val) && val > 0) {
+      const ms = cssMatch[2].toLowerCase() === "ms" ? val : val * 1000;
+      return Math.max(200, Math.min(10000, Math.round(ms)));
+    }
+  }
+
+  return undefined;
+}
+
+function parseDurationValueMs(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.max(200, Math.min(10000, Math.round(value)));
+  }
+  if (typeof value === "string") {
+    const m = value.trim().match(/^([0-9]*\.?[0-9]+)\s*(ms|s)?$/i);
+    if (m) {
+      const num = Number(m[1]);
+      if (Number.isFinite(num) && num > 0) {
+        const ms = m[2]?.toLowerCase() === "ms" ? num : m[2]?.toLowerCase() === "s" ? num * 1000 : num;
+        return Math.max(200, Math.min(10000, Math.round(ms)));
+      }
+    }
+  }
+  return undefined;
+}
+
+function inferAnimationType(
+  hint?: string,
+  svgContent?: string
+): GraphicAnimationType {
+  const lower = (hint || "").toLowerCase();
+  if (lower.includes("blink") || lower.includes("flash")) return "blink";
+  if (lower.includes("bounce")) return "bounce";
+  if (lower.includes("spin") || lower.includes("rotat")) return "spin";
+  if (lower.includes("float")) return "float";
+  if (lower.includes("wiggle") || lower.includes("shake")) return "wiggle";
+  if (lower.includes("glow")) return "glow";
+  if (lower.includes("shimmer")) return "shimmer";
+  if (svgContent && /<animateTransform[^>]*type\s*=\s*["']rotate["']/i.test(svgContent)) {
+    return "spin";
+  }
+  if (svgContent && /<animate[^>]*attributeName\s*=\s*["']opacity["']/i.test(svgContent)) {
+    return "blink";
+  }
+  return "pulse";
+}
+
+/**
+ * Resolves the effective animation config for an animated graphic, honoring any
+ * explicit animationConfig first and otherwise deriving duration/type from SVG
+ * SMIL/CSS timing so canvas playback matches the preview speed.
+ */
+export function resolveGraphicAnimationConfig(options: {
+  explicitConfig?: GraphicAnimationConfig & { duration?: string | number; iterationCount?: string | number };
+  explicitType?: GraphicAnimationType;
+  svgContent?: string;
+  nameOrKey?: string;
+}): GraphicAnimationConfig {
+  const { explicitConfig, explicitType, svgContent, nameOrKey } = options;
+  const detectedDuration = parseSvgDurationMs(svgContent);
+  const explicitDuration =
+    explicitConfig?.durationMs ?? parseDurationValueMs(explicitConfig?.duration);
+  const type =
+    explicitConfig?.type ??
+    explicitType ??
+    inferAnimationType(nameOrKey, svgContent);
+  const loop =
+    explicitConfig?.loop ??
+    (explicitConfig?.iterationCount !== undefined
+      ? String(explicitConfig.iterationCount).toLowerCase() === "infinite"
+      : true);
+
+  return {
+    type,
+    durationMs: explicitDuration ?? detectedDuration ?? 1400,
+    easing: explicitConfig?.easing ?? "ease-in-out",
+    loop,
+    delayMs: explicitConfig?.delayMs,
+    intensity: explicitConfig?.intensity,
+    direction: explicitConfig?.direction,
+  };
+}

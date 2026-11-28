@@ -70,7 +70,7 @@ export default function BordersPanel() {
         }));
         setAssets(mapped);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Border assets load nahi hue.");
+        if (active) setError(err instanceof Error ? err.message : "Failed to load border assets.");
       } finally {
         if (active) setLoading(false);
       }

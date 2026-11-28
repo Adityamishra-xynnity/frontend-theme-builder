@@ -11,7 +11,6 @@ import {
   Path,
   PencilBrush,
   Group,
-  ActiveSelection,
   Shadow,
   Pattern,
   loadSVGFromString,
@@ -29,6 +28,7 @@ import {
 import jsPDF from "jspdf";
 import { useEditor } from "./EditorContext";
 import { getElementSignature } from "../utils/elementSignature";
+import { showAlert } from "../components/common/AppDialogHost";
 
 import type {
   ElementType,
@@ -41,7 +41,10 @@ import type {
 } from "../types/graphics";
 import type { EmojiAsset } from "../types/emoji";
 import type { ThemeElementAsset } from "../types/themeElements";
-import { graphicAnimationRuntime } from "../utils/graphicAnimationRuntime";
+import {
+  graphicAnimationRuntime,
+  resolveGraphicAnimationConfig,
+} from "../utils/graphicAnimationRuntime";
 import { takeDraggedElement } from "../utils/elementDrag";
 import { createBorderFabricObjects } from "../utils/borderUtils";
 import {
@@ -1064,14 +1067,13 @@ export function FabricProvider({
         }
       }
 
-      // Text combinations are created with a center origin. Convert their
-      // position to the top-left origin expected by the page reconstruction
-      // code, so copied pages keep the exact same text position.
-      const isTextObject =
-        object.type === "i-text" || object.type === "textbox";
-      const textTopLeft = isTextObject
-        ? object.getPointByOrigin("left", "top")
-        : null;
+      // Convert every non-freehand object's position to top-left origin so
+      // saved designs, page copies, and CertificatePreview all match the
+      // exact canvas position regardless of Fabric v7's default center origin.
+      const topLeftPoint =
+        !item.isFreehand && typeof object.getPointByOrigin === "function"
+          ? object.getPointByOrigin("left", "top")
+          : null;
 
       const isRegisteredAnim = graphicAnimationRuntime.isRegistered(object);
       const baseTransform = isRegisteredAnim
@@ -1088,12 +1090,12 @@ export function FabricProvider({
           ? baseTransform.left
           : item.isFreehand && object.type === "path"
             ? object.getCenterPoint().x
-            : textTopLeft?.x ?? object.left ?? 0,
+            : topLeftPoint?.x ?? object.left ?? 0,
         y: baseTransform
           ? baseTransform.top
           : item.isFreehand && object.type === "path"
             ? object.getCenterPoint().y
-            : textTopLeft?.y ?? object.top ?? 0,
+            : topLeftPoint?.y ?? object.top ?? 0,
         width: object.width ?? 0,
         height: object.height ?? 0,
         scaleX: baseTransform ? baseTransform.scaleX : (object.scaleX ?? 1),
@@ -1169,9 +1171,6 @@ export function FabricProvider({
 
         if (item.shapeSides) {
           element.shapeSides = item.shapeSides;
-        }
-        if (typeof (object as any).rx === "number" && (object as any).rx > 0) {
-          element.borderRadius = (object as any).rx;
         }
       }
 
@@ -2124,12 +2123,21 @@ export function FabricProvider({
 
       graphicObject.setCoords();
 
+      const hasEmbeddedSvgAnim = Boolean(
+        svgString && (/<animate(?:Transform|Motion)?\b/i.test(svgString) || /@keyframes\b/i.test(svgString))
+      );
       const isAnimated =
         graphic.assetData?.type === "animated" ||
-        Boolean(graphic.assetData?.animationConfig);
-      const animConfig = graphic.assetData?.animationConfig;
-      const animType: GraphicAnimationType | undefined =
-        animConfig?.type ?? (isAnimated ? "pulse" : undefined);
+        Boolean(graphic.assetData?.animationConfig) ||
+        hasEmbeddedSvgAnim;
+      const animConfig = isAnimated
+        ? resolveGraphicAnimationConfig({
+          explicitConfig: graphic.assetData?.animationConfig,
+          svgContent: svgString,
+          nameOrKey: `${graphic.name || ""} ${graphic.assetKey || ""}`,
+        })
+        : undefined;
+      const animType: GraphicAnimationType | undefined = animConfig?.type;
       const elementId = crypto.randomUUID();
 
       // Always derive the palette from the parsed SVG (solid fills, strokes AND
@@ -2170,186 +2178,134 @@ export function FabricProvider({
     const svgContent = icon.assetData?.svgContent;
     if (!svgContent) return;
 
-    const graphicPayload: GraphicAsset = {
+    await addGraphic({
       id: icon.id,
       assetKey: icon.assetKey,
       name: icon.name,
       assetType: "GRAPHIC",
       category: icon.category,
-      assetData: {
-        categoryId: icon.category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        categoryName: icon.category,
-        type: "static",
-        assetFormat: "svg",
-        viewBox: "0 0 24 24",
-        width: 24,
-        height: 24,
-        svgContent,
-        colorPalette: Array.isArray(icon.assetData?.colorPalette)
-          ? icon.assetData.colorPalette
-          : undefined,
-        tags: Array.isArray(icon.assetData?.tags) ? icon.assetData.tags : undefined,
-      },
       sortOrder: icon.sortOrder,
       isActive: icon.isActive,
-    };
-
-    await addGraphic(graphicPayload);
+      assetData: {
+        categoryId: icon.category,
+        type: "static",
+        assetFormat: "svg",
+        viewBox: "0 0 120 120",
+        width: icon.assetData?.width ?? 120,
+        height: icon.assetData?.height ?? 120,
+        svgContent,
+        colorPalette: icon.assetData?.colorPalette,
+      },
+    });
   }
 
   async function addStructuredLayout(asset: ThemeElementAsset) {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const children = asset.assetData?.elements;
-    if (!canvas || !Array.isArray(children) || children.length === 0) return;
+    if (!Array.isArray(children) || children.length === 0) {
+      if (asset.assetData?.svgContent) {
+        await addIcon(asset);
+      }
+      return;
+    }
 
     saveCanvasState();
 
-    const layoutWidth = Number(asset.assetData?.width) || 400;
-    const layoutHeight = Number(asset.assetData?.height) || 180;
-    const maxAllowedWidth = Math.max(220, canvas.getWidth() - 48);
-    const scale = layoutWidth > maxAllowedWidth ? maxAllowedWidth / layoutWidth : 1;
-
-    const offsetX = Math.max(24, (canvas.getWidth() - layoutWidth * scale) / 2);
-    const offsetY = Math.max(24, (canvas.getHeight() - layoutHeight * scale) / 2);
-
+    const layoutWidth = asset.assetData?.width ?? 400;
+    const layoutHeight = asset.assetData?.height ?? 200;
+    const offsetX = Math.max(20, (canvas.getWidth() - layoutWidth) / 2);
+    const offsetY = Math.max(20, (canvas.getHeight() - layoutHeight) / 2);
     const created: FabricObject[] = [];
 
     for (const child of children) {
-      const cx = offsetX + child.x * scale;
-      const cy = offsetY + child.y * scale;
+      let obj: FabricObject | null = null;
 
       if (child.kind === "rect") {
-        const w = Math.max(4, (child.width ?? 100) * scale);
-        const h = Math.max(4, (child.height ?? 60) * scale);
-        const rx = (child.rx ?? 0) * scale;
-        const rect = new Rect({
-          left: cx,
-          top: cy,
-          width: w,
-          height: h,
-          fill: child.fill ?? "#FFFFFF",
-          stroke: child.stroke,
-          strokeWidth: child.strokeWidth ? child.strokeWidth * scale : 0,
-          rx,
-          ry: rx,
+        obj = new Rect({
+          left: offsetX + (child.x ?? 0),
+          top: offsetY + (child.y ?? 0),
+          width: Math.max(1, child.width ?? 120),
+          height: Math.max(1, child.height ?? 60),
+          rx: child.rx ?? 0,
+          ry: child.rx ?? 0,
+          fill: child.fill ?? "#f1f5f9",
+          stroke: child.stroke ?? "",
+          strokeWidth: child.strokeWidth ?? 0,
           originX: "left",
           originY: "top",
-          selectable: true,
-          evented: true,
-          objectCaching: false,
         });
-        applyObjectControls(rect);
-        attachMetadata(rect, "rectangle");
-        created.push(rect);
+        attachMetadata(obj, "rectangle");
       } else if (child.kind === "circle") {
-        const radius = Math.max(4, (child.radius ?? 24) * scale);
-        const circle = new Circle({
-          left: cx,
-          top: cy,
+        const radius = child.radius ?? (child.size ? child.size / 2 : 24);
+        obj = new Circle({
+          left: offsetX + (child.x ?? 0),
+          top: offsetY + (child.y ?? 0),
           radius,
-          fill: child.fill ?? "#EEF2FF",
-          stroke: child.stroke,
-          strokeWidth: child.strokeWidth ? child.strokeWidth * scale : 0,
+          fill: child.fill ?? "#2563eb",
+          stroke: child.stroke ?? "",
+          strokeWidth: child.strokeWidth ?? 0,
           originX: "left",
           originY: "top",
-          selectable: true,
-          evented: true,
-          objectCaching: false,
         });
-        applyObjectControls(circle);
-        attachMetadata(circle, "circle");
-        created.push(circle);
+        attachMetadata(obj, "circle");
       } else if (child.kind === "text") {
-        const w = Math.max(40, (child.width ?? 200) * scale);
-        const fontSize = Math.max(10, Math.round((child.fontSize ?? 16) * scale));
-        const textbox = new Textbox(child.text ?? "", {
-          left: cx,
-          top: cy,
-          width: w,
-          fontSize,
-          fontFamily: child.fontFamily ?? "Inter",
-          fill: child.fill ?? "#0F172A",
-          fontWeight: child.fontWeight === "bold" ? "bold" : "normal",
+        obj = new Textbox(child.text ?? "Text", {
+          left: offsetX + (child.x ?? 0),
+          top: offsetY + (child.y ?? 0),
+          width: Math.max(40, child.width ?? 180),
+          fontSize: child.fontSize ?? 16,
+          fontFamily: child.fontFamily ?? "Arial",
+          fontWeight: child.fontWeight ?? "normal",
+          fill: child.fill ?? "#111827",
           textAlign: child.textAlign ?? "left",
-          lineHeight: 1.25,
           originX: "left",
           originY: "top",
           editable: true,
-          selectable: true,
-          evented: true,
-          padding: 4,
-          objectCaching: false,
         });
-        applyObjectControls(textbox);
-        attachMetadata(textbox, "text");
-        created.push(textbox);
+        attachMetadata(obj, "text");
       } else if (child.kind === "svg" && child.svgContent) {
         try {
           const { objects, options } = await loadSVGFromString(child.svgContent);
           const valid = objects.filter((o): o is FabricObject => o !== null);
           if (valid.length > 0) {
             const group = util.groupSVGElements(valid, options);
-            if (typeof (group as any).forEachObject === "function") {
-              (group as any).forEachObject((inner: any) => {
-                inner.set({ selectable: false, evented: false });
-              });
-            }
-            const targetSize = (child.size ?? 36) * scale;
-            const origMax = Math.max(group.width || 24, group.height || 24);
-            const svgScale = targetSize / origMax;
+            const targetSize = child.size ?? child.width ?? 36;
+            const scale = targetSize / Math.max(1, group.width || 1, group.height || 1);
             group.set({
-              left: cx,
-              top: cy,
-              scaleX: svgScale,
-              scaleY: svgScale,
+              left: offsetX + (child.x ?? 0),
+              top: offsetY + (child.y ?? 0),
+              scaleX: scale,
+              scaleY: scale,
               originX: "left",
               originY: "top",
-              selectable: true,
-              evented: true,
               subTargetCheck: false,
               interactive: false,
-              objectCaching: false,
             });
-            const extractedColors = Array.from(
-              new Set(
-                (child.svgContent.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).map((c) =>
-                  c.toUpperCase()
-                )
-              )
-            );
-            applyObjectControls(group);
-            attachMetadata(group, "graphic", undefined, {
-              graphicId: asset.id,
-              graphicKey: asset.assetKey,
-              graphicCategory: asset.category,
+            attachMetadata(group, "graphic", crypto.randomUUID(), {
               svgContent: child.svgContent,
-              colorPalette: extractedColors,
+              colorPalette: extractColorsFromFabricGroup(group),
             });
-            created.push(group);
+            obj = group;
           }
         } catch (err) {
-          console.warn("Unable to parse child SVG in layout:", err);
+          console.warn("Failed to parse structured SVG child:", err);
         }
+      }
+
+      if (obj) {
+        applyObjectControls(obj);
+        canvas.add(obj);
+        created.push(obj);
       }
     }
 
-    if (created.length === 0) return;
-
-    created.forEach((obj) => {
-      canvas.add(obj);
-      obj.setCoords();
-    });
-
-    if (created.length === 1) {
+    if (created.length > 0) {
       activateObject(created[0]);
-    } else {
-      const selection = new ActiveSelection(created, { canvas });
-      canvas.setActiveObject(selection);
-      setSelectedObject(selection);
+      canvas.requestRenderAll();
+      syncCanvasToEditor();
     }
-
-    canvas.requestRenderAll();
-    syncCanvasToEditor();
   }
 
   // Colour pickers fire a change per mouse-move. Take ONE undo snapshot per gesture and
@@ -3351,53 +3307,6 @@ export function FabricProvider({
 
     if (!canvas || !original) return;
 
-    const activeObjects = canvas.getActiveObjects();
-    if (activeObjects.length > 1) {
-      saveCanvasState();
-      try {
-        const clones: FabricObject[] = [];
-        for (const item of activeObjects) {
-          const itemMeta = item as FabricObjectWithMeta;
-          const cloned = await item.clone(SERIALIZED_PROPERTIES);
-          const pt = item.getPointByOrigin("left", "top");
-          cloned.set({
-            originX: "left",
-            originY: "top",
-            left: pt.x + 20,
-            top: pt.y + 20,
-          });
-          attachMetadata(cloned, itemMeta.elementType ?? "text", crypto.randomUUID(), {
-            imageSrc: itemMeta.imageSrc,
-            pendingUploadId: itemMeta.pendingUploadId,
-            isPendingUpload: itemMeta.isPendingUpload,
-            shapeSides: itemMeta.shapeSides,
-            isFreehand: itemMeta.isFreehand,
-            graphicId: itemMeta.graphicId,
-            graphicKey: itemMeta.graphicKey,
-            graphicCategory: itemMeta.graphicCategory,
-            svgContent: itemMeta.svgContent,
-            colorPalette: itemMeta.colorPalette ? [...itemMeta.colorPalette] : undefined,
-            isAnimated: itemMeta.isAnimated,
-            animationConfig: itemMeta.animationConfig ? { ...itemMeta.animationConfig } : undefined,
-            animationType: itemMeta.animationType,
-          });
-          applyObjectControls(cloned);
-          canvas.add(cloned);
-          cloned.setCoords();
-          clones.push(cloned);
-        }
-        canvas.discardActiveObject();
-        const selection = new ActiveSelection(clones, { canvas });
-        canvas.setActiveObject(selection);
-        setSelectedObject(selection);
-        canvas.requestRenderAll();
-        syncCanvasToEditor();
-      } catch (error) {
-        console.error("Multi-object duplication failed:", error);
-      }
-      return;
-    }
-
     saveCanvasState();
 
     try {
@@ -4205,9 +4114,11 @@ export function FabricProvider({
       } catch (error) {
         console.error("Failed to export PNG pages:", error);
 
-        window.alert(
-          "PNG download nahi ho paya. Please console error check karein aur dobara try karein.",
-        );
+        void showAlert({
+          title: "PNG Download Failed",
+          message: "Failed to download PNG. Please check the console for errors and try again.",
+          variant: "error",
+        });
       } finally {
         // Restore the page that was open before exporting.
         if (originalPageId && originalPageId !== currentPageId) {
@@ -4465,7 +4376,11 @@ export function FabricProvider({
         if (pdf) pdf.save(`${getDownloadName()}.pdf`);
       } catch (error) {
         console.error("Failed to export PDF pages:", error);
-        window.alert("PDF download nahi ho paya. Please console error check karein aur dobara try karein.");
+        void showAlert({
+          title: "PDF Download Failed",
+          message: "Failed to download PDF. Please check the console for errors and try again.",
+          variant: "error",
+        });
       } finally {
         // Return to the page the user was editing before export.
         if (originalPageId && originalPageId !== currentPageId) {

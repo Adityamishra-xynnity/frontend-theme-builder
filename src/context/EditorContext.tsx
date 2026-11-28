@@ -55,6 +55,7 @@ export interface SavedDesign {
   orientation?: PageOrientation;
   pages?: EditorPage[];
   previewElements?: DesignPreviewElement[];
+  previewPageElements?: EditorElement[];
 }
 
 interface EditorContextType {
@@ -210,7 +211,7 @@ function normalizePages(
       id: page.id || createId(),
       name: page.name || `Page ${index + 1}`,
       elements: Array.isArray(page.elements)
-        ? page.elements
+        ? page.elements.map((el) => ({ ...el, id: el.id || createId() }))
         : [],
       backgroundColor:
         page.backgroundColor || DEFAULT_BACKGROUND,
@@ -873,6 +874,7 @@ export function EditorProvider({
 
       pages: normalizedPages,
       previewElements: design.previewElements,
+      previewPageElements: design.previewPageElements,
     };
   }, []);
 

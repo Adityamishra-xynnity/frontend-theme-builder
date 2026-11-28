@@ -946,20 +946,7 @@ export default function Toolbar() {
               </label>
             )}
 
-            {/* Send by Email */}
-            <button
-              type="button"
-              onMouseDown={preserveSelection}
-              onClick={() => {
-                setEmailMessage("");
-                setShowEmailModal(true);
-              }}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 text-xs font-semibold text-violet-700 shadow-xs transition hover:bg-violet-50 active:scale-95"
-              title="Send canvas design by email"
-            >
-              <Mail size={14} />
-              <span className="hidden sm:inline">Send by Email</span>
-            </button>
+
 
             {/* Save */}
             <button

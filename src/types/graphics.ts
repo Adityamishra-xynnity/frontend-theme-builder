@@ -10,7 +10,8 @@ export type GraphicAnimationType =
   | "spin"
   | "glow"
   | "shimmer"
-  | "wiggle";
+  | "wiggle"
+  | "blink";
 
 export type GraphicAnimationEasing =
   | "linear"
